@@ -2,7 +2,7 @@ import asyncio
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from functools import cache, cached_property
+from functools import cache, cached_property, partial
 from itertools import groupby
 from pathlib import Path
 from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, cast
@@ -28,7 +28,7 @@ from reformatters.common.region_job import (
     RegionJob,
     SourceFileResult,
 )
-from reformatters.common.retry import exponential_backoff_time
+from reformatters.common.retry import exponential_backoff_time, retry
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
 
 log = get_logger(__name__)
@@ -392,7 +392,11 @@ class VirtualRegionJob(
                 }
             )
             driver.process_virtual(
-                primary_repo, list(replica_repos), branch_name, remaining
+                primary_repo,
+                list(replica_repos),
+                branch_name,
+                remaining,
+                overwrite_chunks=overwrite_chunks,
             )
         return {}
 
@@ -402,55 +406,96 @@ class VirtualRegionJob(
         replica_repos: Sequence[icechunk.Repository],
         branch: str,
         remaining: Sequence[SOURCE_FILE_COORD],
+        *,
+        overwrite_chunks: bool = False,
     ) -> None:
         """Run the virtual write loop over `remaining`, committing each yielded batch atomically.
 
-        `remaining` is the pre-filtered union of the worker's not-already-present
-        source files (gathered by process_worker_jobs). The same loop serves
-        backfill (temp branch, one batch -> one commit) and the single-writer
-        operational update ("main", per-tick commits); see "The write loop" in
+        `remaining` is the union of the worker's source files, pre-filtered unless
+        `overwrite_chunks` requests a rewrite. The same loop serves backfill
+        (temp branch, one batch -> one commit) and operational updates
+        ("main", per-tick commits); see "The write loop" in
         docs/virtual_datasets.md.
         """
-        # A fresh writable session is opened per batch because an icechunk
-        # session becomes read-only after commit. sync_dims_to grows the store
-        # lazily (a no-op on the pre-sized backfill branch).
-        readonly_store = primary_repo.readonly_session(branch).store
-        current_size = self._committed_append_dim_size(readonly_store)
-
         for file_refs_batch in self.process_virtual_refs(remaining):
-            prepare_start = time.monotonic()
             assert file_refs_batch, "process_virtual_refs yielded an empty batch"
             for coord, file_refs in file_refs_batch:
                 self._assert_probe_chunk_covered(coord, file_refs)
-            refs = [ref for _, file_refs in file_refs_batch for ref in file_refs]
-            primary_session = primary_repo.writable_session(branch)
-            replica_sessions = [repo.writable_session(branch) for repo in replica_repos]
-            stores = [primary_session.store, *(s.store for s in replica_sessions)]
+            for repo in (*replica_repos, primary_repo):
+                retry(
+                    partial(
+                        self._commit_virtual_batch,
+                        repo,
+                        branch,
+                        file_refs_batch,
+                        overwrite_chunks=overwrite_chunks,
+                    ),
+                    max_attempts=5,
+                    retryable_exceptions=(icechunk.ConflictError,),
+                )
 
-            needed_size = self._needed_append_dim_size(refs)
-            resized = needed_size > current_size
-            if resized:
-                self.sync_dims_to(stores, needed_size)
-                current_size = needed_size
+    def _commit_virtual_batch(
+        self,
+        repo: icechunk.Repository,
+        branch: str,
+        file_refs_batch: Sequence[tuple[SOURCE_FILE_COORD, Sequence[VirtualRef]]],
+        *,
+        overwrite_chunks: bool,
+    ) -> None:
+        prepare_start = time.monotonic()
+        # A fresh writable session is opened per attempt because an icechunk
+        # session becomes read-only after commit. sync_dims_to grows the store
+        # lazily (a no-op on the pre-sized backfill branch).
+        session = repo.writable_session(branch)
+        if not overwrite_chunks:
+            remaining = self.filter_already_present(
+                [coord for coord, _ in file_refs_batch], session.store
+            )
+            remaining_ids = {id(coord) for coord in remaining}
+            file_refs_batch = [
+                (coord, refs)
+                for coord, refs in file_refs_batch
+                if id(coord) in remaining_ids
+            ]
+        if not file_refs_batch:
+            return
 
-            emit_start = time.monotonic()
-            prepare_s = emit_start - prepare_start
-            self._emit_refs(stores, refs)
-            emit_s = time.monotonic() - emit_start
+        refs = [ref for _, file_refs in file_refs_batch for ref in file_refs]
+        current_size = self._committed_append_dim_size(session.store)
+        needed_size = self._needed_append_dim_size(refs)
+        resized = needed_size > current_size
+        if resized:
+            self.sync_dims_to([session.store], needed_size)
 
-            now = pd.Timestamp.now(tz="UTC")
-            commit_start = time.monotonic()
+        emit_start = time.monotonic()
+        prepare_s = emit_start - prepare_start
+        self._emit_refs([session.store], refs)
+        emit_s = time.monotonic() - emit_start
+
+        now = pd.Timestamp.now(tz="UTC")
+        commit_start = time.monotonic()
+        try:
             storage.commit_if_icechunk(
-                f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
-                primary_session.store,
-                [s.store for s in replica_sessions],
+                f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}", session.store, []
             )
-            log.info(
-                f"Committed {len(refs)} refs "
-                f"(emit {emit_s:.1f}s, commit {time.monotonic() - commit_start:.1f}s) "
-                f"arrays={len({ref.data_var.path for ref in refs})} "
-                f"prepare={prepare_s:.1f}s resized={resized}"
-            )
+        except icechunk.RebaseFailedError as error:
+            if overwrite_chunks:
+                data_paths = {f"/{ref.data_var.path}" for ref in refs}
+                if any(
+                    conflict.conflict_type == icechunk.ConflictType.ChunkDoubleUpdate
+                    and conflict.path in data_paths
+                    for conflict in error.conflicts
+                ):
+                    raise AssertionError(
+                        "Concurrent overwrite_chunks writers must write disjoint data chunks"
+                    ) from error
+            raise
+        log.info(
+            f"Committed {len(refs)} refs "
+            f"(emit {emit_s:.1f}s, commit {time.monotonic() - commit_start:.1f}s) "
+            f"arrays={len({ref.data_var.path for ref in refs})} "
+            f"prepare={prepare_s:.1f}s resized={resized}"
+        )
 
     def _assert_probe_chunk_covered(
         self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]

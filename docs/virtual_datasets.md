@@ -64,6 +64,8 @@ Every ref from a source file, plus any append-dim expansion its positions requir
 
 This invariant is also what lets the filter probe a single representative cell per file: if its representative cell is present, all of the accepted refs from that file were committed together. This does not imply that the source contained every expected message.
 
+Each batch commits to replicas before the primary. A conflicting transaction opens a fresh writable session on the same repository, filters out complete files, and recomputes any expansion before recommitting. Retries are bounded to five attempts per repository; a primary conflict does not replay an already committed replica. Explicit `overwrite_chunks` backfills bypass filtering and require disjoint data chunks between concurrent writers.
+
 ## Operational updates: single writer
 
 `operational_update_jobs()` returns **one** job spanning the active window (the recent, still-incomplete span of the append dim). One pod commits whole files straight to `main` as they arrive — no temp branch, no coordination files (`DynamicalDataset.update` routes to `_run_virtual_operational_update`).
@@ -72,6 +74,8 @@ Single-writer is what makes lazy append-dim expansion safe: `main` grows exactly
 
 Each update fire first refreshes metadata from the checked-in template, trimmed to the store's committed extent (`VirtualRegionJob.refresh_metadata`): template attrs and coordinate-value fixes deploy operationally — matching materialized updates, which rewrite metadata every fire — while the append dim is never sized past ingested data. Byte-identical metadata is skipped, so an in-sync store adds no commit. Structural changes are rejected by the same drift guard materialized updates use — changing structure still requires a backfill.
 
+The refresh reads each store's extent from the same session it commits. A conflict retries with a fresh session, so concurrent growth cannot be overwritten with metadata trimmed to an older extent. Replicas retain their own extents.
+
 Virtual stores carry no consolidated metadata in the root zarr.json — nothing updates it as the append dim grows, so readers list the live metadata instead. Every virtual metadata writer renders unconsolidated (`VirtualRegionJob.consolidated_metadata = False` covers backfill setup/finalize; appends and the refresh pass `consolidated=False` directly), so their outputs are byte-identical and the refresh only commits on real template drift. Appends write only variables spanning the append dim: overwriting the rest would delete chunks that equal their fill_value (e.g. `spatial_ref`), since appends write with `write_empty_chunks=False`.
 
 Crash recovery is automatic: committed refs are durable and the filter skips them on the next cron fire; uncommitted refs and expansions vanish and are re-discovered.
@@ -79,6 +83,8 @@ Crash recovery is automatic: committed refs are durable and the filter skips the
 **Files the source hasn't published yet roll to the next fire rather than failing the run.** An update stops polling at its `poll_deadline` — the scheduled fire plus the cron job's `pod_active_deadline`, less a small grace — and returns with those files still pending; final validation determines whether the Job succeeds. The next fire re-sweeps an overlapping window. Files published during an inactive gap wait until that fire; low latency requires a polling pod when the source files arrive. `pod_active_deadline` therefore sizes how long a fire chases its own files: cover the source's typical publication time with headroom, and let a late cycle roll over rather than stretching past the fire interval (`concurrencyPolicy: Replace` kills a run that outlives its successor's fire anyway). Both ends of a fire's work are anchored to its scheduled fire rather than to process start: a pod replacing an evicted one stops polling when the pod it replaced would have, and its window ends at that fire, so it finishes its predecessor's steps instead of adopting the next fire's and waiting out its deadline on files that publish after it. A source that stops publishing altogether is caught by validation in the final update pod (data currency and manifest completeness).
 
 Validation shares the single `pod_active_deadline` with polling. The polling cutoff is derived from that deadline using `virtual_poll_deadline_grace`. An optional Job `active_deadline` limits the whole run, including replacement pods whose pod deadlines start again.
+
+CronJobs expose `concurrency_policy` (`Replace` by default, also `Allow` or `Forbid`). Datasets retain their existing schedules, deadlines, and replacement policy until configured otherwise.
 
 Validation retries inherit both deadlines from the live CronJob and are admitted only if a full pod duration fits strictly before its next fire. Their polling cutoff stays anchored to the preceding fire. A retry admitted after cutoff gets an initial discovery/ingest sweep and validation, without an extended polling window. Job deadlines run from Job start, and `Replace` applies only within one CronJob; neither provides a store-wide lock. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods.
 
