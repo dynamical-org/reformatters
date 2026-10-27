@@ -12,7 +12,7 @@ from .template_config import NoaaRtmaRuAnalysisVirtualTemplateConfig
 class NoaaRtmaRuAnalysisVirtualDataset(NoaaRtmaAnalysisVirtualDataset):
     update_schedule: ClassVar[str] = "*/15 * * * *"
     update_deadline: ClassVar[timedelta] = timedelta(minutes=14)
-    update_cron_suspended: ClassVar[bool] = True
+    update_cron_suspended: ClassVar[bool] = False
     max_delay: ClassVar[timedelta] = timedelta(minutes=45)
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=2)
 
