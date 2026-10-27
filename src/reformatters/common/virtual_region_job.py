@@ -443,8 +443,7 @@ class VirtualRegionJob(
         overwrite_chunks: bool,
     ) -> None:
         prepare_start = time.monotonic()
-        # A committed or conflicted session cannot be reused. sync_dims_to grows the store
-        # lazily (a no-op on the pre-sized backfill branch).
+        # Reopen on conflict so filtering and extent use the new snapshot.
         session = repo.writable_session(branch)
         if not overwrite_chunks:
             remaining = self.filter_already_present(

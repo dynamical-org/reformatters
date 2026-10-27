@@ -603,6 +603,64 @@ def test_explicit_overwrite_survives_conflict_retry(
         )
 
 
+def test_overlapping_backfill_overwrite_retries_identical_refs(
+    virtual_memory_repo: icechunk.Repository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = virtual_memory_repo
+    job = _make_region_job(_create_template_ds(1), region=slice(0, 1))
+    session = repo.writable_session("main")
+    job.sync_dims_to([session.store], 1)
+    snapshot = session.commit("pre-size backfill")
+    repo.create_branch("backfill", snapshot)
+    stale = repo.writable_session("backfill")
+    _process_virtual(job, repo, branch="backfill")
+    opened = _queue_stale_sessions(monkeypatch, repo, [stale])
+    before = _snapshot_count(repo, "backfill")
+
+    job.process_virtual(
+        repo, [], "backfill", job.source_file_coords(), overwrite_chunks=True
+    )
+
+    assert len(opened) == 2
+    assert _snapshot_count(repo, "backfill") == before + 1
+    store = repo.readonly_session("backfill").store
+    _assert_store_values(store, n_inits=1)
+
+    async def read_refs() -> dict[tuple[int, ...], tuple[str, int, int]]:
+        refs = {}
+        async for batch in store.array_chunk_iterator("temperature_2m"):
+            indices, _, locations, offsets, lengths, _ = batch
+            refs.update(
+                {
+                    tuple(int(i) for i in index): (location, int(offset), int(length))
+                    for index, location, offset, length in zip(
+                        indices, locations, offsets, lengths, strict=True
+                    )
+                }
+            )
+        return refs
+
+    refs = asyncio.run(read_refs())
+    assert refs == {
+        (0, lead_idx, 0, 0): (
+            job.messages_url,
+            *_message_offset_length(0, lead_idx),
+        )
+        for lead_idx in range(N_LEADS)
+    }
+    assert all(
+        store.session.chunk_type("/temperature_2m", index) == icechunk.ChunkType.virtual
+        for index in refs
+    )
+    assert repo.lookup_branch("main") == snapshot
+    assert (
+        job.filter_already_present(
+            job.source_file_coords(), repo.readonly_session("main").store
+        )
+        == job.source_file_coords()
+    )
+
+
 def test_primary_conflict_does_not_replay_committed_replica(
     virtual_memory_repo: icechunk.Repository,
     monkeypatch: pytest.MonkeyPatch,
