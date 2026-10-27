@@ -270,10 +270,28 @@ def test_cron_concurrency_defaults_to_replace_and_can_allow_overlap() -> None:
     cron = _cron_job_with_name("archive-update")
     default = cron.as_kubernetes_object()
     assert default["spec"]["concurrencyPolicy"] == "Replace"
-    overlapping = cron.model_copy(update={"concurrency_policy": "Allow"})
+    overlapping = CronJob.model_validate(
+        cron.model_dump()
+        | {"concurrency_policy": "Allow", "active_deadline": timedelta(hours=1)}
+    )
     expected = copy.deepcopy(default)
     expected["spec"]["concurrencyPolicy"] = "Allow"
+    expected["spec"]["jobTemplate"]["spec"]["activeDeadlineSeconds"] = 3600
     assert overlapping.as_kubernetes_object() == expected
+
+
+@pytest.mark.parametrize("policy", ["Allow", "Replace", "Forbid"])
+def test_allow_requires_job_deadline(policy: str) -> None:
+    config = _cron_job_with_name("archive-update").model_dump() | {
+        "concurrency_policy": policy
+    }
+    if policy == "Allow":
+        with pytest.raises(
+            ValidationError, match="Allow require a Job active_deadline"
+        ):
+            CronJob.model_validate(config)
+    else:
+        assert CronJob.model_validate(config).active_deadline is None
 
 
 @pytest.mark.parametrize(

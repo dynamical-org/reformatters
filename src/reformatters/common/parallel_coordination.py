@@ -7,21 +7,25 @@ import json
 import re
 import time
 from collections.abc import Collection, Mapping, Sequence
+from datetime import timedelta
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 import icechunk
 import pandas as pd
 import xarray as xr
+from kubernetes import client
 from pydantic import TypeAdapter
 
-from reformatters.common import storage, template_utils
+from reformatters.common import kubernetes, storage, template_utils
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import RegionJob, SourceFileResult
 from reformatters.common.storage import StoreFactory
 from reformatters.common.zarr import copy_zarr_metadata
 
 log = get_logger(__name__)
+
+_JOB_POLL_INTERVAL = timedelta(seconds=30)
 
 _RESULT_FILE_PATTERN = re.compile(r"worker-(?P<worker_index>\d+)\.json")
 
@@ -40,6 +44,68 @@ def dump_worker_results_json(
 
 class SetupInfo(TypedDict, total=False):
     repo_snapshots: dict[str, str]
+
+
+type JobState = Literal["run", "skip", "finalized"]
+
+
+def read_job_state(store_factory: StoreFactory, job: client.V1Job) -> JobState | None:
+    assert job.metadata is not None
+    assert job.metadata.name is not None
+    assert job.metadata.uid is not None
+    files = store_factory.read_all_coordination_files(job.metadata.name, "state.json")
+    if files:
+        state = json.loads(files[0])
+        if state["uid"] == job.metadata.uid:
+            assert state["state"] in {"run", "skip", "finalized"}
+            return state["state"]
+    return None
+
+
+def write_job_state(
+    store_factory: StoreFactory, job_name: str, job_uid: str, state: JobState
+) -> None:
+    store_factory.write_coordination_file(
+        job_name, "state.json", json.dumps({"uid": job_uid, "state": state}).encode()
+    )
+
+
+def job_is_writing(store_factory: StoreFactory, job: client.V1Job) -> bool:
+    return not kubernetes.job_is_terminal(job) and read_job_state(
+        store_factory, job
+    ) in {None, "run"}
+
+
+def wait_for_older_jobs(
+    store_factory: StoreFactory, cronjob_name: str, job: client.V1Job
+) -> None:
+    while any(
+        kubernetes.job_order(other) < kubernetes.job_order(job)
+        and job_is_writing(store_factory, other)
+        for other in kubernetes.list_cronjob_jobs(cronjob_name)
+    ):
+        log.info("Waiting for older Jobs before %s", kubernetes.job_order(job)[1])
+        time.sleep(_JOB_POLL_INTERVAL.total_seconds())
+
+
+def backoff_before_repass(
+    store_factory: StoreFactory,
+    cronjob_name: str,
+    job: client.V1Job,
+    retry_number: int,
+) -> bool:
+    backoff = timedelta(minutes=min(5 * 2 ** (retry_number - 1), 30))
+    for _ in range(backoff // _JOB_POLL_INTERVAL):
+        time.sleep(_JOB_POLL_INTERVAL.total_seconds())
+        if any(
+            kubernetes.job_order(other) > kubernetes.job_order(job)
+            and not kubernetes.job_is_terminal(other)
+            and read_job_state(store_factory, other) == "run"
+            for other in kubernetes.list_cronjob_jobs(cronjob_name)
+        ):
+            log.info("Yielding %s to a newer run", kubernetes.job_order(job)[1])
+            return False
+    return True
 
 
 def parallel_setup(
@@ -181,9 +247,14 @@ def finalize(
     consolidated: bool,
     publish_zarr3_metadata: bool | None = None,
     exclude_coord_value_chunks: Collection[str] = (),
+    job_uid: str | None = None,
 ) -> None:
-    if publish_zarr3_metadata is None:
-        publish_zarr3_metadata = update_template_with_results
+    assert job_uid is None or branch_name != "main"
+    publish_zarr3_metadata = (
+        update_template_with_results
+        if publish_zarr3_metadata is None
+        else publish_zarr3_metadata
+    )
     if update_template_with_results:
         assert len(all_jobs) > 0
         updated_template = all_jobs[0].update_template_with_results(merged_results)
@@ -269,6 +340,9 @@ def finalize(
                 "operational update) published concurrently and wins; re-run this "
                 "job to reprocess and publish."
             )
+        if job_uid is not None:
+            write_job_state(store_factory, reformat_job_name, job_uid, "finalized")
+
         # Second pass: clean up temp branches.
         for _role, repo in replicas_first:
             if branch_name in repo.list_branches():

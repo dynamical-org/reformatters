@@ -104,6 +104,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset(
         update_template_with_results: bool,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
+        job_uid: str | None = None,
     ) -> None:
         if (existing_ds := self._open_existing_store()) is not None:
             self._assert_stored_labels_match_template(existing_ds, template_ds)
@@ -117,6 +118,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset(
             update_template_with_results=update_template_with_results,
             overwrite_chunks=overwrite_chunks,
             overwrite_metadata=overwrite_metadata,
+            job_uid=job_uid,
         )
 
     def _assert_stored_labels_match_template(

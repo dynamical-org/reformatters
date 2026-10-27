@@ -3,10 +3,11 @@ import json
 import math
 import os
 import subprocess
+import time
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar
+from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar, cast
 
 import icechunk
 import numpy as np
@@ -15,6 +16,7 @@ import typer
 import xarray as xr
 import zarr.errors
 from icechunk.store import IcechunkStore
+from kubernetes import client
 from pydantic import Field, computed_field, model_validator
 
 from reformatters.common import (
@@ -147,28 +149,50 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         """Update an existing dataset with the latest data."""
         is_first = worker_index == 0
         is_last = worker_index == workers_total - 1
+        is_virtual = issubclass(self.region_job_class, VirtualRegionJob)
         job_fire_time: Timestamp | None = None
         if (
-            issubclass(self.region_job_class, VirtualRegionJob)
+            is_virtual
             and (
                 cron_job := self._operational_cron_job(ReformatCronJob)
             ).concurrency_policy
             == "Allow"
         ):
             job_fire_time = cron_job.previous_fire_time(pd.Timestamp.now())
+        materialized_job = None
+        job_reference_time: Timestamp | None = None
+        job_uid: str | None = None
         with self._monitor(
             ReformatCronJob,
             reformat_job_name,
             send_in_progress=is_first,
             send_result=is_last,
         ):
+            if not is_virtual and Config.is_prod:
+                cron = self._operational_cron_job(ReformatCronJob)
+                if cron.concurrency_policy == "Allow":
+                    materialized_job = kubernetes.get_job(reformat_job_name)
+                    assert materialized_job.metadata is not None
+                    assert materialized_job.metadata.creation_timestamp is not None
+                    assert materialized_job.metadata.uid is not None
+                    job_uid = materialized_job.metadata.uid
+                    job_reference_time = pd.Timestamp(
+                        materialized_job.metadata.creation_timestamp
+                    ).tz_convert(None)
+                    if not self._prepare_and_wait_materialized_update(
+                        materialized_job, cron, is_first=is_first
+                    ):
+                        return
             tmp_store = self._tmp_store()
 
             all_jobs, template_ds = self._operational_update_jobs(
-                reformat_job_name, tmp_store, job_fire_time=job_fire_time
+                reformat_job_name,
+                tmp_store,
+                job_fire_time=job_fire_time,
+                job_reference_time=job_reference_time,
             )
 
-            if issubclass(self.region_job_class, VirtualRegionJob):
+            if is_virtual:
                 # Virtual operational updates stream one worker per Job (see docs/parallel_processing.md).
                 if is_first:
                     self._assert_no_structural_drift(template_ds)
@@ -184,24 +208,89 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     template_ds=template_ds,
                     tmp_store=tmp_store,
                     update_template_with_results=True,
+                    job_uid=job_uid,
                 )
 
         if is_last:
-            self._validate_after_update(reformat_job_name, job_fire_time=job_fire_time)
+            self._validate_after_update(
+                reformat_job_name,
+                materialized_job=materialized_job,
+                job_fire_time=job_fire_time,
+            )
 
         log.info(
             f"Operational update complete. Wrote to primary store {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()}"
         )
 
+    def _prepare_and_wait_materialized_update(
+        self, job: client.V1Job, cron: CronJob, *, is_first: bool
+    ) -> bool:
+        """Return whether this Job should write, after recording or reusing its decision and, if it runs, waiting for older writers."""
+        factory = self.store_factory
+        assert job.metadata is not None
+        name, uid = job.metadata.name, job.metadata.uid
+        assert name is not None
+        assert uid is not None
+        cronjob_name = os.environ["CRON_JOB_NAME"]
+        state = parallel_coordination.read_job_state(factory, job)
+        if is_first and state is None:
+            is_backstop = kubernetes.job_kind(job) == "scheduled" and any(
+                kubernetes.job_kind(other) == "trigger"
+                and timedelta(0)
+                <= kubernetes.job_order(job)[0] - kubernetes.job_order(other)[0]
+                <= cast(timedelta, cron.active_deadline) / 2
+                for other in kubernetes.list_cronjob_jobs(cronjob_name)
+            )
+            if is_backstop:
+                parallel_coordination.wait_for_older_jobs(factory, cronjob_name, job)
+                if self._current_data_is_published():
+                    state = "skip"
+            state = state or "run"
+            parallel_coordination.write_job_state(factory, name, uid, state)
+            log.info("Job %s decision: %s", name, state)
+        while state is None:
+            time.sleep(5)
+            state = parallel_coordination.read_job_state(factory, job)
+        if state != "run":
+            return False
+        parallel_coordination.wait_for_older_jobs(factory, cronjob_name, job)
+        return True
+
+    def _current_data_is_published(self) -> bool:
+        check = item(
+            check
+            for check in self.validators()
+            if isinstance(check, validation.CheckCurrentData)
+        )
+        store = self.store_factory.primary_store()
+        with validation.open_flattened_dataset(
+            store, consolidated=not isinstance(store, IcechunkStore)
+        ) as ds:
+            return check.check(
+                validation.ValidationContext(
+                    store=store,
+                    ds=ds,
+                    append_dim=self.template_config.append_dim,
+                    append_dim_frequency=self.template_config.append_dim_frequency,
+                )
+            ).passed
+
     def _validate_after_update(
-        self, reformat_job_name: str, *, job_fire_time: Timestamp | None = None
+        self,
+        reformat_job_name: str,
+        *,
+        materialized_job: client.V1Job | None = None,
+        job_fire_time: Timestamp | None = None,
     ) -> None:
         try:
             self._validate_with_monitor(reformat_job_name, job_fire_time=job_fire_time)
         except Exception as error:
             log.exception("Operational validation failed for %s", reformat_job_name)
             if (
-                isinstance(error, validation.OperationalValidationError)
+                (
+                    materialized_job is not None
+                    or isinstance(error, validation.OperationalValidationError)
+                )
                 and Config.is_prod
                 and not (
                     issubclass(self.region_job_class, VirtualRegionJob)
@@ -210,14 +299,23 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 )
             ):
                 should_retry, retry_job_name = kubernetes.retry_job_name(
-                    reformat_job_name
+                    reformat_job_name,
+                    max_retries=16 if materialized_job is not None else 1,
                 )
-                if should_retry:
+                if should_retry and (
+                    materialized_job is None
+                    or parallel_coordination.backoff_before_repass(
+                        self.store_factory,
+                        os.environ["CRON_JOB_NAME"],
+                        materialized_job,
+                        int(retry_job_name.rsplit("-r", 1)[1]),
+                    )
+                ):
                     try:
                         kubernetes.create_job_from_cronjob(
                             os.environ["CRON_JOB_NAME"],
                             retry_job_name,
-                            skip_if_next_run_within_deadline=True,
+                            skip_if_next_run_within_deadline=materialized_job is None,
                         )
                     except Exception:
                         log.exception("Could not submit %s", retry_job_name)
@@ -457,6 +555,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         update_template_with_results: bool,
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
+        job_uid: str | None = None,
     ) -> None:
         """Shared processing loop for both updates and backfills.
 
@@ -570,6 +669,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 consolidated=self.region_job_class.consolidated_metadata,
                 publish_zarr3_metadata=update_template_with_results or overwrite,
                 exclude_coord_value_chunks=exclude_coord_value_chunks,
+                job_uid=job_uid,
             )
 
     def _run_virtual_operational_update(
@@ -705,18 +805,26 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         tmp_store: Path,
         *,
         job_fire_time: Timestamp | None = None,
+        job_reference_time: Timestamp | None = None,
     ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
         """The jobs an operational update runs, and the template they write against."""
         operational_update_jobs = self.region_job_class.operational_update_jobs
-        fire_time_kwarg: dict[str, Any] = {}
-        if "job_fire_time" in inspect.signature(operational_update_jobs).parameters:
-            fire_time_kwarg["job_fire_time"] = (
+        time_kwargs: dict[str, Any] = {}
+        parameters = inspect.signature(operational_update_jobs).parameters
+        assert job_reference_time is None or "job_reference_time" in parameters, (
+            f"{self.region_job_class.__name__}.operational_update_jobs must accept "
+            "job_reference_time for queued updates"
+        )
+        if "job_fire_time" in parameters:
+            time_kwargs["job_fire_time"] = (
                 job_fire_time
                 if job_fire_time is not None
                 else self._operational_cron_job(ReformatCronJob).previous_fire_time(
                     pd.Timestamp.now()
                 )
             )
+        if "job_reference_time" in parameters:
+            time_kwargs["job_reference_time"] = job_reference_time
 
         return operational_update_jobs(
             primary_store=self.store_factory.primary_store(),
@@ -725,7 +833,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
             reformat_job_name=reformat_job_name,
-            **fire_time_kwarg,
+            **time_kwargs,
         )
 
     def _virtual_validation_region_job(

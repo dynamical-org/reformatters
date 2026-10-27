@@ -30,13 +30,14 @@ class NoaaHrrrForecast48HourDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Define Kubernetes cron jobs for operational updates."""
         # We pull the 0, 6, 12, and 18 init times in this dataset.
-        # HRRR f048 (last lead time) NOMADS last-modified ~init+1h50m (we try S3
-        # first to spare NOMADS, but NOMADS publishes first). +3 min buffer.
+        # Complete-cycle source readiness sets the offset, rounded up to a minute.
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="53 1,7,13,19 * * *",
-            pod_active_deadline=timedelta(minutes=10),  # usually takes <2 min
+            schedule="6 2,8,14,20 * * *",
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6),
+            active_deadline=timedelta(hours=6),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",
@@ -58,7 +59,7 @@ class NoaaHrrrForecast48HourDataset(
             self.template_config.data_vars
         )
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=3)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=6)),
             # append_dim_window=4 covers a day of 6-hourly cycles, so a truncated or missing
             # forecast is caught even after newer cycles land.
             validation.CheckRecentNans(

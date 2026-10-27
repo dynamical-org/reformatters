@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
 import pandas as pd
 import pydantic
@@ -286,6 +286,13 @@ class CronJob(Job):
     suspend: bool = False
     concurrency_policy: ConcurrencyPolicy = "Replace"
 
+    @pydantic.model_validator(mode="after")
+    def _validate_overlap_deadline(self) -> Self:
+        assert self.concurrency_policy != "Allow" or self.active_deadline is not None, (
+            "CronJobs using Allow require a Job active_deadline"
+        )
+        return self
+
     def previous_fire_time(self, now: Timestamp) -> Timestamp:
         """The most recent time this schedule fired, at or before `now`.
 
@@ -321,7 +328,10 @@ class CronJob(Job):
                 "schedule": self.schedule,
                 "suspend": self.suspend,
                 "concurrencyPolicy": self.concurrency_policy,
-                "jobTemplate": {"spec": job_spec},
+                "jobTemplate": {
+                    "metadata": {"labels": {_CRONJOB_NAME_LABEL: self.name}},
+                    "spec": job_spec,
+                },
             },
         }
 
@@ -456,6 +466,47 @@ def create_job_from_cronjob(
             raise
         log.info(f"Job {job_name} already exists from CronJob {cronjob_name}")
     return True
+
+
+def get_job(job_name: str) -> client.V1Job:
+    config.load_incluster_config()
+    return client.BatchV1Api().read_namespaced_job(
+        job_name, os.environ["POD_NAMESPACE"]
+    )
+
+
+def list_cronjob_jobs(cronjob_name: str) -> list[client.V1Job]:
+    config.load_incluster_config()
+    jobs = client.BatchV1Api().list_namespaced_job(
+        os.environ["POD_NAMESPACE"],
+        label_selector=f"{_CRONJOB_NAME_LABEL}={cronjob_name}",
+    )
+    return sorted(jobs.items, key=job_order)
+
+
+def job_order(job: client.V1Job) -> tuple[datetime, str]:
+    assert job.metadata is not None
+    assert job.metadata.creation_timestamp is not None
+    assert job.metadata.name is not None
+    return job.metadata.creation_timestamp, job.metadata.name
+
+
+def job_is_terminal(job: client.V1Job) -> bool:
+    conditions = job.status.conditions if job.status is not None else None
+    return any(
+        condition.type in {"Complete", "Failed"} and condition.status == "True"
+        for condition in (conditions or [])
+    )
+
+
+def job_kind(job: client.V1Job) -> Literal["trigger", "scheduled", "manual"]:
+    assert job.metadata is not None
+    annotations = job.metadata.annotations or {}
+    if annotations.get("dynamical.org/run-kind") == "trigger":
+        return "trigger"
+    if annotations.get("cronjob.kubernetes.io/instantiate") == "manual":
+        return "manual"
+    return "scheduled"
 
 
 def retry_job_name(job_name: str, max_retries: int = 1) -> tuple[bool, str]:

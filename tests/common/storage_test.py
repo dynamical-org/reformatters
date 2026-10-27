@@ -347,6 +347,20 @@ class TestCoordinationFiles:
         factory = _local_factory(tmp_path)
         factory.clear_coordination_files("test-job")  # should not raise
 
+    def test_cleanup_preserves_job_state(self, tmp_path: str) -> None:
+        factory = _local_factory(tmp_path)
+        factory.write_coordination_file("job", "state.json", b'"finalized"')
+        factory.write_coordination_file("job", "setup/ready.json", b"ready")
+        factory.write_coordination_file("job", "results/worker-0.json", b"data")
+
+        factory.clear_coordination_files("job")
+
+        assert factory.read_all_coordination_files("job", "state.json") == [
+            b'"finalized"'
+        ]
+        assert factory.read_all_coordination_files("job", "setup") == []
+        assert factory.read_all_coordination_files("job", "results") == []
+
 
 class TestIcechunkRepos:
     def test_returns_repos_for_icechunk_stores_only(self) -> None:
@@ -724,13 +738,22 @@ def test_clear_coordination_files_rm_path_rooted_in_internal(
         template_config_version="v1.0",
     )
     mock_fs = MagicMock()
+    mock_fs.ls.return_value = [f"{factory._coordination_base_path()}/my-job/results"]
     monkeypatch.setattr(factory, "_coordination_fs", lambda: mock_fs)
 
     factory.clear_coordination_files("my-job")
 
+    mock_fs.invalidate_cache.assert_called_once_with(
+        f"{factory._coordination_base_path()}/my-job"
+    )
+    assert [call[0] for call in mock_fs.method_calls] == [
+        "invalidate_cache",
+        "ls",
+        "rm",
+    ]
     mock_fs.rm.assert_called_once()
     path = mock_fs.rm.call_args.args[0]
-    assert path.endswith("/_internal/my-job"), path
+    assert path.endswith("/_internal/my-job/results"), path
 
 
 class TestIcechunkPrimaryWithZarr3Replica:

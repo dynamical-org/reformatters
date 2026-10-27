@@ -68,6 +68,39 @@ Use one scalar per dataset. Later positions in a multi-position unit are detecte
 
 Currency does not replace integrity checks. Use `CheckVirtualManifestCompleteness` to require complete older positions and detect interior gaps, and use recent NaNs, decode health, replica, and expected-shard checks as appropriate. Tune leading completeness tiers and NaN thresholds by hand when they false-alert. Integrity failures can page before the currency fire. Validation errors page, and Sentry cron monitors alert on missed, timeout, and error check-ins. See [validation](validation.md) for configuring and inspecting checks.
 
+## Materialized deadlines and monitoring
+
+Materialized pod and Job active deadlines equal the interval between scheduled fires, `Δf`. Sentry's `max_runtime` matches the pod deadline, so a hung update alerts at that deadline. Virtual budgets follow [virtual polling](#virtual-polling).
+
+The update check-in covers the start decision, queue wait, processing, and finalization. A skipping Job closes it successfully without validation. Validation has its own check-in after publication. End-of-run backoff is outside both check-ins.
+
+## Materialized queue and re-passes
+
+These rules apply to production materialized updates whose CronJobs adopt `Allow` with the deadlines above. [Job state and ordering](parallel_processing.md#materialized-job-state-and-ordering) define the coordination files and Job identity. A Job is **writing** while Kubernetes reports neither a `Complete` nor a `Failed` condition and its matching-UID state is absent or `run`. Failed indices alone do not make a Job terminal; running siblings may still write. A stuck writer blocks newer Jobs until it finishes or its Job deadline expires.
+
+Pod 0 decides once, before any index computes region jobs. Job annotations determine the kind:
+
+- `dynamical.org/run-kind: trigger` identifies a trigger.
+- Other Jobs annotated `cronjob.kubernetes.io/instantiate: manual` are manual, including operator clones and re-passes.
+- Remaining Jobs are scheduled. Ownership does not determine the kind.
+
+A scheduled Job takes the backstop check when a trigger for its CronJob was created within `Δf/2` before its own creation. It waits for older writers without recording a state, then checks only `CheckCurrentData` against the published store. It records `skip` if current, otherwise `run`. The comparison uses the scheduled Job's own creation time even when pod 0 is replaced later. Every other Job records `run`. Until annotated triggers exist, the backstop check is inactive.
+
+All indices, including replacement pods, reuse the matching-UID decision. `skip` and `finalized` exit 0 without processing or validation. On `run`, each index waits until no older Job is writing, checking every 30 seconds, before reading the store and computing jobs. Waiting only on older Jobs prevents deadlock; a finalized Job does not block the queue while validating or sleeping. A Job deciding whether to skip never records `run` first, so it cannot suppress a re-pass and then skip.
+
+Each adopted materialized builder accepts the explicit `job_reference_time` argument. Its current Job's own `creationTimestamp`, normalized to UTC, anchors window and planning calculations; a re-pass uses its own Job's creation time. All indices and replacements therefore compute the same window across initialization boundaries. Forwarding a reference to an unsupported builder fails rather than dropping it. Download, polling, and validation clocks keep current time. This reference is distinct from a virtual update's selected `job_fire_time`.
+
+The last index follows the [publication and cleanup order](parallel_processing.md#cleanup), then always validates, including when it had no region jobs. On successful validation, the run is done. On failure, it reports the error before backing off outside the check-ins:
+
+- Sleep 5 minutes before `-r1`, 10 before `-r2`, 20 before `-r3`, and 30 before each later re-pass, through `-r16`.
+- From 30 seconds into sleep, check every 30 seconds and immediately before submission for a newer nonterminal Job with matching-UID `run` state. Yield to one without submitting; absent, skipped, finalized, terminal, or stale-UID state does not suppress a re-pass.
+- Otherwise, `create_job_from_cronjob` submits the next `-rN` as an ordinary manual update. It recomputes its repair work from store state. Re-passes use `retry_job_name(max_retries=16)` and do not apply the legacy next-fire deadline suppression. Suspending the CronJob prevents submission.
+- Exit 20 whether a re-pass was submitted or the pod yielded. A failing `-r16` reports and exits without sleeping or submitting another Job.
+
+An interrupted backoff is lost; a later trigger or scheduled fire covers it. A replacement that sees finalized state exits successfully, including after an interruption in cleanup, validation, or backoff. Every persistent failure can start another chain at each fire, and sleeping pods retain their resources. See the [operations card](ops_card.md#troubleshooting) for first response steps.
+
+Materialized datasets outside this lifecycle retain one immediate `-r1`, submitted only when the next scheduled fire is farther away than the pod deadline. A multi-worker replacement after cleanup waits for deleted setup files until its deadline; a single-worker replacement reruns the update. Inspect termination reasons before rerunning the full update as a new Job.
+
 ## Repair window
 
 `operational_update_jobs` defines the repair window, usually starting inclusively at the latest stored position. A dataset that needs a wider window defines one. Gaps outside it page and require a [backfill](backfill.md). Forecast-derived analyses publish a non-ragged leading edge through result trimming or discovery gating.

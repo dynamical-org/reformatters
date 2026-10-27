@@ -284,6 +284,11 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             The name of the reformatting job, used for progress tracking.
             This is often the name of the Kubernetes job, or "local".
 
+        A materialized implementation may declare `job_reference_time: Timestamp | None`: the
+        Kubernetes Job creation time, normalized to naive UTC. Using it for the window end
+        gives every index and replacement the same work even across an init boundary.
+        Without a reference time, local and non-Allow updates keep their clock behavior.
+
         An implementation may additionally declare `job_fire_time: Timestamp | None`,
         passed only to implementations that declare it: the scheduled fire of the
         update cron running this job. Bounding the update by it rather than by the

@@ -69,7 +69,15 @@ Virtual *backfills* are **not** an exception — they use the normal temp-branch
 
 ## Worker coordination
 
-For `workers_total > 1`, workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/` (a single-worker job skips these files).
+Workers coordinate via files in an object store directory at `{base_path}/{dataset_id}/_internal/{job_name}/`. Setup and result files are needed only for `workers_total > 1`. Materialized operational updates using the queue below also retain a `state.json`, including for single-worker Jobs.
+
+### Materialized Job state and ordering
+
+The [materialized queue and re-pass rules](operational_update_timing.md#materialized-queue-and-re-passes) define admission decisions, writer waits, reference-time windows, validation, and retries.
+
+Every Job inherits the `dynamical.org/cronjob-name` label from its CronJob's `jobTemplate`. The update service account and deployer need `list` permission on Jobs. The shared listing helper selects that label and orders Jobs by `(creationTimestamp, name)`.
+
+`state.json` contains the Job UID in `uid` and one of `run`, `skip`, or `finalized` in `state`. Readers accept it only for the current Job UID; another UID counts as absent. Setup/results cleanup preserves this file.
 
 ### Setup signal
 
@@ -81,9 +89,9 @@ Each worker writes `results/worker-{N}.json` containing its `process_results` di
 
 ### Cleanup
 
-After successful finalization, the last worker deletes the `_internal/{job_name}/` directory and the temp icechunk branch.
+For queued materialized updates, finalization records `finalized` only after every store's publication CAS succeeds and the divergence check passes. This write precedes deletion of temporary branches and coordination files. A failed or interrupted publication leaves the existing state and temporary branches available for inspection or retry.
 
-Operational validation runs in that last worker after cleanup. A caught validation error exits with code 20 and fails the Job without restarting the finalized index. If a multi-worker Job's last pod is killed during validation, its replacement instead waits for the deleted setup files until its pod deadline; it cannot resume validation. Single-worker replacements rerun the update. Inspect pod termination reasons before retrying the full update as a new Job.
+The last worker deletes the temporary Icechunk branches, then setup and result files; `state.json` is retained. See the [materialized lifecycle](operational_update_timing.md#materialized-queue-and-re-passes) for replacement-pod, validation, and backoff behavior.
 
 ## Failure modes
 

@@ -12,7 +12,7 @@ Prefer simple mechanisms and existing utilities. Accept occasional late alerts o
 | B′: urgent currency values | audit `max_delay` against existing fires | Not needed: an audit found current `max_delay` values already satisfy the currency rule | No correction required |
 | [A: overlap primitives](https://github.com/dynamical-org/reformatters/pull/1227) | configurable concurrency; fresh-session conflict recovery; metadata refresh using its committing session | Draft; implemented | Conflict recovery and metadata refresh apply to existing datasets; overlap activation is adopted per cohort |
 | [C: virtual pilot](https://github.com/dynamical-org/reformatters/pull/1262) | poll windows, deadlines, and currency values; virtual lifecycle documentation | Draft; pilots implemented | HRRR 18-hour and RRFS sub-hourly virtual use overlapping polling with bounded Jobs and selected-fire validation; remaining virtual families follow |
-| D: materialized pilot and cohorts | queue, deadlines, validation re-passes, untriggered schedules; analysis boundary windows | Pending | Pilot: HRRR 48-hour; remaining materialized families follow |
+| [D: materialized pilot and cohorts](https://github.com/dynamical-org/reformatters/pull/1260) | queue, deadlines, validation re-passes, untriggered schedules; analysis boundary windows | Draft; pilot implemented | HRRR 48-hour uses the materialized queue, Job-reference-time window, bounded re-passes, and chosen untriggered timing; remaining materialized families and analysis boundaries follow |
 | G: completion triggers and cohorts | completion dispatch, Job identity, backstop decisions, admission; move consumer schedules with trigger activation | Pending | After both producer and consumer lifecycles are adopted |
 
 Adoption status is tracked here; recommendations do not activate polling, overlapping writers, retries, or triggers. Each later change updates this table with its PR link and adopted datasets. The core dependency order is B, A, C pilot, D pilot, G pilot, then family cohorts. The profiler recommends `S = min(p95 + max(p95 − p50, 5 min), p99 + 1 min)` for untriggered runs and retains all three candidates plus the chosen row for review. Untriggered cron moves and derived currency values use that chosen offset; adoption and named exceptions remain subject to manual review. A consumer's move from `S` to `T` lands with its trigger activation.
@@ -25,21 +25,9 @@ Discover about once per second and commit each tick. Exit when nothing remains p
 
 Pod and Job deadlines include the fire interval, startup, overlap, maximum observed validation duration, and shutdown allowance. Validation runs once after polling, and its failure exits with the validation-failure code. Virtual runs create no re-pass Job. Unreadable files are skipped for that pod's lifetime and retried at the next fire. Document these rules in the evergreen timing and virtual-dataset docs with the pilot implementation.
 
-### Materialized admission and queue
+### Materialized cohorts
 
-Enable this lifecycle only with `Allow` concurrency and pod and Job deadlines equal to the fire interval. The update check-in covers the start decision, queue wait, processing, and finalize. Backoff sleep is outside it; Sentry's maximum runtime matches the pod deadline.
-
-Store the Job UID and `run`, `skip`, or `finalized` in `state.json` in its coordination directory. Another UID's state counts as absent. Order Jobs by creation timestamp, then name. A Job is writing while Kubernetes reports it neither Complete nor Failed and its state is absent or `run`.
-
-Pod zero decides before computing jobs. Every ordinary Job records `run`; every index waits until no older Job is writing before computing its jobs. Replacement pods reuse the recorded decision. A finalized Job exits successfully without writing again. Immediately after the finalize CAS, record `finalized` before cleanup; the final pod then always validates. Waiting only on older writers prevents deadlock and lets a queued Job proceed while an older finalized Job validates or sleeps.
-
-Scheduled, trigger, and manual Jobs are distinguished by annotations. `dynamical.org/run-kind: trigger` identifies a trigger. Without `cronjob.kubernetes.io/instantiate: manual`, an untagged Job is scheduled; all others are manual, including operator clones and re-passes. Manual Jobs always run. Once triggers are active, a scheduled Job with a trigger created within half the fire interval before its creation first waits for older writers, then skips if currency passes. It records no `run` state before that decision.
-
-### Materialized validation re-passes
-
-A validation failure pages. Unless the Job is already `-r16`, wait 5, 10, or 20 minutes, then 30 minutes on subsequent steps. From one minute into sleep, check each minute and immediately before submission for a newer nonterminal Job with `run` state. Yield to such a Job; otherwise clone the next re-pass from the CronJob and exit with the validation-failure code. A re-pass recomputes work from store state. Interrupted sleeps are lost; a later trigger or fire covers recovery. Retain state files until ordinary cleanup.
-
-Persistent integrity failures can cause repeated full passes and alerts while sleeping pods retain their resources. During a known persistent failure, suspend the CronJob or fix the validator. Add that guidance to the operations docs with the materialized lifecycle. Keep the deprecated plain-Zarr primary on its existing lifecycle until removal; reader safety remains mandatory.
+The [materialized deadlines and monitoring](../operational_update_timing.md#materialized-deadlines-and-monitoring) and [queue and re-pass rules](../operational_update_timing.md#materialized-queue-and-re-passes) are implemented and documented with the pilot. Remaining work is cohort adoption, tracked above. The deprecated plain-Zarr primary retains its existing lifecycle until removal.
 
 ### Triggers
 
