@@ -1,3 +1,4 @@
+import math
 import os
 import signal
 from collections.abc import Iterator
@@ -110,7 +111,9 @@ def monitor_cron(
                 "schedule": {"type": "crontab", "value": cron_job.schedule},
                 "timezone": "UTC",
                 "checkin_margin": checkin_margin,
-                "max_runtime": int(cron_job.pod_active_deadline.total_seconds() / 60),
+                "max_runtime": math.ceil(
+                    cron_job.pod_active_deadline.total_seconds() / 60
+                ),
                 "failure_issue_threshold": 1,
                 "recovery_threshold": 1,
             },

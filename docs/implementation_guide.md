@@ -136,7 +136,7 @@ Kubernetes resource values, materialized (fan-out across indexed jobs):
   - ephemeral_storage: 20GB is a good starting point.
   - Parallelism: set `workers_total` and `parallelism` on the `ReformatCronJob` using `self.num_variable_groups()`. Multiply by 2 if `operational_update_jobs` reprocesses the most recent time slice (see GEFS datasets for examples).
 
-For virtual updates, use `workers_total = 1` and `parallelism = 1` (they are single-writer); `cpu="1.7"` and `memory="7G"` are good starting points. See [Operational updates](virtual_datasets.md#operational-updates-single-writer), and [Manifest splitting](virtual_datasets.md#manifest-splitting) for sizing the manifest split the storage config needs.
+For virtual updates, use `workers_total = 1` and `parallelism = 1` (one worker per Job); `cpu="1.7"` and `memory="7G"` are good starting points. See [Operational updates](virtual_datasets.md#operational-updates), and [Manifest splitting](virtual_datasets.md#manifest-splitting) for sizing the manifest split the storage config needs.
 
 For a materialized source whose publication lag exceeds 48 hours, set `expected_unavailable_window` on its region job so not-yet-published days log at info.
 

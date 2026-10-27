@@ -225,6 +225,34 @@ def test_monitor_cron_without_sentry(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_capture.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("deadline", "max_runtime"),
+    [
+        (timedelta(hours=2), 120),
+        (timedelta(hours=2, seconds=1), 121),
+        (timedelta(minutes=63, seconds=31), 64),
+        (timedelta(minutes=62, seconds=37), 63),
+    ],
+)
+def test_monitor_rounds_runtime_up_to_the_pod_deadline(
+    deadline: timedelta,
+    max_runtime: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
+    capture = Mock()
+    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", capture)
+    monkeypatch.setattr(sentry_sdk, "flush", Mock())
+    cron = _CRON_JOB.model_copy(update={"pod_active_deadline": deadline})
+
+    with monitor_cron(cron, "job-name"):
+        pass
+
+    assert [
+        call.kwargs["monitor_config"]["max_runtime"] for call in capture.call_args_list
+    ] == [max_runtime, max_runtime]
+
+
 def test_install_sigterm_logger(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

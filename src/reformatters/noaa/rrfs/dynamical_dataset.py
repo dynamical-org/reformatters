@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import Any, ClassVar, Generic, TypeVar
+from typing import Any, ClassVar, Generic, Literal, TypeVar
 
 from pydantic import Field, NonNegativeInt
 
@@ -27,6 +27,7 @@ class NoaaRrfsDataset(
     template_config: NoaaProjectedForecastTemplateConfig[DATA_VAR]
     update_offset_minutes: NonNegativeInt
     update_deadline: timedelta
+    concurrency_policy: ClassVar[Literal["Allow", "Forbid", "Replace"]] = "Replace"
     min_present_fraction: ClassVar[tuple[float, ...]] = (1.0,)
     allow_all_nan_vars: ClassVar[tuple[str, ...]] = ()
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
@@ -63,6 +64,7 @@ class NoaaRrfsDataset(
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
                 schedule=f"{self.update_offset_minutes % 60} {hours} * * *",
+                concurrency_policy=self.concurrency_policy,
                 pod_active_deadline=self.update_deadline,
                 active_deadline=self.update_deadline,
                 image=image_tag,

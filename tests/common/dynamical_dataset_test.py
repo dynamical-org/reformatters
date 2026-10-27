@@ -879,13 +879,13 @@ def test_validate_dataset_virtual_replica_compares_but_skips_shard_check(
     assert replica_call.kwargs["region_job"] is None
 
 
-def test_run_virtual_operational_update_asserts_single_writer() -> None:
+def test_run_virtual_operational_update_asserts_one_worker_per_job() -> None:
     dataset = ExampleVirtualDataset()
-    with pytest.raises(AssertionError, match="single-writer"):
+    with pytest.raises(AssertionError, match="one worker per Job"):
         dataset._run_virtual_operational_update(
             [Mock()], worker_index=0, workers_total=2
         )
-    with pytest.raises(AssertionError, match="single-writer"):
+    with pytest.raises(AssertionError, match="one worker per Job"):
         dataset._run_virtual_operational_update(
             [Mock()], worker_index=1, workers_total=1
         )

@@ -160,7 +160,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             )
 
             if issubclass(self.region_job_class, VirtualRegionJob):
-                # Virtual operational updates are single-writer streaming (see docs/parallel_processing.md)
+                # Virtual operational updates stream one worker per Job (see docs/parallel_processing.md).
                 if is_first:
                     self._assert_no_structural_drift(template_ds)
                 self._run_virtual_operational_update(
@@ -192,6 +192,11 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             if (
                 isinstance(error, validation.OperationalValidationError)
                 and Config.is_prod
+                and not (
+                    issubclass(self.region_job_class, VirtualRegionJob)
+                    and self._operational_cron_job(ReformatCronJob).concurrency_policy
+                    == "Allow"
+                )
             ):
                 should_retry, retry_job_name = kubernetes.retry_job_name(
                     reformat_job_name
@@ -562,12 +567,12 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         worker_index: int,
         workers_total: int,
     ) -> None:
-        """Single-writer virtual dataset operational update: commit one or more
+        """One-worker virtual dataset operational update: commit one or more
         whole source files straight to the "main" icechunk branch as they arrive
         (no parallel_coordination), so readers see each file within seconds.
         See "Operational updates" in docs/virtual_datasets.md."""
-        assert workers_total == 1, "Virtual operational updates run single-writer"
-        assert worker_index == 0, "Virtual operational updates run single-writer"
+        assert workers_total == 1, "Virtual operational updates use one worker per Job"
+        assert worker_index == 0, "Virtual operational updates use one worker per Job"
         # A single active-window job whose generator polls the union of all
         # still-missing files; multiple jobs would run sequentially and the first
         # one's polling could consume the pod's deadline and starve the rest.
@@ -837,14 +842,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         return Config.is_prod
 
     def _virtual_poll_deadline(self, now: Timestamp) -> Timestamp:
-        """When a virtual operational update stops waiting on files the source has not
-        published yet, leaving them to the next fire.
-
-        Anchored to the scheduled fire rather than to `now`, so a pod replacing an
-        evicted one stops when the pod it replaced would have, instead of polling into
-        the next fire and being killed mid-poll. Lands a grace period before the pod's
-        own active deadline, leaving room to validate, exit and check in.
-        """
+        """Polling cutoff of the latest scheduled fire, reserving time for validation."""
         cron_job = self._operational_cron_job(ReformatCronJob)
         assert (
             timedelta(0)

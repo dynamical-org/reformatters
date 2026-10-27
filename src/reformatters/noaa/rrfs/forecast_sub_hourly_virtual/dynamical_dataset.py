@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from pydantic import NonNegativeInt
 
@@ -10,10 +10,10 @@ from .template_config import NoaaRrfsForecastSubHourlyVirtualTemplateConfig
 
 
 class NoaaRrfsForecastSubHourlyVirtualDataset(NoaaRrfsDataset):
-    # Polling leaves time to validate and exit before the next hourly update.
     update_offset_minutes: NonNegativeInt = 75
-    update_deadline: timedelta = timedelta(minutes=59)
-    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=60)
+    update_deadline: timedelta = timedelta(minutes=62, seconds=37)
+    concurrency_policy: ClassVar[Literal["Allow", "Forbid", "Replace"]] = "Allow"
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=81)
     # 00Z and 12Z source publication can continue past the poll deadline.
     min_present_fraction: ClassVar[tuple[float, ...]] = (6 / 18, 1.0)
     template_config: NoaaRrfsForecastSubHourlyVirtualTemplateConfig = (
@@ -24,6 +24,4 @@ class NoaaRrfsForecastSubHourlyVirtualDataset(NoaaRrfsDataset):
     )
 
     def current_data_max_delay(self) -> timedelta:
-        # A delayed init's first file can land after this pod's poll deadline; the
-        # next hourly fire checks that init.
-        return timedelta(hours=2, minutes=40)
+        return timedelta(minutes=139)

@@ -31,7 +31,7 @@ class NoaaHrrrForecast18HourVirtualDataset(
         NoaaHrrrForecast18HourVirtualRegionJob
     )
 
-    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=2)
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=107)
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
@@ -50,11 +50,12 @@ class NoaaHrrrForecast18HourVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Race the current init: f00 arrives near :51 and f18 normally by init + 86m.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="50 * * * *",
-            pod_active_deadline=timedelta(minutes=59),
+            schedule="44 * * * *",
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(minutes=63, seconds=31),
+            active_deadline=timedelta(minutes=63, seconds=31),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="4",
@@ -66,7 +67,7 @@ class NoaaHrrrForecast18HourVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(minutes=52)),
+            validation.CheckCurrentData(max_delay=timedelta(minutes=81)),
             # Newest ingested init: the run that just ended may have deferred late files
             # to the next fire, but f00 lands an hour before its poll deadline, so 5%
             # (3 of 57 files, one lead's worth) separates a deferral from a cycle that
