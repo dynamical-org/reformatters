@@ -13,6 +13,7 @@ import pandas as pd
 import typer
 import xarray as xr
 import zarr
+from matplotlib.axes import Axes
 from zarr.storage import ObjectStore, StoreLike
 
 from reformatters.common.retry import retry
@@ -310,6 +311,51 @@ class RunContext:
 def is_forecast_dataset(ds: xr.Dataset) -> bool:
     """Check if dataset is a forecast (has init_time and lead_time) or analysis (has time)."""
     return "init_time" in ds.dims and "lead_time" in ds.dims
+
+
+def is_wind_direction(data: xr.DataArray) -> bool:
+    return data.attrs.get("standard_name") in (
+        "wind_from_direction",
+        "wind_to_direction",
+    ) and data.attrs.get("units") in ("degree", "degrees")
+
+
+def report_mean(
+    data: xr.DataArray, dim: str | Sequence[str] | None = None
+) -> xr.DataArray:
+    """NaN-skipping mean; degree wind directions use unit-vector means.
+
+    A mean resultant length at most 1e-8 has no defined direction and returns NaN.
+    """
+    if not is_wind_direction(data):
+        return data.mean(dim=dim, keep_attrs=True)
+    radians = np.deg2rad(data.astype("float64"))
+    sin_mean = xr.apply_ufunc(np.sin, radians, dask="allowed").mean(dim=dim)
+    cos_mean = xr.apply_ufunc(np.cos, radians, dask="allowed").mean(dim=dim)
+    mean = np.rad2deg(np.arctan2(sin_mean, cos_mean)) % 360
+    mean = mean.where(~np.isclose(mean, 360, rtol=0, atol=1e-10), 0)
+    return mean.where(np.hypot(sin_mean, cos_mean) > 1e-8).assign_attrs(data.attrs)
+
+
+def annotate_empty_timeseries(
+    ax: Axes,
+    data: xr.DataArray,
+    time_coord: str,
+    period: xr.DataArray | None = None,
+) -> None:
+    if data.notnull().any():
+        return
+    times = data[time_coord] if period is None else period
+    if times.size > 1:
+        ax.set_xlim(times.values.min(), times.values.max())
+    ax.text(
+        0.5,
+        0.5,
+        "No data at this point in the requested period (validation).",
+        ha="center",
+        va="center",
+        transform=ax.transAxes,
+    )
 
 
 def scope_time_period(

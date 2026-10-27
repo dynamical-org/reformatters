@@ -1,15 +1,19 @@
 from unittest.mock import Mock
 
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
 
 from scripts.validation.compare_timeseries import (
+    _draw_timeseries_at_point,
+    _store_temporal_stats,
     run_compare_timeseries,
     select_time_period_for_comparison,
 )
-from scripts.validation.utils import RunContext
+from scripts.validation.utils import RunContext, VariableStats
 
 
 def _reference_dataset() -> xr.Dataset:
@@ -126,3 +130,67 @@ def test_temporal_statistic_selection_labels_and_reference(
         assert f"[statistic={label}]" in title
     if not comparable:
         assert "validation only" in title
+
+
+@pytest.mark.parametrize("wind", [False, True])
+def test_temporal_point_statistics_preserve_extrema(wind: bool) -> None:
+    data = xr.DataArray([350.0, np.nan, 10.0], dims="time")
+    if wind:
+        data.attrs.update(standard_name="wind_to_direction", units="degree")
+    stats = VariableStats(name="test")
+    _store_temporal_stats(stats, data, data, data, data)
+    for prefix in ("val", "ref"):
+        for point in (1, 2):
+            assert getattr(stats, f"{prefix}_temporal_min_p{point}") == 10.0
+            assert getattr(stats, f"{prefix}_temporal_max_p{point}") == 350.0
+            assert getattr(stats, f"{prefix}_temporal_mean_p{point}") == pytest.approx(
+                0.0 if wind else 180.0, abs=1e-10
+            )
+
+
+@pytest.mark.parametrize("reference", ["absent", "empty", "valid"])
+@pytest.mark.parametrize("forecast", [False, True])
+def test_empty_comparison_panel_retains_dates_and_annotation(
+    reference: str, forecast: bool
+) -> None:
+    times = pd.date_range("2020-01-01", periods=6, freq="D")
+    coord = "valid_time" if forecast else "time"
+    dim = "lead_time" if forecast else "time"
+    data = xr.DataArray(np.full(6, np.nan), dims=dim, coords={coord: (dim, times)})
+    ref = (
+        None
+        if reference == "absent"
+        else xr.DataArray(
+            np.full(6, 1.0 if reference == "valid" else np.nan),
+            dims="time",
+            coords={"time": times},
+        )
+    )
+    fig, ax = plt.subplots()
+    try:
+        _draw_timeseries_at_point(
+            ax, data, ref, coord, "time", "validation", "reference", "K", "point"
+        )
+        np.testing.assert_allclose(
+            ax.get_xlim(), mdates.date2num([times[0], times[-1]])
+        )
+        assert any(
+            "no data at this point" in text.get_text().lower() for text in ax.texts
+        )
+        assert all("validation" in text.get_text().lower() for text in ax.texts)
+        assert not any("land" in text.get_text().lower() for text in ax.texts)
+    finally:
+        plt.close(fig)
+
+
+def test_present_comparison_data_has_no_absence_annotation() -> None:
+    times = pd.date_range("2020-01-01", periods=6, freq="D")
+    data = xr.DataArray(np.ones(6), dims="time", coords={"time": times})
+    fig, ax = plt.subplots()
+    try:
+        _draw_timeseries_at_point(
+            ax, data, None, "time", "time", "validation", "reference", "K", "point"
+        )
+        assert not ax.texts
+    finally:
+        plt.close(fig)

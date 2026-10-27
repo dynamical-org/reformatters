@@ -10,6 +10,7 @@ from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
     RunContext,
     VariableStats,
+    annotate_empty_timeseries,
     deterministic_reference_allowed,
     end_date_option,
     get_two_random_points,
@@ -24,6 +25,7 @@ from scripts.validation.utils import (
     parse_point_options,
     point_option,
     reference_url_option,
+    report_mean,
     resolve_output_dir,
     resolve_reference_url,
     scope_time_period,
@@ -112,7 +114,7 @@ def _compute_point_stats(
     vals = vals[~np.isnan(vals)]
     if vals.size == 0:
         return None, None, None
-    return float(np.min(vals)), float(np.max(vals)), float(np.mean(vals))
+    return float(np.min(vals)), float(np.max(vals)), float(report_mean(da))
 
 
 def _draw_timeseries_at_point(
@@ -155,6 +157,7 @@ def _draw_timeseries_at_point(
     ax.tick_params(axis="x", rotation=45)
     ax.relim()
     ax.autoscale_view()
+    annotate_empty_timeseries(ax, val_series, time_coord)
 
 
 def _load_timeseries_for_var(

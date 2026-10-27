@@ -123,7 +123,9 @@ def _value_ts_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     lo, hi = _append_dim_range(ctx)
     header = f"**Point time series** — {lo} - {hi}"
     if ctx.is_virtual:
-        header += f", sampled lead={ctx.value_ts_lead_label}"
+        header += ", sampled"
+        if ctx.value_ts_lead_label is not None:
+            header += f" lead={ctx.value_ts_lead_label}"
         if ctx.value_ts_member is not None:
             header += f", member={ctx.value_ts_member}"
         if stats.level_dim is not None:

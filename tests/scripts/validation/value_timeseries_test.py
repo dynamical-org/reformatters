@@ -1,10 +1,13 @@
 from pathlib import Path
 from unittest.mock import Mock
 
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from matplotlib.figure import Figure
 
 from scripts.validation.utils import RunContext
 from scripts.validation.value_timeseries import (
@@ -132,6 +135,10 @@ def test_run_value_timeseries_forecast_draws_std(tmp_path: Path) -> None:
     stats = ctx.stats["temperature_2m"]
     assert stats.value_std_p1 is not None
     assert stats.value_std_p1 > 0.0
+    expected = ds["temperature_2m"].isel(ctx.point1_sel).mean(dim="lead_time")
+    assert stats.value_mean_p1 == pytest.approx(float(expected.mean()))
+    assert stats.value_min_p1 == float(expected.min())
+    assert stats.value_max_p1 == float(expected.max())
 
 
 def test_run_value_timeseries_selects_and_records_level(tmp_path: Path) -> None:
@@ -244,3 +251,70 @@ def test_virtual_sample_and_value_plot_record_statistic(
     run_value_timeseries(ctx)
     assert f"[statistic={expected}]" in figure.suptitle.call_args.args[0]
     assert stats.value_std_p1 is None
+
+
+def test_wind_value_series_and_full_period_statistics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ds = _forecast_dataset()
+    data = ds["temperature_2m"]
+    data.values[:] = np.asarray([350.0, 10.0, np.nan])[None, :, None, None]
+    data.attrs.update(standard_name="wind_from_direction", units="degree")
+    ctx = _ctx(ds, tmp_path)
+    mean, _ = _compute_value_series(data.isel(ctx.point1_sel))
+    np.testing.assert_allclose(mean, 0.0, atol=1e-10)
+    assert mean.attrs == data.attrs
+    run_value_timeseries(ctx)
+    stats = ctx.stats["temperature_2m"]
+    assert stats.value_mean_p1 == pytest.approx(0.0, abs=1e-10)
+    assert stats.value_mean_p2 == pytest.approx(0.0, abs=1e-10)
+    assert stats.value_min_p1 == pytest.approx(0.0, abs=1e-10)
+    assert stats.value_max_p1 == pytest.approx(0.0, abs=1e-10)
+    assert stats.value_std_p1 is None
+    assert stats.value_std_p2 is None
+    figures: list[Figure] = []
+    monkeypatch.setattr(
+        Figure, "savefig", lambda self, *args, **kwargs: figures.append(self)
+    )
+    run_value_timeseries(ctx)
+    assert len(figures[0].axes) == 2
+
+
+@pytest.mark.parametrize("kind", ["analysis", "forecast", "virtual"])
+def test_empty_value_panels_retain_full_requested_range(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    ds = _forecast_dataset() if kind == "forecast" else _analysis_dataset()
+    ds["temperature_2m"].values[:] = np.nan
+    ctx = _ctx(ds, tmp_path)
+    ctx.is_virtual = kind == "virtual"
+    monkeypatch.setattr(
+        "scripts.validation.value_timeseries.VIRTUAL_VALUE_TS_SAMPLES", 2
+    )
+    figures: list[Figure] = []
+    monkeypatch.setattr(
+        Figure, "savefig", lambda self, *args, **kwargs: figures.append(self)
+    )
+    run_value_timeseries(ctx)
+    time_dim = "init_time" if kind == "forecast" else "time"
+    for ax in figures[0].axes:
+        np.testing.assert_allclose(
+            ax.get_xlim(),
+            mdates.date2num([ds[time_dim].values[0], ds[time_dim].values[-1]]),
+        )
+    for ax in figures[0].axes[:2]:
+        assert any(
+            "no data at this point" in text.get_text().lower() for text in ax.texts
+        )
+        assert not any("land" in text.get_text().lower() for text in ax.texts)
+    plt.close("all")
+
+
+def test_full_period_wind_mean_wraps_across_time(tmp_path: Path) -> None:
+    ds = _analysis_dataset()
+    data = ds["temperature_2m"]
+    data.values[:] = np.asarray([350.0, 10.0] * 4)[:, None, None]
+    data.attrs.update(standard_name="wind_from_direction", units="degree")
+    ctx = _ctx(ds, tmp_path)
+    run_value_timeseries(ctx)
+    assert ctx.stats["temperature_2m"].value_mean_p1 == pytest.approx(0.0, abs=1e-10)

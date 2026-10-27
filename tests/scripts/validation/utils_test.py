@@ -20,6 +20,7 @@ from scripts.validation.utils import (
     nearest_point_index,
     parse_lead_time,
     parse_point_options,
+    report_mean,
     select_var_slice,
     to_reference_longitude,
     var_slug,
@@ -299,3 +300,59 @@ def test_anonymous_virtual_credentials_authorize_http_container(tmp_path: Path) 
     credentials = _anonymous_virtual_credentials(storage)
     assert credentials is not None
     icechunk.Repository.open(storage, authorize_virtual_chunk_access=credentials)
+
+
+@pytest.mark.parametrize("standard_name", ["wind_from_direction", "wind_to_direction"])
+@pytest.mark.parametrize("units", ["degree", "degrees"])
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([350.0, 10.0], 0.0),
+        ([20.0, 40.0], 30.0),
+        ([0.0, 180.0], np.nan),
+        ([0.0, 180.0000001], np.nan),
+        ([np.nan, np.nan], np.nan),
+        ([350.0, np.nan, 10.0], 0.0),
+    ],
+)
+def test_report_mean_wind_direction(
+    standard_name: str, units: str, dtype: str, values: list[float], expected: float
+) -> None:
+    data = xr.DataArray(
+        np.asarray(values, dtype=dtype),
+        dims="sample",
+        attrs={"standard_name": standard_name, "units": units},
+    )
+    original = data.copy(deep=True)
+    result = report_mean(data)
+    np.testing.assert_allclose(float(result), expected, atol=1e-6)
+    assert result.attrs == data.attrs
+    xr.testing.assert_identical(data, original)
+
+
+@pytest.mark.parametrize(
+    "attrs",
+    [
+        {},
+        {"standard_name": "air_temperature", "units": "degree"},
+        {"standard_name": "wind_from_direction", "units": "radian"},
+    ],
+)
+def test_report_mean_scalar_unchanged(attrs: dict[str, str]) -> None:
+    data = xr.DataArray(
+        [[350.0, np.nan, 10.0], [20.0, 30.0, 40.0]],
+        dims=("time", "sample"),
+        attrs=attrs,
+    )
+    xr.testing.assert_identical(
+        report_mean(data, dim=["sample"]), data.mean(dim=["sample"], keep_attrs=True)
+    )
+
+
+def test_report_mean_near_cancellation_above_threshold() -> None:
+    data = xr.DataArray(
+        [0.0, 180.00001],
+        attrs={"standard_name": "wind_from_direction", "units": "degree"},
+    )
+    assert float(report_mean(data)) == pytest.approx(270.000005, abs=1e-7)

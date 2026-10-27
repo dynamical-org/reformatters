@@ -26,6 +26,7 @@ from scripts.validation.utils import (
     output_dir_option,
     parse_lead_time,
     reference_url_option,
+    report_mean,
     resolve_output_dir,
     resolve_reference_url,
     scope_time_period,
@@ -136,7 +137,7 @@ def _compute_spatial_stats(
     else:
         stats.val_spatial_min = float(np.min(data_clean))
         stats.val_spatial_max = float(np.max(data_clean))
-        stats.val_spatial_mean = float(np.mean(data_clean))
+        stats.val_spatial_mean = float(report_mean(data))
 
     if ref_data is not None:
         ref_clean = ref_data.values.flat[~np.isnan(ref_data.values.flat)]
@@ -144,7 +145,7 @@ def _compute_spatial_stats(
         if ref_clean.size:
             stats.ref_spatial_min = float(np.min(ref_clean))
             stats.ref_spatial_max = float(np.max(ref_clean))
-            stats.ref_spatial_mean = float(np.mean(ref_clean))
+            stats.ref_spatial_mean = float(report_mean(ref_data))
     else:
         ref_clean = np.array([])
         stats.ref_available_spatial = False

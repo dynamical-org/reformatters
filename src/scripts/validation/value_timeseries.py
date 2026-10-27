@@ -12,10 +12,12 @@ from scripts.validation.utils import (
     SPATIAL_DIMS,
     RunContext,
     VariableStats,
+    annotate_empty_timeseries,
     end_date_option,
     format_lead_time,
     get_two_random_points,
     is_virtual_store,
+    is_wind_direction,
     level_label,
     level_option,
     load_retried,
@@ -23,6 +25,7 @@ from scripts.validation.utils import (
     output_dir_option,
     parse_point_options,
     point_option,
+    report_mean,
     resolve_output_dir,
     scope_time_period,
     select_var_slice,
@@ -49,8 +52,10 @@ def _compute_value_series(da_point: xr.DataArray) -> tuple[xr.DataArray, xr.Data
     For analysis datasets (a single value per timestep) the std is zero and the mean is
     just the value. For forecast/ensemble datasets the band spans lead_time/ensemble spread.
     """
-    non_time_dims = [dim for dim in da_point.dims if dim not in ("time", "init_time")]
-    mean_series = da_point.mean(dim=non_time_dims)
+    non_time_dims = [
+        str(dim) for dim in da_point.dims if dim not in ("time", "init_time")
+    ]
+    mean_series = report_mean(da_point, dim=non_time_dims)
     std_series = da_point.std(dim=non_time_dims)
     return mean_series, std_series
 
@@ -103,7 +108,7 @@ def _store_value_stats(
     mean = mean[~np.isnan(mean)]
     std = std_series.values
     std = std[~np.isnan(std)]
-    overall_mean = float(np.mean(mean)) if mean.size else None
+    overall_mean = float(report_mean(mean_series)) if mean.size else None
     overall_std = float(np.mean(std)) if std.size else None
     overall_min = float(np.min(mean)) if mean.size else None
     overall_max = float(np.max(mean)) if mean.size else None
@@ -225,7 +230,9 @@ def run_value_timeseries(ctx: RunContext) -> None:
             # ensemble) to reduce over — a single value per timestep (analysis
             # datasets, or the virtual one-message sample) would report a misleading
             # 0; report n/a instead.
-            has_std = any(d not in ("time", "init_time") for d in da_p1.dims)
+            has_std = not is_wind_direction(da_p1) and any(
+                d not in ("time", "init_time") for d in da_p1.dims
+            )
             if not has_std:
                 stats.value_std_p1 = stats.value_std_p2 = None
 
@@ -244,6 +251,11 @@ def run_value_timeseries(ctx: RunContext) -> None:
             _draw_value_trace(
                 axes_v[0, 1], mean_p2, std_p2, "orange", "red", p2_label, units, has_std
             )
+            time_dim = "init_time" if "init_time" in da_p1.dims else "time"
+            for ax, data in zip(axes_v[0], (da_p1, da_p2), strict=True):
+                annotate_empty_timeseries(
+                    ax, data, time_dim, ctx.validation_ds[time_dim]
+                )
             title = f"{var}{level_label(stats)}"
             fig_v.suptitle(
                 f"{title} — full-period mean ± std" if has_std else title, fontsize=11
