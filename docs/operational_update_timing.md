@@ -101,7 +101,7 @@ The last index follows the [publication and cleanup order](parallel_processing.m
 
 An interrupted backoff is lost; a later trigger or scheduled fire covers it. A replacement that sees finalized state exits successfully, including after an interruption in cleanup, validation, or backoff. Every persistent failure can start another chain at each fire, and sleeping pods retain their resources. See the [operations card](ops_card.md#troubleshooting) for first response steps.
 
-Before exiting, the last index performs [expired state cleanup](parallel_processing.md#cleanup), after validation and any backoff/submission decisions, or when exiting on `skip` or `finalized`. It keeps the current Job's state and deletes only other Jobs' state files older than the retention threshold, which exceeds every configured operational Job and pod deadline.
+Before exiting, the last index performs [expired state cleanup](parallel_processing.md#cleanup) outside the update check-in, after validation and any backoff/submission decisions, or when exiting on `skip` or `finalized`.
 
 Materialized datasets outside this lifecycle retain one immediate `-r1`, submitted only when the next scheduled fire is farther away than the pod deadline. A multi-worker replacement after cleanup waits for deleted setup files until its deadline; a single-worker replacement reruns the update. Inspect termination reasons before rerunning the full update as a new Job.
 

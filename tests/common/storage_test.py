@@ -10,6 +10,7 @@ import icechunk
 import pytest
 import zarr
 import zarr.storage
+from aiobotocore.stub import AioStubber
 from icechunk.store import IcechunkStore
 from pydantic import ValidationError
 
@@ -409,44 +410,66 @@ class TestCoordinationFiles:
     def test_expired_state_cleanup_noop_without_states(self, tmp_path: str) -> None:
         _local_factory(tmp_path).clear_expired_job_states("current")
 
-    @pytest.mark.parametrize("error", [None, FileNotFoundError, PermissionError])
+    @pytest.mark.parametrize("error_code", [None, "NoSuchKey", "AccessDenied"])
     def test_expired_state_cleanup_uses_object_last_modified_and_only_ignores_gone_race(
         self,
         tmp_path: str,
         monkeypatch: pytest.MonkeyPatch,
-        error: type[Exception] | None,
+        error_code: str | None,
     ) -> None:
         factory = _local_factory(tmp_path)
-        fs = Mock()
-        fs.glob.return_value = {
-            "bucket/dataset/_internal/expired/state.json": {
-                "type": "file",
-                "LastModified": datetime.now(UTC) - JOB_STATE_RETENTION * 2,
-            },
-            "bucket/dataset/_internal/fresh/state.json": {
-                "type": "file",
-                "LastModified": datetime.now(UTC),
-            },
-            "bucket/dataset/_internal/current/state.json": {
-                "type": "file",
-                "LastModified": datetime.now(UTC) - JOB_STATE_RETENTION * 2,
-            },
-        }
-        fs.rm.side_effect = error
+        fs = fsspec.filesystem(
+            "s3",
+            anon=True,
+            skip_instance_cache=True,
+            client_kwargs={"region_name": "us-east-1"},
+        )
+        listing = Mock(
+            return_value={
+                "bucket/dataset/_internal/expired/state.json": {
+                    "type": "file",
+                    "LastModified": datetime.now(UTC) - JOB_STATE_RETENTION * 2,
+                },
+                "bucket/dataset/_internal/fresh/state.json": {
+                    "type": "file",
+                    "LastModified": datetime.now(UTC),
+                },
+                "bucket/dataset/_internal/current/state.json": {
+                    "type": "file",
+                    "LastModified": datetime.now(UTC) - JOB_STATE_RETENTION * 2,
+                },
+            }
+        )
+        monkeypatch.setattr(fs, "glob", listing)
         monkeypatch.setattr(factory, "_coordination_fs", lambda: fs)
 
-        if error is PermissionError:
-            with pytest.raises(PermissionError):
+        with AioStubber(fs.s3) as service:
+            expected = {
+                "Bucket": "bucket",
+                "Key": "dataset/_internal/expired/state.json",
+            }
+            if error_code is None:
+                service.add_response("delete_object", {}, expected_params=expected)
+            else:
+                service.add_client_error(
+                    "delete_object",
+                    service_error_code=error_code,
+                    service_message=error_code,
+                    http_status_code=403 if error_code == "AccessDenied" else 404,
+                    expected_params=expected,
+                )
+            if error_code == "AccessDenied":
+                with pytest.raises(PermissionError, match="AccessDenied"):
+                    factory.clear_expired_job_states("current")
+            else:
                 factory.clear_expired_job_states("current")
-        else:
-            factory.clear_expired_job_states("current")
+            service.assert_no_pending_responses()
 
-        fs.glob.assert_called_once_with(
+        listing.assert_called_once_with(
             f"{factory._coordination_base_path()}/*/state.json",
             detail=True,
             refresh=True,
         )
-        fs.rm.assert_called_once_with("bucket/dataset/_internal/expired/state.json")
 
 
 class TestIcechunkRepos:

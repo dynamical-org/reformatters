@@ -334,7 +334,7 @@ class StoreFactory(FrozenBaseModel):
             )
             if modified < cutoff:
                 with contextlib.suppress(FileNotFoundError):
-                    fs.rm(path)
+                    fs.rm_file(path)
 
 
 _ICECHUNK_TO_S3FS_CREDENTIAL_KEYS = {

@@ -29,6 +29,7 @@ from reformatters.common import (
 from reformatters.common import parallel_coordination as pc
 from reformatters.common.config import Config, Env
 from reformatters.common.iterating import digest, get_worker_jobs
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import RegionJob
 from reformatters.common.storage import (
     JOB_STATE_RETENTION,
@@ -177,13 +178,51 @@ def telemetry(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[Mock, Mock]]:
         sdk_client.close()
 
 
-def test_job_state_retention_exceeds_all_operational_deadlines() -> None:
+def test_job_state_retention_has_margin_above_queued_materialized_deadlines() -> None:
     for dataset in DYNAMICAL_DATASETS:
+        if not issubclass(dataset.region_job_class, MaterializedRegionJob):
+            continue
         for cron in dataset.operational_kubernetes_resources("test-image"):
-            if isinstance(cron, kubernetes.CronJob):
-                assert cron.pod_active_deadline < JOB_STATE_RETENTION, cron.name
-                if cron.active_deadline is not None:
-                    assert cron.active_deadline < JOB_STATE_RETENTION, cron.name
+            if (
+                isinstance(cron, kubernetes.ReformatCronJob)
+                and cron.concurrency_policy == "Allow"
+            ):
+                assert cron.active_deadline is not None, cron.name
+                assert cron.pod_active_deadline <= JOB_STATE_RETENTION / 2, cron.name
+                assert cron.active_deadline <= JOB_STATE_RETENTION / 2, cron.name
+
+
+@pytest.mark.parametrize("state", ["run", "skip", "finalized"])
+@pytest.mark.parametrize("cleanup_fails", [False, True])
+def test_state_cleanup_runs_after_update_checkin_closes(
+    pilot: Pilot,
+    monkeypatch: pytest.MonkeyPatch,
+    state: pc.JobState,
+    cleanup_fails: bool,
+) -> None:
+    job = _job("job")
+    pilot.jobs[:] = [job]
+    pilot.write(job, state)
+    events: list[tuple[str, str]] = []
+    operational.register_run_monitor(_recording_monitor(events))
+
+    def cleanup(name: str) -> None:
+        assert ("ok", _CRON) in events
+        assert ("error", _CRON) not in events
+        if cleanup_fails:
+            raise PermissionError("cleanup denied")
+
+    cleanup_mock = Mock(side_effect=cleanup)
+    monkeypatch.setattr(StoreFactory, "clear_expired_job_states", cleanup_mock)
+
+    if cleanup_fails:
+        with pytest.raises(PermissionError, match="cleanup denied"):
+            pilot.dataset.update("job")
+    else:
+        pilot.dataset.update("job")
+
+    cleanup_mock.assert_called_once_with("job")
+    assert ("error", _CRON) not in events
 
 
 def test_only_last_index_cleans_expired_states_after_publication_and_validation(

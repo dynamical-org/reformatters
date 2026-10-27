@@ -170,6 +170,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             None if is_virtual else pd.Timestamp.now(tz="UTC").tz_localize(None)
         )
         job_uid: str | None = None
+        should_run = True
         with self._monitor(
             ReformatCronJob,
             reformat_job_name,
@@ -187,43 +188,44 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     job_reference_time = pd.Timestamp(
                         materialized_job.metadata.creation_timestamp
                     ).tz_convert(None)
-                    if not self._prepare_and_wait_materialized_update(
+                    should_run = self._prepare_and_wait_materialized_update(
                         materialized_job, cron, is_first=is_first
-                    ):
-                        if is_last:
-                            self.store_factory.clear_expired_job_states(
-                                reformat_job_name
-                            )
-                        return
-            tmp_store = self._tmp_store()
+                    )
+            if should_run:
+                tmp_store = self._tmp_store()
 
-            all_jobs, template_ds = self._operational_update_jobs(
-                reformat_job_name,
-                tmp_store,
-                job_fire_time=job_fire_time,
-                job_reference_time=job_reference_time,
-            )
+                all_jobs, template_ds = self._operational_update_jobs(
+                    reformat_job_name,
+                    tmp_store,
+                    job_fire_time=job_fire_time,
+                    job_reference_time=job_reference_time,
+                )
 
-            if is_virtual:
-                # Virtual operational updates stream one worker per Job (see docs/parallel_processing.md).
-                if is_first:
-                    self._assert_no_structural_drift(template_ds)
-                self._run_virtual_operational_update(
-                    all_jobs, worker_index, workers_total, job_fire_time=job_fire_time
-                )
-            else:
-                self._process_region_jobs(
-                    all_jobs=all_jobs,
-                    worker_index=worker_index,
-                    workers_total=workers_total,
-                    reformat_job_name=reformat_job_name,
-                    template_ds=template_ds,
-                    tmp_store=tmp_store,
-                    update_template_with_results=True,
-                    job_uid=job_uid,
-                )
+                if is_virtual:
+                    # Virtual operational updates stream one worker per Job (see docs/parallel_processing.md).
+                    if is_first:
+                        self._assert_no_structural_drift(template_ds)
+                    self._run_virtual_operational_update(
+                        all_jobs,
+                        worker_index,
+                        workers_total,
+                        job_fire_time=job_fire_time,
+                    )
+                else:
+                    self._process_region_jobs(
+                        all_jobs=all_jobs,
+                        worker_index=worker_index,
+                        workers_total=workers_total,
+                        reformat_job_name=reformat_job_name,
+                        template_ds=template_ds,
+                        tmp_store=tmp_store,
+                        update_template_with_results=True,
+                        job_uid=job_uid,
+                    )
 
         try:
+            if not should_run:
+                return
             if is_last:
                 self._validate_after_update(
                     reformat_job_name,
