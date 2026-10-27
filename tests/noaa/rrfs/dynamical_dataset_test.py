@@ -250,31 +250,31 @@ def test_consecutive_fires_keep_init_selection_and_restart_cutoff(
 @pytest.mark.parametrize(
     (
         "variant",
-        "retry_minute",
+        "retry_elapsed",
         "created",
-        "poll_minutes_remaining",
+        "poll_time_remaining",
         "offset",
-        "duration_minutes",
+        "duration",
         "grace_minutes",
     ),
     [
-        ("rrfs-forecast-18-hour", 70, True, 160, 65, 170, 5),
-        ("rrfs-forecast-18-hour", 80, False, 150, 65, 170, 5),
-        ("rrfs-forecast-18-hour", 233, False, -3, 65, 170, 5),
-        ("rrfs-forecast-84-hour", 363, False, -3, 65, 300, 5),
-        ("rrfs-ens-forecast", 363, False, -3, 70, 295, 5),
-        ("refs-forecast-hourly", 363, False, -3, 105, 262, 7),
-        ("refs-forecast-3-hourly", 363, False, -3, 105, 262, 7),
+        ("rrfs-forecast-18-hour", "70m", True, "2h40m", 65, "2h50m", 5),
+        ("rrfs-forecast-18-hour", "80m", False, "150m", 65, "2h50m", 5),
+        ("rrfs-forecast-18-hour", "3h53m", False, "-3m", 65, "2h50m", 5),
+        ("rrfs-forecast-84-hour", "6h03m", False, "-3m", 65, "5h", 5),
+        ("rrfs-ens-forecast", "6h03m", False, "-3m", 70, "4h55m", 5),
+        ("refs-forecast-hourly", "6h03m", False, "-3m", 105, "4h22m", 7),
+        ("refs-forecast-3-hourly", "6h03m", False, "-3m", 105, "4h22m", 7),
     ],
 )
 def test_legacy_virtual_retry_admission_and_fire_anchored_cutoff(
     monkeypatch: pytest.MonkeyPatch,
     variant: str,
-    retry_minute: int,
+    retry_elapsed: str,
     created: bool,
-    poll_minutes_remaining: int,
+    poll_time_remaining: str,
     offset: int,
-    duration_minutes: int,
+    duration: str,
     grace_minutes: int,
 ) -> None:
     dataset = next(
@@ -283,14 +283,14 @@ def test_legacy_virtual_retry_admission_and_fire_anchored_cutoff(
         if dataset.dataset_id == f"noaa-{variant}-virtual"
     )
     (update,) = dataset.operational_kubernetes_resources("test")
-    duration = timedelta(minutes=duration_minutes)
+    deadline = pd.Timedelta(duration)
     grace = timedelta(minutes=grace_minutes)
     hours = "1,4,7,10,13,16,19,22" if "18-hour" in variant else "1,7,13,19"
     update = update.model_copy(
         update={
             "schedule": f"{offset % 60} {hours} * * *",
-            "pod_active_deadline": duration,
-            "active_deadline": duration,
+            "pod_active_deadline": deadline,
+            "active_deadline": deadline,
             "concurrency_policy": "Replace",
         }
     )
@@ -315,7 +315,7 @@ def test_legacy_virtual_retry_admission_and_fire_anchored_cutoff(
             )
         ),
     )
-    now = pd.Timestamp("2026-10-15T00:00:00Z") + timedelta(minutes=retry_minute)
+    now = pd.Timestamp("2026-10-15T00:00:00Z") + pd.Timedelta(retry_elapsed)
     batch = Mock()
     batch.read_namespaced_cron_job.return_value = cronjob
     monkeypatch.setenv("POD_NAMESPACE", "weather")
@@ -336,8 +336,8 @@ def test_legacy_virtual_retry_admission_and_fire_anchored_cutoff(
         is created
     )
     assert batch.create_namespaced_job.called is created
-    assert dataset._virtual_poll_deadline(now) - now == timedelta(
-        minutes=poll_minutes_remaining
+    assert dataset._virtual_poll_deadline(now) - now == pd.Timedelta(
+        poll_time_remaining
     )
     if created:
         retry = batch.create_namespaced_job.call_args.args[1]
