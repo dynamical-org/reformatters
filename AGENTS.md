@@ -125,6 +125,14 @@ Base class: `src/reformatters/common/dynamical_dataset.py`, commented example su
 - Implement `operational_kubernetes_resources()` - define the update cron job
 - Implement `validators()` - return the operational validation checks for the dataset
 
+## Operational update timing
+
+- **Publish as soon as the source has the data.**
+  - Virtual datasets poll from just before the source's earliest normal arrival until the next scheduled run takes over, so each file lands within seconds, even when the source is late.
+  - A materialized dataset runs the moment its virtual sibling (or archive job) sees a complete unit. Datasets with nothing to trigger them run as soon as they are reliably available when the source is publishing normally.
+
+Follow [operational update timing](docs/operational_update_timing.md) when choosing cron schedules, deadlines, and validator `max_delay`, using `src/scripts/timing_profile/` for measurements. Values are hand-set in each dataset's code; the [adoption plan](docs/plans/operational_update_timing.md) lists which datasets have adopted these rules and tracks lifecycle and value rollout.
+
 ## Dataset structures
 
 1. **Forecast dataset** Dimensions init_time, lead_time, latitude/y, longitude/x [, ensemble_member].
