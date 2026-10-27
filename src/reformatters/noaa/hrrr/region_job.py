@@ -26,6 +26,7 @@ from reformatters.common.types import (
     ArrayFloat32,
     DatetimeLike,
     Dim,
+    Timestamp,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import (
     NoaaHrrrDataVar,
@@ -106,6 +107,8 @@ class NoaaHrrrRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[NoaaHrrrDataVar],
         reformat_job_name: str,
+        *,
+        job_reference_time: Timestamp | None = None,
     ) -> tuple[
         Sequence[RegionJob[NoaaHrrrDataVar, NoaaHrrrSourceFileCoord]],
         xr.DataTree,
@@ -118,7 +121,11 @@ class NoaaHrrrRegionJob(
         existing_ds = xr.open_zarr(primary_store, chunks=None, decode_timedelta=True)
         append_dim_start = cls._update_append_dim_start(existing_ds[append_dim])
 
-        append_dim_end = cls._update_append_dim_end()
+        append_dim_end = (
+            job_reference_time
+            if job_reference_time is not None
+            else cls._update_append_dim_end()
+        )
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(

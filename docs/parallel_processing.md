@@ -73,7 +73,7 @@ Workers coordinate via files in an object store directory at `{base_path}/{datas
 
 ### Materialized update queue
 
-Materialized updates whose CronJob uses `concurrencyPolicy: Allow` coordinate across Jobs as well as across worker indices. HRRR 48-hour forecasts use this lifecycle. Both the Job and pod deadlines equal the interval between scheduled fires. Other materialized datasets retain their existing lifecycle until their CronJobs adopt `Allow`.
+Materialized updates whose CronJob uses `concurrencyPolicy: Allow` coordinate across Jobs as well as across worker indices. Both the Job and pod deadlines equal the interval between scheduled fires. Other materialized datasets retain their existing lifecycle until their CronJobs adopt `Allow`.
 
 Every Job inherits the `dynamical.org/cronjob-name` label from its CronJob's `jobTemplate`. Workers list Jobs with that label and order them by `(creationTimestamp, name)`. The update service account and deployer need `list` permission on Jobs.
 
@@ -85,7 +85,7 @@ At the start of `update()`, inside the update check-in and before computing regi
 - A scheduled Job takes the backstop check if a trigger Job was created within half the fire interval before its own creation. It first waits until no older Job is writing, without recording a state. It then checks only `CheckCurrentData` against the published store: if current, it records `skip`; otherwise, `run`. The window uses Job creation times, including when pod 0 is replaced much later. Until annotated triggers exist, this check is inactive.
 - Every other Job records `run`.
 
-All indices, including replacement pods, reuse the matching-UID state. `skip` and `finalized` exit successfully without processing or validation. On `run`, each index waits until no older Job is writing, checking every 60 seconds, **before** computing its region jobs. All indices therefore compute from the same published store state. A stuck older writer blocks the queue until it finishes or its Job deadline expires.
+All indices, including replacement pods, reuse the matching-UID state. The Job creation time is the reference for the materialized update window, so indices and replacements compute the same window even across an initialization boundary. Each materialized builder adopts the explicit `job_reference_time` argument before its CronJob enables this lifecycle. `skip` and `finalized` exit successfully without processing or validation. On `run`, each index waits until no older Job is writing, checking every 60 seconds, **before** computing its region jobs. All indices therefore compute from the same published store state. A stuck older writer blocks the queue until it finishes or its Job deadline expires.
 
 The update check-in covers the decision, queue wait, processing, and finalization. A skip closes it successfully. The queue waits only on older Jobs, so a chain of queued Jobs cannot deadlock.
 

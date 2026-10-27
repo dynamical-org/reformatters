@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -13,6 +14,8 @@ from zarr.storage import MemoryStore
 from reformatters.common import dynamical_dataset, kubernetes, operational, validation
 from reformatters.common import parallel_coordination as pc
 from reformatters.common.config import Config, Env
+from reformatters.common.iterating import get_worker_jobs
+from reformatters.common.region_job import RegionJob
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
@@ -51,6 +54,16 @@ def _job(
     )
 
 
+def _job_positions(jobs: Sequence[RegionJob]) -> list[tuple[pd.Timestamp, ...]]:
+    return [
+        tuple(
+            pd.Timestamp(value)
+            for value in job.template_ds.init_time.isel(init_time=job.region).values
+        )
+        for job in jobs
+    ]
+
+
 @dataclass
 class Pilot:
     dataset: NoaaHrrrForecast48HourDataset
@@ -62,11 +75,12 @@ class Pilot:
     sleep: Mock
 
     def state(self, job: client.V1Job) -> pc.JobState | None:
-        return pc.read_job_state(
-            self.dataset.store_factory, job.metadata.name, job.metadata.uid
-        )
+        return pc.read_job_state(self.dataset.store_factory, job)
 
     def write(self, job: client.V1Job, state: pc.JobState) -> None:
+        assert job.metadata is not None
+        assert job.metadata.name is not None
+        assert job.metadata.uid is not None
         pc.write_job_state(
             self.dataset.store_factory, job.metadata.name, job.metadata.uid, state
         )
@@ -90,6 +104,9 @@ def pilot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Pilot:
     api = Mock()
     api.list_namespaced_job.side_effect = lambda *args, **kwargs: client.V1JobList(
         items=list(jobs)
+    )
+    api.read_namespaced_job.side_effect = lambda name, namespace: next(
+        job for job in jobs if kubernetes.job_order(job)[1] == name
     )
     monkeypatch.setattr(kubernetes.config, "load_incluster_config", Mock())
     monkeypatch.setattr(kubernetes.client, "BatchV1Api", Mock(return_value=api))
@@ -124,6 +141,8 @@ def test_job_listing_uses_cronjob_label_and_stable_order(pilot: Pilot) -> None:
     pilot.api.list_namespaced_job.assert_called_once_with(
         "pilot", label_selector=f"dynamical.org/cronjob-name={_CRON}"
     )
+    assert kubernetes.get_job("b") == newer
+    pilot.api.read_namespaced_job.assert_called_once_with("b", "pilot")
     template = pilot.dataset._operational_cron_job(kubernetes.ReformatCronJob)
     assert template.as_kubernetes_object()["spec"]["jobTemplate"]["metadata"][
         "labels"
@@ -135,6 +154,7 @@ def test_job_kinds_use_annotations_including_cronjob_owned_operator_jobs(
     kind: Literal["scheduled", "trigger", "manual"],
 ) -> None:
     job = _job("operator", kind=kind)
+    assert job.metadata is not None
     job.metadata.owner_references = [
         client.V1OwnerReference(
             api_version="batch/v1", kind="CronJob", name=_CRON, uid="cron-uid"
@@ -160,6 +180,7 @@ def test_failed_index_with_running_sibling_is_still_writing(pilot: Pilot) -> Non
     job = _job("job")
     newer = _job("newer", "2026-10-26T07:54Z")
     pilot.jobs[:] = [job, newer]
+    assert job.status is not None
     job.status.failed = 1
     job.status.active = 1
     job.status.failed_indexes = "0"
@@ -169,6 +190,7 @@ def test_failed_index_with_running_sibling_is_still_writing(pilot: Pilot) -> Non
     def deadline(seconds: int) -> None:
         assert seconds == 60
         assert pilot.state(newer) == "run"
+        assert job.status is not None
         job.status.conditions = [client.V1JobCondition(type="Failed", status="True")]
 
     pilot.sleep.side_effect = deadline
@@ -181,6 +203,7 @@ def test_stale_uid_is_absent(pilot: Pilot, state: pc.JobState) -> None:
     old = _job("job")
     pilot.write(old, state)
     new = _job("job")
+    assert new.metadata is not None
     new.metadata.uid = "replacement-job-uid"
     assert pilot.state(new) is None
     assert pc.job_is_writing(pilot.dataset.store_factory, new)
@@ -221,6 +244,7 @@ def test_every_index_computes_after_predecessor_finalizes_and_reuses_decision(
 ) -> None:
     older, current = _job("a"), _job("b")
     pilot.jobs[:] = [older, current]
+    assert current.metadata is not None
     computed: list[str] = []
     events: list[tuple[str, str]] = []
     operational.register_run_monitor(_recording_monitor(events))
@@ -291,6 +315,7 @@ def test_manual_jobs_never_take_backstop_check(
 ) -> None:
     trigger = _job("trigger", "2026-10-26T07:00Z", kind="trigger", terminal="Complete")
     manual = _job(manual_name, kind="manual")
+    assert manual.metadata is not None
     manual.metadata.owner_references = [
         client.V1OwnerReference(
             api_version="batch/v1", kind="CronJob", name=_CRON, uid="cron-uid"
@@ -535,6 +560,7 @@ def test_late_file_repass_succeeds_and_chain_stops_at_r16(
         _CRON, "job-r1", skip_if_next_run_within_deadline=False
     )
 
+    assert first.status is not None
     first.status.conditions = [client.V1JobCondition(type="Failed", status="True")]
     repass = _job("job-r1", "2026-10-26T07:59Z", kind="manual")
     pilot.jobs.append(repass)
@@ -543,6 +569,7 @@ def test_late_file_repass_succeeds_and_chain_stops_at_r16(
     assert pilot.validate.call_count == 2
     assert submit.call_count == 1
 
+    assert repass.status is not None
     repass.status.conditions = [client.V1JobCondition(type="Complete", status="True")]
     last = _job("job-r16", "2026-10-26T08:30Z", kind="manual")
     pilot.jobs.append(last)
@@ -582,6 +609,7 @@ def test_eviction_after_finalize_releases_queue_and_replacement_exits(
         raise KeyboardInterrupt("pod evicted")
 
     def finalize(**kwargs: object) -> None:
+        assert job.metadata is not None
         assert kwargs["job_uid"] == job.metadata.uid
         pc.finalize(
             pilot.dataset.store_factory,
@@ -653,8 +681,16 @@ def test_highest_index_with_zero_work_finalizes_and_validates(
         "_process_region_jobs",
         dynamical_dataset.DynamicalDataset._process_region_jobs,
     )
-    monkeypatch.setattr(StoreFactory, "icechunk_repos", Mock(return_value=[]))
-    monkeypatch.setattr(pc, "parallel_setup", Mock(return_value={}))
+    repo = FakeRepo()
+    repo.create_branch("_job_job", "snap-initial")
+    monkeypatch.setattr(
+        StoreFactory, "icechunk_repos", Mock(return_value=[("primary", repo)])
+    )
+    monkeypatch.setattr(
+        pc,
+        "parallel_setup",
+        Mock(return_value={"repo_snapshots": {"primary": "snap-initial"}}),
+    )
     monkeypatch.setattr(pc, "collect_results", Mock(return_value={}))
     monkeypatch.setattr(pc.template_utils, "write_metadata", Mock())
     monkeypatch.setattr(pc.template_utils, "assert_no_append_dim_retraction", Mock())
@@ -724,6 +760,7 @@ def test_persistent_failure_submits_each_repass_through_r16(
         with pytest.raises(typer.Exit) as exc:
             pilot.dataset.update(name)
         assert exc.value.exit_code == 20
+        assert job.status is not None
         job.status.conditions = [client.V1JobCondition(type="Failed", status="True")]
 
     assert [call.args[1] for call in submit.call_args_list] == [
@@ -787,3 +824,284 @@ def test_replacement_pod_zero_reuses_run_when_trigger_appears_after_decision(
     assert pilot.state(job) == "run"
     currency.assert_not_called()
     pilot.sleep.assert_not_called()
+
+
+@pytest.mark.parametrize("policy", ["Replace", "Forbid"])
+def test_non_allow_update_keeps_immediate_single_retry(
+    pilot: Pilot, monkeypatch: pytest.MonkeyPatch, policy: str
+) -> None:
+    cron = pilot.dataset._operational_cron_job(kubernetes.ReformatCronJob).model_copy(
+        update={"concurrency_policy": policy, "active_deadline": None}
+    )
+    monkeypatch.setattr(
+        NoaaHrrrForecast48HourDataset,
+        "operational_kubernetes_resources",
+        lambda self, image_tag: [cron],
+    )
+    unexpected = AssertionError("legacy update entered materialized coordination")
+    pilot.api.list_namespaced_job.side_effect = unexpected
+    pilot.api.read_namespaced_job.side_effect = unexpected
+    monkeypatch.setattr(pc, "read_job_state", Mock(side_effect=unexpected))
+    monkeypatch.setattr(pc, "write_job_state", Mock(side_effect=unexpected))
+    pilot.validate.side_effect = validation.OperationalValidationError("missing data")
+    submit = Mock()
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
+
+    for name in ("job", "job-r1"):
+        with pytest.raises(typer.Exit) as exc:
+            pilot.dataset.update(name)
+        assert exc.value.exit_code == 20
+
+    submit.assert_called_once_with(
+        _CRON, "job-r1", skip_if_next_run_within_deadline=True
+    )
+    pilot.api.list_namespaced_job.assert_not_called()
+    pilot.api.read_namespaced_job.assert_not_called()
+    pilot.sleep.assert_not_called()
+
+
+def test_nonzero_index_waits_for_writing_predecessor_before_computing(
+    pilot: Pilot,
+) -> None:
+    older, current = _job("a"), _job("b")
+    pilot.jobs[:] = [older, current]
+    pilot.write(older, "run")
+    pilot.write(current, "run")
+    published = xr.Dataset(coords={"init_time": pd.to_datetime(["2026-10-26T06:00"])})
+
+    def finalize_older(seconds: int) -> None:
+        nonlocal published
+        assert seconds == 60
+        pilot.compute.assert_not_called()
+        assert pilot.state(older) == "run"
+        pilot.write(older, "finalized")
+        published = xr.Dataset(
+            coords={"init_time": pd.to_datetime(["2026-10-26T12:00"])}
+        )
+
+    def compute(*args: object, **kwargs: object) -> tuple[list[object], xr.DataTree]:
+        assert pilot.state(older) == "finalized"
+        assert pd.Timestamp(published.init_time.values[0]) == pd.Timestamp(
+            "2026-10-26T12:00"
+        )
+        return [], xr.DataTree(published)
+
+    pilot.sleep.side_effect = finalize_older
+    pilot.compute.side_effect = compute
+    pilot.dataset.update("b", worker_index=2, workers_total=3)
+    pilot.sleep.assert_called_once_with(60)
+    pilot.compute.assert_called_once()
+    pilot.validate.assert_called_once()
+
+
+def test_backoff_error_is_not_logged_as_submission_failure(
+    pilot: Pilot, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    job = _job("job")
+    pilot.jobs[:] = [job]
+    pilot.validate.side_effect = validation.OperationalValidationError("missing data")
+    interrupted = RuntimeError("Job listing failed during backoff")
+    monkeypatch.setattr(pc, "backoff_before_repass", Mock(side_effect=interrupted))
+    submit = Mock()
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
+
+    with pytest.raises(RuntimeError, match="Job listing failed during backoff"):
+        pilot.dataset.update("job")
+
+    submit.assert_not_called()
+    assert "Operational validation failed for job" in caplog.text
+    assert "Could not submit" not in caplog.text
+
+
+def test_finalized_marker_requires_temporary_branch(
+    pilot: Pilot, tmp_path: Path
+) -> None:
+    with pytest.raises(AssertionError):
+        pc.finalize(
+            pilot.dataset.store_factory,
+            all_jobs=[],
+            merged_results={},
+            reformat_job_name="job",
+            branch_name="main",
+            template_ds=xr.DataTree(),
+            tmp_store=tmp_path,
+            setup_info={},
+            workers_total=1,
+            update_template_with_results=False,
+            consolidated=True,
+            job_uid="uid-job",
+        )
+
+
+def test_hrrr_job_reference_keeps_all_indices_and_replacements_on_same_window(
+    pilot: Pilot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = _job("queued", "2026-10-26T13:53Z")
+    pilot.jobs[:] = [job]
+    pilot.write(job, "run")
+    monkeypatch.setattr(
+        NoaaHrrrForecast48HourDataset,
+        "_operational_update_jobs",
+        dynamical_dataset.DynamicalDataset._operational_update_jobs,
+    )
+    monkeypatch.setattr(
+        xr,
+        "open_zarr",
+        Mock(
+            return_value=xr.Dataset(
+                coords={"init_time": pd.date_range("2026-10-26", periods=2, freq="6h")}
+            )
+        ),
+    )
+    now = pd.Timestamp("2026-10-26T17:59:50")
+    monkeypatch.setattr(pd.Timestamp, "now", lambda *args, **kwargs: now)
+    for index, instant in [
+        (0, "2026-10-26T17:59:50"),
+        (1, "2026-10-26T18:00:10"),
+        (0, "2026-10-26T19:00"),
+    ]:
+        now = pd.Timestamp(instant)
+        pilot.dataset.update("queued", worker_index=index, workers_total=2)
+
+    calls = pilot.process.call_args_list
+    jobs = [call.kwargs["all_jobs"] for call in calls]
+    templates = [call.kwargs["template_ds"] for call in calls]
+    expected = [
+        (pd.Timestamp("2026-10-26T06:00"),),
+        (pd.Timestamp("2026-10-26T12:00"),),
+    ]
+    assert [_job_positions(batch) for batch in jobs] == [expected] * 3
+    assert all(
+        dict(template.sizes) == dict(templates[0].sizes) for template in templates
+    )
+    assert all(
+        template.init_time.equals(templates[0].init_time) for template in templates
+    )
+    assert pd.Timestamp(templates[0].init_time.values[-1]) == pd.Timestamp(
+        "2026-10-26T12:00"
+    )
+    assigned = [
+        _job_positions(
+            get_worker_jobs(
+                jobs[index],
+                index,
+                2,
+                worker_assignment=pilot.dataset.region_job_class.worker_assignment,
+            )
+        )
+        for index in (0, 1)
+    ]
+    assert set(assigned[0]).isdisjoint(assigned[1])
+    assert set(assigned[0]) | set(assigned[1]) == set(expected)
+    assert (pd.Timestamp("2026-10-26T12:00"),) in assigned[1]
+    pilot.sleep.assert_not_called()
+
+
+def test_hrrr_without_job_reference_keeps_legacy_clock_window(
+    pilot: Pilot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        NoaaHrrrForecast48HourDataset,
+        "_operational_update_jobs",
+        dynamical_dataset.DynamicalDataset._operational_update_jobs,
+    )
+    monkeypatch.setattr(
+        xr,
+        "open_zarr",
+        Mock(
+            return_value=xr.Dataset(
+                coords={"init_time": pd.date_range("2026-10-26", periods=2, freq="6h")}
+            )
+        ),
+    )
+    now = pd.Timestamp("2026-10-26T17:59:50")
+    monkeypatch.setattr(pd.Timestamp, "now", lambda *args, **kwargs: now)
+    before, first_template = pilot.dataset._operational_update_jobs("legacy", tmp_path)
+    now = pd.Timestamp("2026-10-26T18:00:10")
+    after, second_template = pilot.dataset._operational_update_jobs("legacy", tmp_path)
+
+    assert _job_positions(before) == [
+        (pd.Timestamp("2026-10-26T06:00"),),
+        (pd.Timestamp("2026-10-26T12:00"),),
+    ]
+    assert _job_positions(after) == [
+        *_job_positions(before),
+        (pd.Timestamp("2026-10-26T18:00"),),
+    ]
+    assert first_template.sizes["init_time"] < second_template.sizes["init_time"]
+
+
+def test_newly_created_job_without_status_is_writing(pilot: Pilot) -> None:
+    job = _job("newborn")
+    job.status = None
+    assert pc.job_is_writing(pilot.dataset.store_factory, job)
+
+
+@pytest.mark.parametrize(
+    ("name", "created", "expected"),
+    [
+        ("job", "2026-10-26T15:53+02:00", "2026-10-26T13:53"),
+        ("job-r1", "2026-10-26T16:02+02:00", "2026-10-26T14:02"),
+    ],
+)
+def test_update_forwards_current_jobs_utc_creation_time_only_to_planning(
+    pilot: Pilot,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    name: str,
+    created: str,
+    expected: str,
+) -> None:
+    current = _job(
+        name, created, kind="manual" if name.endswith("-r1") else "scheduled"
+    )
+    pilot.jobs[:] = [current]
+    if name.endswith("-r1"):
+        pilot.jobs.insert(0, _job("job", "2026-10-26T13:53Z", terminal="Failed"))
+    wall_clock = pd.Timestamp("2026-10-26T18:00:10")
+    monkeypatch.setattr(pd.Timestamp, "now", lambda *args, **kwargs: wall_clock)
+
+    def check_current_clock(*args: object, **kwargs: object) -> None:
+        assert pd.Timestamp.now() == wall_clock
+
+    pilot.process.side_effect = check_current_clock
+    pilot.validate.side_effect = check_current_clock
+    pilot.dataset.update(name)
+
+    pilot.compute.assert_called_once_with(
+        name, tmp_path, job_reference_time=pd.Timestamp(expected)
+    )
+    pilot.api.read_namespaced_job.assert_called_once_with(name, "pilot")
+    pilot.process.assert_called_once()
+    pilot.validate.assert_called_once()
+    pilot.sleep.assert_not_called()
+
+
+def test_queued_update_rejects_builder_without_reference_time(
+    pilot: Pilot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _job("job")
+    pilot.jobs[:] = [current]
+    monkeypatch.setattr(
+        NoaaHrrrForecast48HourDataset,
+        "_operational_update_jobs",
+        dynamical_dataset.DynamicalDataset._operational_update_jobs,
+    )
+
+    def builder_without_reference(
+        *args: object, **kwargs: object
+    ) -> tuple[list[RegionJob], xr.DataTree]:
+        raise AssertionError("unanchored builder must not run")
+
+    monkeypatch.setattr(
+        pilot.dataset.region_job_class,
+        "operational_update_jobs",
+        builder_without_reference,
+    )
+    with pytest.raises(
+        AssertionError, match="must accept job_reference_time for queued updates"
+    ):
+        pilot.dataset.update("job")
+
+    pilot.process.assert_not_called()
+    pilot.validate.assert_not_called()

@@ -319,6 +319,7 @@ class StoreFactory(FrozenBaseModel):
     def clear_coordination_files(self, job_name: str) -> None:
         path = f"{self._coordination_base_path()}/{job_name}"
         fs = self._coordination_fs()
+        fs.invalidate_cache(path)
         with contextlib.suppress(FileNotFoundError):
             for entry in fs.ls(path, detail=False):
                 if entry.rsplit("/", 1)[-1] != "state.json":

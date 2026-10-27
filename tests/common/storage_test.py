@@ -743,6 +743,14 @@ def test_clear_coordination_files_rm_path_rooted_in_internal(
 
     factory.clear_coordination_files("my-job")
 
+    mock_fs.invalidate_cache.assert_called_once_with(
+        f"{factory._coordination_base_path()}/my-job"
+    )
+    assert [call[0] for call in mock_fs.method_calls] == [
+        "invalidate_cache",
+        "ls",
+        "rm",
+    ]
     mock_fs.rm.assert_called_once()
     path = mock_fs.rm.call_args.args[0]
     assert path.endswith("/_internal/my-job/results"), path
