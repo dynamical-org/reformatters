@@ -1,6 +1,4 @@
 import functools
-import json
-import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -440,10 +438,9 @@ def _icechunk_storage(url: str) -> icechunk.Storage | None:
         return None
     bucket, _, prefix = url.removeprefix("s3://").partition("/")
     assert prefix, url
-    storage_options = json.loads(
-        os.environ.get("VALIDATION_S3_STORAGE_OPTIONS", "{}")
-    ).get(bucket, {"anonymous": True, "region": "us-west-2"})
-    return icechunk.s3_storage(bucket=bucket, prefix=prefix, **storage_options)
+    return icechunk.s3_storage(
+        bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
+    )
 
 
 def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:

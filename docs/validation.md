@@ -17,7 +17,7 @@ uv run src/scripts/validation/plots.py run-all <DATASET_URL>
 
 To look up the URLs for a dataset, run `uv run main <dataset-id> dataset-urls`. It prints the primary and replica URLs; pass `--format json` for a machine-readable form.
 
-Private S3-compatible Icechunk stores accept `VALIDATION_S3_STORAGE_OPTIONS`, a JSON object mapping bucket names to `icechunk.s3_storage` options (`endpoint_url`, `access_key_id`, `secret_access_key`, `region`, and `force_path_style` as needed). Inject it through your credential manager. Options apply only to the named buckets; other S3 buckets, including public references, retain anonymous reads. HTTP URLs are unchanged. Validation opens read-only sessions and does not read Kubernetes Secrets.
+Validation reads public stores without credentials. Use an `https://` Icechunk URL for a bucket published through an HTTP endpoint; `s3://` URLs use anonymous S3 access.
 
 Expect the run to take ~30–60 seconds per variable, mostly bounded by S3 reads (a ~20-variable dataset finishes in ~10–15 minutes). Progress is logged: one line per variable per plot type. Virtual stores are slower and their runtime scales differently — see [Virtual and multi-level datasets](#virtual-and-multi-level-datasets) below.
 
