@@ -106,7 +106,7 @@ def register_commands(
             assert json.loads(installed.stdout)["spec"] == item["spec"], (
                 f"Installed {item['kind']} {item['metadata']['name']} differs from bundle"
             )
-        verify_trigger_admission(namespace, [])
+        verify_trigger_admission(namespace, sorted(trigger_role_targets(namespace)))
 
     @app.command()
     def render_kubernetes_admission_bundle(

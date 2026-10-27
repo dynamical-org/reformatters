@@ -21,7 +21,7 @@ Accessible via manually triggered github actions. Follow link and click "run wor
 - [Create job from cronjob](https://github.com/dynamical-org/reformatters/actions/workflows/manual-create-job-from-cronjob.yml) - Use this to manually re-run any workflow. This is safe to do.
 
 ## Troubleshooting
-- **Completion triggers**: Jobs named `<consumer>-t<YYYYmmddHHMM>z` are completion triggers; see [Sentry monitoring](#sentry-monitoring) for skipped backstops. An operator's "Create job from cronjob" always runs and never skips.
+- **Completion triggers**: If a trigger is missed, the next scheduled update covers it. Use "Create job from cronjob" to rerun sooner; manual runs never skip.
 - **Validation fails**: Missing source data is common. Check "Get jobs" for an active update. If none is running, rerun it with "Create job from cronjob".
 - **Update times out**: Use "Get jobs" and "Get pods" to check status. A run whose logs end with `Received SIGTERM, exiting` was stopped by kubernetes (eviction, pod active deadline, or a replacing fire); one whose logs stop with no such line was killed outright (e.g. out of memory) or stopped making progress on its own.
 - **Update fails**: Look at issues and logs. Jobs that raise an error usually require a code change to fix (e.g. structural change to data at the source). If it appears a code change is needed, make a PR, merge it, wait for the deploy action to complete, then re-run the update. If it appears transient, re-run the update job.
