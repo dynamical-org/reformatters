@@ -156,7 +156,7 @@ class FailRegionJob(MaterializedRegionJob[FailDataVar, FailSourceFileCoord]):
         job_reference_time: pd.Timestamp,
     ) -> tuple[Sequence[RegionJob[FailDataVar, FailSourceFileCoord]], xr.DataTree]:
         # Mirror the standard resume pattern: reprocess from the latest time already
-        # in the store through the (injected) end time.
+        # in the store through the reference time.
         existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
         append_dim_start = pd.Timestamp(existing_ds[append_dim].max().values)
         template_ds = get_template_fn(job_reference_time)

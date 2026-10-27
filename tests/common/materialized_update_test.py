@@ -1018,44 +1018,6 @@ def test_hrrr_job_reference_keeps_all_indices_and_replacements_on_same_window(
     pilot.sleep.assert_not_called()
 
 
-def test_local_materialized_planning_uses_explicit_reference(
-    pilot: Pilot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(
-        NoaaHrrrForecast48HourDataset,
-        "_operational_update_jobs",
-        dynamical_dataset.DynamicalDataset._operational_update_jobs,
-    )
-    monkeypatch.setattr(
-        xr,
-        "open_zarr",
-        Mock(
-            return_value=xr.Dataset(
-                coords={"init_time": pd.date_range("2026-10-26", periods=2, freq="6h")}
-            )
-        ),
-    )
-    now = pd.Timestamp("2026-10-26T17:59:50")
-    monkeypatch.setattr(pd.Timestamp, "now", lambda *args, **kwargs: now)
-    before, first_template = pilot.dataset._operational_update_jobs(
-        "local", tmp_path, job_reference_time=now
-    )
-    now = pd.Timestamp("2026-10-26T18:00:10")
-    after, second_template = pilot.dataset._operational_update_jobs(
-        "local", tmp_path, job_reference_time=now
-    )
-
-    assert _job_positions(before) == [
-        (pd.Timestamp("2026-10-26T06:00"),),
-        (pd.Timestamp("2026-10-26T12:00"),),
-    ]
-    assert _job_positions(after) == [
-        *_job_positions(before),
-        (pd.Timestamp("2026-10-26T18:00"),),
-    ]
-    assert first_template.sizes["init_time"] < second_template.sizes["init_time"]
-
-
 def test_newly_created_job_without_status_is_writing(pilot: Pilot) -> None:
     job = _job("newborn")
     job.status = None

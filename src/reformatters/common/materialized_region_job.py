@@ -74,7 +74,7 @@ class MaterializedRegionJob(
         job_reference_time: Timestamp,
     ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
         """Return update jobs and their template using one explicit naive-UTC reference."""
-        raise NotImplementedError
+        raise NotImplementedError("Return update jobs and their template.")
 
     def download_file(self, coord: SOURCE_FILE_COORD) -> Path:
         """Download the file for the given coordinate and return the local path."""

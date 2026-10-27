@@ -289,7 +289,7 @@ class EcmwfIfsEns46DayRegionJob(
         append_dim_start = pd.Timestamp(existing_ds[append_dim].max().item())
         newest_init_time = max(
             append_dim_start,
-            latest_init_time(job_reference_time.tz_localize("UTC"), LICENCE_DELAY),
+            latest_init_time(job_reference_time, LICENCE_DELAY),
         )
         append_dim_end = newest_init_time + INIT_FREQUENCY
         template_ds = get_template_fn(append_dim_end)

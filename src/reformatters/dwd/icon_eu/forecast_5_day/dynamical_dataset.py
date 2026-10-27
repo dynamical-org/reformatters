@@ -86,7 +86,6 @@ class DwdIconEuForecast5DayDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="52 3,9,15,21 * * *",
-            # Runs usually take <5 min; reading directly from DWD can take several times longer.
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),
             active_deadline=timedelta(hours=6),

@@ -51,6 +51,8 @@ class EcccHrdpsForecastDataset(
             secret_names=["source-coop-storage-options-key"],
         )
 
+        # An update covers the newest init time and the previous one it reprocesses,
+        # which shard into one job each.
         workers = 2
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",

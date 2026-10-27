@@ -91,7 +91,7 @@ def test_operational_jobs_include_only_expected_inits_and_stored_redo(
     stored_init: str,
     expected_end: str,
 ) -> None:
-    clock = Mock(return_value=pd.Timestamp(now))
+    clock = Mock(return_value=pd.Timestamp(now) + pd.Timedelta(days=2))
     monkeypatch.setattr(pd.Timestamp, "now", clock)
     existing = xr.Dataset(coords={"init_time": pd.date_range(stored_init, periods=1)})
     monkeypatch.setattr(xr, "open_zarr", Mock(return_value=existing))

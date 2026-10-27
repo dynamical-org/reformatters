@@ -33,6 +33,20 @@ _ADOPTIONS = {
 }
 
 
+_MATERIALIZED_DATASETS = [
+    ds
+    for ds in DYNAMICAL_DATASETS
+    if issubclass(ds.region_job_class, MaterializedRegionJob)
+]
+_DERIVED_ENDS = {
+    "noaa-gfs-analysis": "2026-10-26T19:00",
+    "noaa-gefs-analysis": "2026-10-26T21:00",
+    "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree": "2026-10-25",
+    "ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree": "2026-10-25",
+    "ecmwf-aifs-ens-forecast": "2026-10-26T08:50",
+}
+
+
 def dataset_for(dataset_id: str) -> DynamicalDataset:
     return next(ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == dataset_id)
 
@@ -58,13 +72,7 @@ def test_materialized_family_budgets_and_timing(dataset_id: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "dataset",
-    [
-        ds
-        for ds in DYNAMICAL_DATASETS
-        if issubclass(ds.region_job_class, MaterializedRegionJob)
-    ],
-    ids=lambda ds: ds.dataset_id,
+    "dataset", _MATERIALIZED_DATASETS, ids=lambda ds: ds.dataset_id
 )
 def test_materialized_builders_require_reference_time(
     dataset: DynamicalDataset,
@@ -76,11 +84,12 @@ def test_materialized_builders_require_reference_time(
     assert parameter.default is inspect.Parameter.empty
 
 
-@pytest.mark.parametrize("dataset_id", _ADOPTIONS)
-def test_materialized_family_builders_use_reference_not_wall_clock(
-    dataset_id: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize(
+    "dataset", _MATERIALIZED_DATASETS, ids=lambda ds: ds.dataset_id
+)
+def test_materialized_builders_use_reference_not_wall_clock(
+    dataset: DynamicalDataset, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    dataset = dataset_for(dataset_id)
     job_class = dataset.region_job_class
     assert issubclass(job_class, MaterializedRegionJob)
     append_dim = dataset.template_config.append_dim
@@ -112,11 +121,7 @@ def test_materialized_family_builders_use_reference_not_wall_clock(
         reformat_job_name="test",
         job_reference_time=reference,
     )
-    expected = reference
-    if "ifs-ens-forecast-46-day" in dataset_id:
-        expected = pd.Timestamp("2026-10-25")
-    elif dataset_id == "ecmwf-aifs-ens-forecast":
-        expected = pd.Timestamp("2026-10-26T08:50")
+    expected = pd.Timestamp(_DERIVED_ENDS.get(dataset.dataset_id, reference))
     template.assert_called_once_with(expected)
 
 

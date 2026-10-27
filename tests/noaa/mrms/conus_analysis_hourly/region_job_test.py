@@ -451,7 +451,7 @@ def test_operational_update_jobs(
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2024-01-15T06:34")),
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2024-01-17T06:34:00")),
     )
     existing_ds = template_config.get_template(pd.Timestamp("2024-01-15T05:01"))
     template_utils.write_metadata(existing_ds, store_factory)
@@ -463,7 +463,7 @@ def test_operational_update_jobs(
         append_dim=template_config.append_dim,
         all_data_vars=template_config.data_vars,
         reformat_job_name="test_job",
-        job_reference_time=pd.Timestamp.now(),
+        job_reference_time=pd.Timestamp("2024-01-15T06:34"),
     )
 
     assert template_ds.time.max() == pd.Timestamp("2024-01-15T06:00")
