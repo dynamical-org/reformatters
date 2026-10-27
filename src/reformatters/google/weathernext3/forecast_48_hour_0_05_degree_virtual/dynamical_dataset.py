@@ -5,6 +5,7 @@ from reformatters.google.weathernext3.forecast_virtual.dynamical_dataset import 
     GoogleWeathernext3ForecastVirtualDataset,
 )
 from reformatters.google.weathernext_virtual.listing import (
+    weathernext_read_chunk_containers,
     weathernext_virtual_chunk_containers,
 )
 
@@ -26,6 +27,7 @@ class GoogleWeathernext3Forecast48Hour005DegreeVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=weathernext_virtual_chunk_containers(),
+            read_containers=weathernext_read_chunk_containers,
             manifest_split=manifest_append_dim_split(split_size=384, dim="init_time"),
         )
     )

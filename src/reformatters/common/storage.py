@@ -1,6 +1,6 @@
 import contextlib
 import functools
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
@@ -463,6 +463,14 @@ def _get_icechunk_store(
     virtual_config: IcechunkVirtualConfig | None = None,
 ) -> IcechunkStore:
     storage = _get_icechunk_storage(store_path, storage_config)
+    if (
+        not writable
+        and virtual_config is not None
+        and virtual_config.read_containers is not None
+    ):
+        virtual_config = virtual_config.model_copy(
+            update={"containers": virtual_config.read_containers()}
+        )
     repo_config, credentials = _repository_config_and_credentials(virtual_config)
 
     if writable:
@@ -566,6 +574,11 @@ class IcechunkVirtualConfig(FrozenBaseModel):
     )
     # Per-array manifest splitting policy (see manifest_append_dim_split).
     manifest_split: InstanceOf[icechunk.ManifestSplittingConfig]
+    # Replaces `containers` on readonly opens only, so read-time request headers such as
+    # credentials never reach a saved repository config.
+    read_containers: Callable[[], tuple[icechunk.VirtualChunkContainer, ...]] | None = (
+        None
+    )
 
 
 def _repository_config_and_credentials(

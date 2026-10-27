@@ -18,6 +18,8 @@ from reformatters.google.weathernext2.forecast_virtual.template_config import (
     GoogleWeathernext2DataVar,
 )
 from reformatters.google.weathernext_virtual.listing import (
+    SERVICE_TOKEN_SECRET_NAME,
+    weathernext_read_chunk_containers,
     weathernext_virtual_chunk_containers,
 )
 
@@ -43,6 +45,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
             containers=weathernext_virtual_chunk_containers(),
+            read_containers=weathernext_read_chunk_containers,
             manifest_split=manifest_append_dim_split(
                 split_size={
                     r"^/pressure_level/": OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT,
@@ -65,7 +68,10 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
             dataset_id=self.dataset_id,
             cpu="1.7",
             memory="7G",
-            secret_names=self.store_factory.k8s_secret_names(),
+            secret_names=[
+                *self.store_factory.k8s_secret_names(),
+                SERVICE_TOKEN_SECRET_NAME,
+            ],
             suspend=False,
         )
         return [update]

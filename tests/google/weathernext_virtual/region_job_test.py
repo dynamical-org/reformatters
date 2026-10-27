@@ -2,6 +2,7 @@ from collections.abc import Iterator, Sequence
 from typing import Any, Literal
 from unittest.mock import Mock
 
+import httpx
 import pandas as pd
 import pytest
 
@@ -20,6 +21,7 @@ from tests.google.weathernext2.forecast_virtual.native_region_job_test import (
     _job,
     _var,
 )
+from tests.google.weathernext_virtual.listing_test import mock_service_token_secret
 
 
 @pytest.mark.parametrize("historical", [True, False])
@@ -99,3 +101,39 @@ def test_manifest_batches_preserve_window_and_step_order(
         if mode == "backfill"
         else [coords]
     )
+
+
+@pytest.mark.parametrize("token", ["test-service-token", None])
+def test_discovery_listing_sends_service_token_only_when_set(
+    monkeypatch: pytest.MonkeyPatch, token: str | None
+) -> None:
+    mock_service_token_secret(monkeypatch, token)
+    received: list[httpx.Headers] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        received.append(request.headers)
+        return httpx.Response(200, json={"items": []})
+
+    client = httpx.Client
+    monkeypatch.setattr(
+        region_job.httpx,
+        "Client",
+        lambda **kwargs: client(transport=httpx.MockTransport(handler), **kwargs),
+    )
+    init = pd.Timestamp("2025-03-01T06:00")
+    var = _var(OPERATIONAL, "temperature_2m")
+    job = _job(
+        GoogleWeathernext2ForecastOperationalVirtualRegionJob,
+        OPERATIONAL,
+        OPERATIONAL.get_template(init + pd.Timedelta("6h")),
+        [var],
+    )
+
+    assert job.discover_available([_coord(OPERATIONAL, [var], init)]) == []
+    assert received
+    assert [headers.get("X-Dynamical-Service-Token") for headers in received] == [
+        token
+    ] * len(received)
+    assert {headers["User-Agent"] for headers in received} == {
+        "dynamical.org reformatters"
+    }

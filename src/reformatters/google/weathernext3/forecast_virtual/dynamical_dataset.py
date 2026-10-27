@@ -7,6 +7,7 @@ import pandas as pd
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.google.weathernext_virtual.listing import SERVICE_TOKEN_SECRET_NAME
 
 from .region_job import (
     GoogleWeathernext3ForecastVirtualRegionJob,
@@ -44,7 +45,10 @@ class GoogleWeathernext3ForecastVirtualDataset(
                 dataset_id=self.dataset_id,
                 cpu="1.7",
                 memory="7G",
-                secret_names=self.store_factory.k8s_secret_names(),
+                secret_names=[
+                    *self.store_factory.k8s_secret_names(),
+                    SERVICE_TOKEN_SECRET_NAME,
+                ],
                 suspend=True,
             ),
         ]

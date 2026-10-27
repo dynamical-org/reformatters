@@ -163,6 +163,6 @@ A virtual chunk container is more than anonymous credentials — refs are stored
 - **Dedup.** The repeated `s3://bucket/prefix` is not copied into every ref; on an all-virtual store this is most of the on-disk footprint.
 - **En-masse repoint.** Swapping a container registration (e.g. NODD-on-AWS → a GCS mirror, or a Source Coop move) repoints every ref at once, with no manifest rewrite.
 
-Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
+Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises. A container that needs request headers on our own reads (e.g. a service token) goes in `IcechunkVirtualConfig.read_containers`, which `StoreFactory` substitutes on readonly opens only, so the headers never reach a saved config.
 
 How manifests are split, and how to size the splits, is covered in [Manifest splitting](#manifest-splitting).

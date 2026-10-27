@@ -4,10 +4,12 @@ from typing import NamedTuple
 import httpx
 import icechunk
 
+from reformatters.common import kubernetes
 from reformatters.common.retry import retry
 
 PROXY_LOCATION_PREFIX = "https://wn.dynamical.org/chunks/"
 OBJECTS_LOCATION = "https://wn.dynamical.org/objects"
+SERVICE_TOKEN_SECRET_NAME = "wn-service-token"  # noqa: S105
 
 
 class NativeObjectMetadata(NamedTuple):
@@ -20,6 +22,21 @@ def weathernext_virtual_chunk_containers() -> tuple[
 ]:
     return (
         icechunk.VirtualChunkContainer(PROXY_LOCATION_PREFIX, icechunk.http_store()),
+    )
+
+
+def service_token_headers() -> dict[str, str]:
+    token = kubernetes.load_secret(SERVICE_TOKEN_SECRET_NAME).get("WN_SERVICE_TOKEN")
+    return {"X-Dynamical-Service-Token": token} if token else {}
+
+
+def weathernext_read_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...]:
+    """Carries the service token, so must never reach a saved repository config."""
+    return (
+        icechunk.VirtualChunkContainer(
+            PROXY_LOCATION_PREFIX,
+            icechunk.http_store(headers=service_token_headers() or None),
+        ),
     )
 
 

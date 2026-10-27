@@ -20,7 +20,12 @@ from reformatters.common.region_job import (
 from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 
-from .listing import NativeObjectMetadata, ObjectListingQuery, list_objects
+from .listing import (
+    NativeObjectMetadata,
+    ObjectListingQuery,
+    list_objects,
+    service_token_headers,
+)
 
 log = get_logger(__name__)
 
@@ -107,7 +112,10 @@ class WeatherNextVirtualRegionJob(
             ),
         )
         with (
-            httpx.Client(timeout=30, headers={"User-Agent": USER_AGENT}) as client,
+            httpx.Client(
+                timeout=30,
+                headers={"User-Agent": USER_AGENT, **service_token_headers()},
+            ) as client,
             ThreadPoolExecutor(self.download_concurrency) as pool,
         ):
             listed = dict(
