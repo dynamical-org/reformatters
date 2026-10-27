@@ -148,6 +148,42 @@ def test_current_data_cases_cover_registered_datasets() -> None:
     assert {case[0] for case in _FRESHNESS_DEADLINES} == registered
 
 
+@pytest.mark.parametrize(
+    "dataset_id",
+    [
+        "noaa-gfs-forecast",
+        "noaa-hrrr-forecast-48-hour",
+        "ecmwf-ifs-ens-forecast-15-day-0-25-degree",
+        "ecmwf-ifs-ens-15-day-deprecated-zarr-v3",
+        "dwd-icon-eu-forecast-5-day",
+        "eccc-hrdps-forecast",
+    ],
+)
+def test_materialized_forecast_currency_waits_for_publishing_fire(
+    dataset_id: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = next(d for d in DYNAMICAL_DATASETS if d.dataset_id == dataset_id)
+    (current_data,) = [
+        check
+        for check in dataset.validators()
+        if isinstance(check, validation.CheckCurrentData)
+    ]
+    (update,) = [
+        job
+        for job in dataset.operational_kubernetes_resources("test-image")
+        if isinstance(job, ReformatCronJob)
+    ]
+    frequency = pd.Timedelta(dataset.template_config.append_dim_frequency)
+    for init in pd.date_range(
+        "2026-09-27", "2026-09-28", freq=frequency, inclusive="left"
+    ):
+        fire = update.next_fire_time(init)
+        assert init + current_data.max_delay >= fire
+        assert _check_at_time(
+            dataset_id, fire - timedelta(seconds=1), init - frequency, monkeypatch
+        ).passed
+
+
 @pytest.mark.parametrize("hour", [0, 6, 12, 18])
 @pytest.mark.parametrize(
     ("dataset_id", "validation_delay"),
