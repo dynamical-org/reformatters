@@ -86,7 +86,7 @@ class Pilot:
         )
 
     def prepare(self, job: client.V1Job, *, is_first: bool = True) -> bool:
-        return self.dataset._prepare_materialized_update(
+        return self.dataset._prepare_and_wait_materialized_update(
             job,
             self.dataset._operational_cron_job(kubernetes.ReformatCronJob),
             is_first=is_first,
@@ -188,14 +188,14 @@ def test_failed_index_with_running_sibling_is_still_writing(pilot: Pilot) -> Non
     assert pc.job_is_writing(pilot.dataset.store_factory, job)
 
     def deadline(seconds: int) -> None:
-        assert seconds == 60
+        assert seconds == 30
         assert pilot.state(newer) == "run"
         assert job.status is not None
         job.status.conditions = [client.V1JobCondition(type="Failed", status="True")]
 
     pilot.sleep.side_effect = deadline
     assert pilot.prepare(newer)
-    pilot.sleep.assert_called_once_with(60)
+    pilot.sleep.assert_called_once_with(30)
 
 
 @pytest.mark.parametrize("state", ["run", "skip", "finalized"])
@@ -229,14 +229,14 @@ def test_same_second_jobs_run_in_name_order_and_newer_records_run_before_queue(
     assert pilot.state(older) == "run"
 
     def finish_older(seconds: int) -> None:
-        assert seconds == 60
+        assert seconds == 30
         assert pilot.state(newer) == "run"
         assert pilot.state(older) == "run"
         pilot.write(older, "finalized")
 
     pilot.sleep.side_effect = finish_older
     assert pilot.prepare(newer)
-    pilot.sleep.assert_called_once_with(60)
+    pilot.sleep.assert_called_once_with(30)
 
 
 def test_every_index_computes_after_predecessor_finalizes_and_reuses_decision(
@@ -252,7 +252,7 @@ def test_every_index_computes_after_predecessor_finalizes_and_reuses_decision(
 
     def finish_older(seconds: int) -> None:
         nonlocal published
-        assert seconds == 60
+        assert seconds == 30
         assert events[-1] == ("enter", _CRON)
         pilot.compute.assert_not_called()
         published = "new"
@@ -271,7 +271,7 @@ def test_every_index_computes_after_predecessor_finalizes_and_reuses_decision(
     pilot.dataset.update("b", worker_index=2, workers_total=3)
 
     assert computed == ["new", "new", "new"]
-    pilot.sleep.assert_called_once_with(60)
+    pilot.sleep.assert_called_once_with(30)
     pilot.validate.assert_called_once()
     assert all(
         call.kwargs["job_uid"] == current.metadata.uid
@@ -389,7 +389,7 @@ def test_backstop_does_not_record_run_before_currency_check_and_waits_only_for_w
         return True
 
     def finish(seconds: int) -> None:
-        assert seconds == 60
+        assert seconds == 30
         assert pilot.state(backstop) is None
         pilot.write(repass, "finalized")
 
@@ -430,16 +430,21 @@ def test_replacement_pod_zero_backstop_window_uses_job_creation_not_pod_start(
     assert currency.call_count == int(skips)
 
 
-@pytest.mark.parametrize("retry", [1, 2, 3, 4, 16])
-def test_repass_backoff_steps_and_final_check(pilot: Pilot, retry: int) -> None:
+@pytest.mark.parametrize(
+    ("retry", "minutes"), [(1, 5), (2, 10), (3, 20), (4, 30), (16, 30)]
+)
+def test_repass_backoff_steps_and_final_check(
+    pilot: Pilot, retry: int, minutes: int
+) -> None:
     current = _job("current")
     pilot.jobs[:] = [current]
     pilot.write(current, "finalized")
     pilot.sleep.side_effect = None
     assert pc.backoff_before_repass(pilot.dataset.store_factory, _CRON, current, retry)
-    assert pilot.sleep.call_count == min(5 * 2 ** (retry - 1), 30)
+    assert pilot.sleep.call_count == 2 * minutes
+    assert sum(call.args[0] for call in pilot.sleep.call_args_list) == minutes * 60
     assert pilot.api.list_namespaced_job.call_count == pilot.sleep.call_count
-    assert all(call.args == (60,) for call in pilot.sleep.call_args_list)
+    assert all(call.args == (30,) for call in pilot.sleep.call_args_list)
 
 
 @pytest.mark.parametrize("newer_terminal", [None, "Failed", "Complete"])
@@ -454,7 +459,7 @@ def test_backoff_yields_only_after_newer_nonterminal_job_records_matching_run(
 
     def advance(seconds: int) -> None:
         nonlocal ticks
-        assert seconds == 60
+        assert seconds == 30
         ticks += 1
         if ticks == 1:
             pilot.jobs.append(newer)
@@ -468,10 +473,10 @@ def test_backoff_yields_only_after_newer_nonterminal_job_records_matching_run(
     assert pc.backoff_before_repass(pilot.dataset.store_factory, _CRON, current, 1) == (
         newer_terminal is not None
     )
-    assert ticks == (5 if newer_terminal else 3)
+    assert ticks == (10 if newer_terminal else 3)
 
 
-def test_queued_trigger_releases_backing_off_job_within_sixty_seconds(
+def test_queued_trigger_releases_backing_off_job_within_thirty_seconds(
     pilot: Pilot,
 ) -> None:
     current = _job("old")
@@ -480,12 +485,12 @@ def test_queued_trigger_releases_backing_off_job_within_sixty_seconds(
     pilot.write(current, "finalized")
 
     def start_trigger(seconds: int) -> None:
-        assert seconds == 60
+        assert seconds == 30
         assert pilot.prepare(trigger)
 
     pilot.sleep.side_effect = start_trigger
     assert not pc.backoff_before_repass(pilot.dataset.store_factory, _CRON, current, 1)
-    pilot.sleep.assert_called_once_with(60)
+    pilot.sleep.assert_called_once_with(30)
 
 
 def test_healthy_untriggered_update_validates_without_repass(
@@ -526,7 +531,7 @@ def test_validation_pages_then_backs_off_outside_update_checkin_and_repasses(
     monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
 
     def backoff(seconds: int) -> None:
-        assert seconds == 60
+        assert seconds == 30
         assert pilot.state(job) == "finalized"
         assert events == [
             ("enter", _CRON),
@@ -543,7 +548,7 @@ def test_validation_pages_then_backs_off_outside_update_checkin_and_repasses(
     submit.assert_called_once_with(
         _CRON, "job-r1", skip_if_next_run_within_deadline=False
     )
-    assert pilot.sleep.call_count == 5
+    assert pilot.sleep.call_count == 10
 
 
 def test_late_file_repass_succeeds_and_chain_stops_at_r16(
@@ -727,7 +732,7 @@ def test_next_fire_queues_behind_repass_and_publishes_new_unit(
     )
 
     def finish_repass(seconds: int) -> None:
-        assert seconds == 60
+        assert seconds == 30
         pilot.compute.assert_not_called()
         assert pilot.state(scheduled) == "run"
         published.append("06Z")
@@ -744,7 +749,7 @@ def test_next_fire_queues_behind_repass_and_publishes_new_unit(
 
     assert published == ["06Z", "12Z"]
     pilot.validate.assert_called_once()
-    pilot.sleep.assert_called_once_with(60)
+    pilot.sleep.assert_called_once_with(30)
 
 
 def test_persistent_failure_submits_each_repass_through_r16(
@@ -767,7 +772,7 @@ def test_persistent_failure_submits_each_repass_through_r16(
     assert [call.args[1] for call in submit.call_args_list] == [
         f"job-r{retry}" for retry in range(1, 17)
     ]
-    assert pilot.sleep.call_count == 5 + 10 + 20 + 13 * 30
+    assert pilot.sleep.call_count == 2 * (5 + 10 + 20 + 13 * 30)
 
 
 @pytest.mark.parametrize("state", [None, "skip", "finalized"])
@@ -780,7 +785,7 @@ def test_backoff_does_not_yield_to_undecided_or_nonwriting_newer_jobs(
         pilot.write(newer, state)
     pilot.sleep.side_effect = None
     assert pc.backoff_before_repass(pilot.dataset.store_factory, _CRON, current, 1)
-    assert pilot.sleep.call_count == 5
+    assert pilot.sleep.call_count == 10
 
 
 def test_final_backoff_check_prevents_repass_submission(
@@ -796,14 +801,14 @@ def test_final_backoff_check_prevents_repass_submission(
     def advance(seconds: int) -> None:
         nonlocal ticks
         ticks += 1
-        if ticks == 5:
+        if ticks == 10:
             pilot.write(newer, "run")
 
     pilot.sleep.side_effect = advance
     with pytest.raises(typer.Exit) as exc:
         pilot.dataset._validate_after_update("a", materialized_job=current)
     assert exc.value.exit_code == 20
-    assert ticks == 5
+    assert ticks == 10
     submit.assert_not_called()
 
 
@@ -872,7 +877,7 @@ def test_nonzero_index_waits_for_writing_predecessor_before_computing(
 
     def finalize_older(seconds: int) -> None:
         nonlocal published
-        assert seconds == 60
+        assert seconds == 30
         pilot.compute.assert_not_called()
         assert pilot.state(older) == "run"
         pilot.write(older, "finalized")
@@ -890,7 +895,7 @@ def test_nonzero_index_waits_for_writing_predecessor_before_computing(
     pilot.sleep.side_effect = finalize_older
     pilot.compute.side_effect = compute
     pilot.dataset.update("b", worker_index=2, workers_total=3)
-    pilot.sleep.assert_called_once_with(60)
+    pilot.sleep.assert_called_once_with(30)
     pilot.compute.assert_called_once()
     pilot.validate.assert_called_once()
 

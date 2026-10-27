@@ -179,7 +179,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     job_reference_time = pd.Timestamp(
                         materialized_job.metadata.creation_timestamp
                     ).tz_convert(None)
-                    if not self._prepare_materialized_update(
+                    if not self._prepare_and_wait_materialized_update(
                         materialized_job, cron, is_first=is_first
                     ):
                         return
@@ -222,9 +222,10 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             f"Operational update complete. Wrote to primary store {self.store_factory.primary_store()} and replicas {self.store_factory.replica_stores()}"
         )
 
-    def _prepare_materialized_update(
+    def _prepare_and_wait_materialized_update(
         self, job: client.V1Job, cron: CronJob, *, is_first: bool
     ) -> bool:
+        """Record or reuse the run/skip decision and wait for older writers before returning True."""
         factory = self.store_factory
         assert job.metadata is not None
         name, uid = job.metadata.name, job.metadata.uid

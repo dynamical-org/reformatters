@@ -82,7 +82,7 @@ def wait_for_older_jobs(
         for other in kubernetes.list_cronjob_jobs(cronjob_name)
     ):
         log.info("Waiting for older Jobs before %s", kubernetes.job_order(job)[1])
-        time.sleep(60)
+        time.sleep(30)
 
 
 def backoff_before_repass(
@@ -91,8 +91,8 @@ def backoff_before_repass(
     job: client.V1Job,
     retry_number: int,
 ) -> bool:
-    for _ in range(min(5 * 2 ** (retry_number - 1), 30)):
-        time.sleep(60)
+    for _ in range(2 * min(5 * 2 ** (retry_number - 1), 30)):
+        time.sleep(30)
         if any(
             kubernetes.job_order(other) > kubernetes.job_order(job)
             and not kubernetes.job_is_terminal(other)
