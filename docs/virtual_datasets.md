@@ -32,6 +32,8 @@ Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — o
 
 `processing_mode` on the job selects the generator's stopping rule: `"backfill"` sweeps what exists once and exits; `"update"` polls until everything expected is ingested or its `poll_deadline` passes (see [Operational updates](#operational-updates)). `operational_update_jobs` implementations must construct jobs with `processing_mode="update"` (asserted by the driver).
 
+The write loop returns a completion flag for operational dispatch before validation; backfills ignore it. See the [completion-trigger mechanism](parallel_processing.md#completion-triggers) and [completion conditions](operational_update_timing.md#completion-triggers).
+
 ## What a `VirtualRegionJob` implementer writes
 
 `VirtualRegionJob` is **source-agnostic**: the base owns the tick loop (`process_virtual_refs`, working in coord space), the atomic-commit machinery, lazy append-dim expansion (`sync_dims_to`), central chunk-index resolution (`chunk_key`/`_emit_refs`), and unreadable-file skipping (`_file_refs_or_skip`). It assumes nothing about S3, object listing, or even that a source file *has* an index. A dataset fills in the seam.

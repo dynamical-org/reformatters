@@ -7,6 +7,7 @@ from pydantic import Field
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
@@ -33,7 +34,13 @@ class NoaaHrrrForecast48HourVirtualDataset(
         NoaaHrrrForecast48HourVirtualRegionJob
     )
 
-    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=2)
+    materialized_update_triggers: ClassVar[tuple[MaterializedUpdateTrigger, ...]] = (
+        MaterializedUpdateTrigger(
+            target_cronjob="noaa-hrrr-forecast-48-hour-update",
+            init_hours=(0, 6, 12, 18),
+        ),
+    )
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=83)
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(
@@ -55,14 +62,12 @@ class NoaaHrrrForecast48HourVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Run once per 6h cycle just before the first lead times publish
-        # (~init+50m), polling through f48 (~init+2h on S3). The pod exits when the
-        # window is fully ingested; the deadline bounds waiting on a file that never
-        # publishes and stays well under the 6h gap so fires never overlap.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="50 0,6,12,18 * * *",
-            pod_active_deadline=timedelta(hours=1, minutes=40),
+            schedule="44 0,6,12,18 * * *",
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6, minutes=3, seconds=8),
+            active_deadline=timedelta(hours=6, minutes=3, seconds=8),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="4",
@@ -74,7 +79,7 @@ class NoaaHrrrForecast48HourVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(minutes=52)),
+            validation.CheckCurrentData(max_delay=timedelta(minutes=74)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),
         )

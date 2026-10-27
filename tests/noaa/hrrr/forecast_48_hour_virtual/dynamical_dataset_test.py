@@ -54,17 +54,20 @@ def dataset(tmp_path: Path) -> NoaaHrrrForecast48HourVirtualDataset:
     return make_dataset(tmp_path)
 
 
-def test_polling_leaves_validation_time_inside_single_deadline(
+def test_polling_overlaps_next_fire_and_leaves_validation_time(
     dataset: NoaaHrrrForecast48HourVirtualDataset,
 ) -> None:
     cron = dataset.operational_kubernetes_resources("test")[0]
-    fire = pd.Timestamp("2026-10-02T00:50")
-    deadline = pd.Timestamp("2026-10-02T02:28")
+    fire = pd.Timestamp("2026-10-02T00:44")
+    deadline = pd.Timestamp("2026-10-02T06:45:45")
 
-    assert cron.pod_active_deadline == timedelta(minutes=100)
+    assert cron.pod_active_deadline == timedelta(hours=6, minutes=3, seconds=8)
+    assert cron.active_deadline == cron.pod_active_deadline
+    assert cron.concurrency_policy == "Allow"
+    assert deadline - cron.next_fire_time(fire) == timedelta(seconds=105)
     assert dataset._virtual_poll_deadline(fire) == deadline
     assert dataset._virtual_poll_deadline(fire + timedelta(minutes=10)) == deadline
-    assert fire + cron.pod_active_deadline - deadline == timedelta(minutes=2)
+    assert fire + cron.pod_active_deadline - deadline == timedelta(seconds=83)
 
 
 @pytest.mark.slow
@@ -264,7 +267,9 @@ def test_operational_kubernetes_resources(
     # Single-writer virtual update: no fan-out.
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
-    assert update_cron_job.pod_active_deadline < timedelta(hours=6)
+    assert update_cron_job.pod_active_deadline == timedelta(
+        hours=6, minutes=3, seconds=8
+    )
     assert len(update_cron_job.secret_names) > 0
 
 
@@ -283,7 +288,7 @@ def test_current_data_validator_due_at_update_fire(
     (current_data,) = [
         v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
-    assert current_data.max_delay == timedelta(minutes=52)
+    assert current_data.max_delay == timedelta(minutes=74)
 
 
 def _resolved_split_size(

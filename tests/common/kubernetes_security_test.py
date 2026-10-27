@@ -140,6 +140,9 @@ def test_canary_retries_stale_parameter_denials_and_uses_unique_names(
             subprocess.CompletedProcess([], 1, stderr=f"{prefix}-clone"),
             subprocess.CompletedProcess([], 1, stderr=f"{prefix}-clone"),
             subprocess.CompletedProcess([], 0, stderr=""),
+            subprocess.CompletedProcess([], 0, stderr=""),
+            subprocess.CompletedProcess([], 1, stderr=f"{prefix}-clone"),
+            subprocess.CompletedProcess([], 1, stderr=f"{prefix}-clone"),
         ]
     )
     monkeypatch.setattr(subprocess, "run", run)
@@ -149,12 +152,20 @@ def test_canary_retries_stale_parameter_denials_and_uses_unique_names(
         json.loads(call.kwargs["input"])["metadata"]["name"]
         for call in run.call_args_list[1:]
     ]
-    assert len(set(names)) == 5
+    assert len(set(names)) == 8
+    probes = [json.loads(call.kwargs["input"]) for call in run.call_args_list[1:]]
+    key = "dynamical.org/run-kind"
+    assert key not in probes[-4]["metadata"]["annotations"]
+    assert probes[-3]["metadata"]["annotations"][key] == "trigger"
+    assert probes[-2]["metadata"]["annotations"][key] == "manual"
+    assert key not in probes[-1]["metadata"]["annotations"]
+    assert probes[-1]["spec"]["template"]["metadata"]["annotations"][key] == "trigger"
     assert all("--dry-run=server" in call.args[0] for call in run.call_args_list[1:])
 
 
-def test_operator_verifies_empty_bundle(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize("targets", [set(), {"weather-update", "other-update"}])
+def test_operator_verifies_bundle_and_authorized_live_targets(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, targets: set[str]
 ) -> None:
     namespace = "empty-triggers"
     items = trigger_admission_resources(namespace)
@@ -173,6 +184,8 @@ def test_operator_verifies_empty_bundle(
 
     run = Mock(side_effect=read_installed)
     monkeypatch.setattr(subprocess, "run", run)
+    role_targets = Mock(return_value=targets)
+    monkeypatch.setattr(deploy, "trigger_role_targets", role_targets)
     verify = Mock()
     monkeypatch.setattr(deploy, "verify_trigger_admission", verify)
     result = CliRunner().invoke(
@@ -180,12 +193,14 @@ def test_operator_verifies_empty_bundle(
     )
     assert result.exit_code == 0, result.exception
     assert run.call_count == len(items)
-    verify.assert_called_once_with(namespace, [])
+    role_targets.assert_called_once_with(namespace)
+    verify.assert_called_once_with(namespace, sorted(targets))
 
     result = CliRunner().invoke(app, ["verify-kubernetes-admission", str(bundle)])
     assert result.exit_code != 0
     assert "complete generated policy" in str(result.exception)
     assert run.call_count == len(items)
+    role_targets.assert_called_once_with(namespace)
 
 
 @pytest.mark.parametrize("already_exists", [False, True])

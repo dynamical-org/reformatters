@@ -359,6 +359,21 @@ class VirtualRegionJob(
         Always returns an empty dict: virtual refs live in the icechunk manifest,
         so there is nothing to thread back to finalize.
         """
+        cls.process_virtual_worker_jobs(
+            worker_jobs, store_factory, branch_name, overwrite_chunks=overwrite_chunks
+        )
+        return {}
+
+    @classmethod
+    def process_virtual_worker_jobs(
+        cls,
+        worker_jobs: Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]],
+        store_factory: storage.StoreFactory,
+        branch_name: str,
+        *,
+        overwrite_chunks: bool,
+    ) -> bool:
+        """Return whether a pending update window completed before its poll deadline."""
         assert worker_jobs, "process_worker_jobs requires at least one job"
         assert all(isinstance(job, VirtualRegionJob) for job in worker_jobs)
         jobs = cast(
@@ -391,14 +406,14 @@ class VirtualRegionJob(
                     "ingested_through": jobs[0].read_ingested_through(readonly_store),
                 }
             )
-            driver.process_virtual(
+            return driver.process_virtual(
                 primary_repo,
                 list(replica_repos),
                 branch_name,
                 remaining,
                 overwrite_chunks=overwrite_chunks,
             )
-        return {}
+        return False
 
     def process_virtual(
         self,
@@ -408,15 +423,17 @@ class VirtualRegionJob(
         remaining: Sequence[SOURCE_FILE_COORD],
         *,
         overwrite_chunks: bool = False,
-    ) -> None:
+    ) -> bool:
         """Run the virtual write loop over `remaining`, committing each yielded batch atomically.
 
         `remaining` is the union of the worker's source files, pre-filtered unless
         `overwrite_chunks` requests a rewrite. The same loop serves backfill
         (temp branch, one batch -> one commit) and operational updates
         ("main", per-tick commits); see "The write loop" in
-        docs/virtual_datasets.md.
+        docs/virtual_datasets.md. Return whether every pending file became present
+        before the poll deadline, without skipping an unreadable file.
         """
+        processed: set[int] = set()
         for file_refs_batch in self.process_virtual_refs(remaining):
             assert file_refs_batch, "process_virtual_refs yielded an empty batch"
             for coord, file_refs in file_refs_batch:
@@ -433,6 +450,13 @@ class VirtualRegionJob(
                     max_attempts=5,
                     retryable_exceptions=(icechunk.ConflictError,),
                 )
+            processed.update(id(coord) for coord, _ in file_refs_batch)
+        return (
+            self.processing_mode == "update"
+            and bool(remaining)
+            and all(id(coord) in processed for coord in remaining)
+            and pd.Timestamp.now() < self.poll_deadline
+        )
 
     def _commit_virtual_batch(
         self,

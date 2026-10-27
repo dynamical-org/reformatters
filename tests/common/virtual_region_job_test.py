@@ -2762,9 +2762,11 @@ def test_update_window_ends_at_the_scheduled_fire(
     driven: list[VirtualTestRegionJob] = []
     monkeypatch.setattr(
         VirtualTestRegionJob,
-        "process_worker_jobs",
+        "process_virtual_worker_jobs",
         classmethod(
-            lambda cls, worker_jobs, *args, **kwargs: driven.extend(worker_jobs) or {}
+            lambda cls, worker_jobs, *args, **kwargs: (
+                driven.extend(worker_jobs) or False
+            )
         ),
     )
 
@@ -2910,9 +2912,11 @@ def test_operational_update_passes_poll_deadline_to_the_write_loop(
     driven: list[VirtualTestRegionJob] = []
     monkeypatch.setattr(
         VirtualTestRegionJob,
-        "process_worker_jobs",
+        "process_virtual_worker_jobs",
         classmethod(
-            lambda cls, worker_jobs, *args, **kwargs: driven.extend(worker_jobs) or {}
+            lambda cls, worker_jobs, *args, **kwargs: (
+                driven.extend(worker_jobs) or False
+            )
         ),
     )
     dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)

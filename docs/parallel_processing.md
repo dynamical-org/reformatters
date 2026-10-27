@@ -79,6 +79,12 @@ Every Job inherits the `dynamical.org/cronjob-name` label from its CronJob's `jo
 
 `state.json` contains the Job UID in `uid` and one of `run`, `skip`, or `finalized` in `state`. Readers accept it only for the current Job UID; another UID counts as absent. Setup/results cleanup preserves this file.
 
+### Completion triggers
+
+Producers list consumers in `materialized_update_triggers`, with `init_hours` filtering each consumer's cycles. `_run_virtual_operational_update` dispatches from the write loop's completion flag for the newest append position in the selected-fire window. See the [completion-trigger rules](operational_update_timing.md#completion-triggers) for eligibility, completion conditions, backstop timing, and rollout requirements.
+
+`MaterializedUpdateTrigger` builds `<consumer>-t<YYYYmmddHHMM>z` names, shortening long prefixes with a digest. `create_job_from_cronjob(kind="trigger")` sets `RUN_KIND_ANNOTATION`.
+
 ### Setup signal
 
 Worker 0 writes `setup/ready.json` after completing setup (creating branches, writing metadata). Workers 1+ poll for this file before proceeding.

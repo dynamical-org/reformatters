@@ -22,13 +22,13 @@ _FRESHNESS_DEADLINES = [
     ("noaa-gefs-forecast-10-day-0-25-degree-virtual", "2026-09-27 00:00", "3h48m"),
     ("noaa-gefs-forecast-16-day-0-5-degree-virtual", "2026-09-27 00:00", "3h47m"),
     ("noaa-gefs-forecast-35-day-0-5-degree-virtual", "2026-09-27 00:00", "3h50m"),
-    ("noaa-hrrr-forecast-48-hour", "2026-09-27 00:00", "2h06m"),
+    ("noaa-hrrr-forecast-48-hour", "2026-09-27 00:00", "2h12m"),
     ("noaa-hrrr-analysis", "2026-09-26 21:00", "4h"),
     ("noaa-hrrr-analysis-virtual", "2026-09-26 23:00", "54m"),
     ("noaa-rtma-analysis-virtual", "2026-09-27 00:00", "90m"),
     ("noaa-rtma-ru-analysis-virtual", "2026-09-27 00:15", "45m"),
     ("noaa-urma-analysis-virtual", "2026-09-27 00:00", "7h40m"),
-    ("noaa-hrrr-forecast-48-hour-virtual", "2026-09-27 00:00", "52m"),
+    ("noaa-hrrr-forecast-48-hour-virtual", "2026-09-27 00:00", "74m"),
     ("noaa-hrrr-forecast-18-hour-virtual", "2026-09-27 00:00", "74m"),
     ("noaa-rrfs-forecast-84-hour-virtual", "2026-09-27 00:00", "360m"),
     ("noaa-rrfs-forecast-18-hour-virtual", "2026-09-27 00:00", "230m"),
@@ -251,3 +251,20 @@ def test_rrfs_sub_hourly_init_is_due_at_next_fire_poll_deadline(
     stale = _check_at_time(dataset_id, deadline + cadence, previous, monkeypatch)
     assert not stale.passed
     assert due.isoformat() in stale.message
+
+
+@pytest.mark.parametrize("hour", [0, 6, 12, 18])
+def test_hrrr48_backstop_requires_missing_init_at_fire_plus_startup(
+    hour: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset_id = "noaa-hrrr-forecast-48-hour"
+    dataset = next(d for d in DYNAMICAL_DATASETS if d.dataset_id == dataset_id)
+    init = pd.Timestamp("2026-10-27") + timedelta(hours=hour)
+    (cron,) = dataset.operational_kubernetes_resources("test")
+    fire = cron.next_fire_time(init)
+    assert fire == init + timedelta(hours=2, minutes=12)
+    now = fire + timedelta(seconds=35)
+    assert not _check_at_time(
+        dataset_id, now, init - timedelta(hours=6), monkeypatch
+    ).passed
+    assert _check_at_time(dataset_id, now, init, monkeypatch).passed

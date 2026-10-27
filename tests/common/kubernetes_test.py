@@ -3,7 +3,7 @@ import copy
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from unittest.mock import MagicMock, Mock, patch
 
 import pandas as pd
@@ -693,8 +693,10 @@ def _deployed_cronjob(*, suspend: bool = False) -> Mock:
     return cronjob
 
 
+@pytest.mark.parametrize("kind", [None, "trigger"])
 def test_create_job_clones_live_template_without_owner_reference(
     monkeypatch: pytest.MonkeyPatch,
+    kind: Literal["trigger"] | None,
 ) -> None:
     cronjob = _deployed_cronjob()
     batch = Mock()
@@ -708,7 +710,7 @@ def test_create_job_clones_live_template_without_owner_reference(
         "reformatters.common.kubernetes.client.BatchV1Api", lambda: batch
     )
 
-    assert create_job_from_cronjob("weather-update", "weather-retry-r1")
+    assert create_job_from_cronjob("weather-update", "weather-retry-r1", kind=kind)
     load_config.assert_called_once_with()
     batch.read_namespaced_cron_job.assert_called_once_with("weather-update", "weather")
     batch.create_namespaced_job.assert_called_once()
@@ -724,7 +726,9 @@ def test_create_job_clones_live_template_without_owner_reference(
     assert job.metadata.annotations == {
         "template-note": "value",
         "cronjob.kubernetes.io/instantiate": "manual",
+        **({"dynamical.org/run-kind": "trigger"} if kind else {}),
     }
+    assert job.spec.template.metadata is None
     assert job.spec == cronjob.spec.job_template.spec
     assert job.spec is not cronjob.spec.job_template.spec
     assert job.spec.active_deadline_seconds == 600
@@ -766,7 +770,10 @@ def test_create_job_skips_only_within_live_deadline(
     assert batch.create_namespaced_job.called is created
 
 
-def test_create_job_respects_suspend(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("kind", [None, "trigger"])
+def test_create_job_respects_suspend(
+    monkeypatch: pytest.MonkeyPatch, kind: Literal["trigger"] | None
+) -> None:
     batch = Mock()
     batch.read_namespaced_cron_job.return_value = _deployed_cronjob(suspend=True)
     monkeypatch.setenv("POD_NAMESPACE", "weather")
@@ -777,7 +784,7 @@ def test_create_job_respects_suspend(monkeypatch: pytest.MonkeyPatch) -> None:
         "reformatters.common.kubernetes.client.BatchV1Api", lambda: batch
     )
 
-    assert not create_job_from_cronjob("weather-update", "weather-retry-r1")
+    assert not create_job_from_cronjob("weather-update", "weather-retry-r1", kind=kind)
     batch.create_namespaced_job.assert_not_called()
 
 
@@ -788,8 +795,9 @@ def test_create_job_rejects_invalid_name(job_name: str) -> None:
 
 
 @pytest.mark.parametrize("matching", [True, False])
+@pytest.mark.parametrize("kind", [None, "trigger"])
 def test_create_job_409_requires_matching_identity(
-    monkeypatch: pytest.MonkeyPatch, matching: bool
+    monkeypatch: pytest.MonkeyPatch, matching: bool, kind: Literal["trigger"] | None
 ) -> None:
     cronjob = _deployed_cronjob()
     batch = Mock()
@@ -815,10 +823,10 @@ def test_create_job_409_requires_matching_identity(
     )
 
     if matching:
-        assert create_job_from_cronjob("weather-update", "weather-retry-r1")
+        assert create_job_from_cronjob("weather-update", "weather-retry-r1", kind=kind)
     else:
         with pytest.raises(ApiException) as error:
-            create_job_from_cronjob("weather-update", "weather-retry-r1")
+            create_job_from_cronjob("weather-update", "weather-retry-r1", kind=kind)
         assert error.value.status == 409
     batch.read_namespaced_job.assert_called_once_with("weather-retry-r1", "weather")
 
