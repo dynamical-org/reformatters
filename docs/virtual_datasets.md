@@ -84,11 +84,11 @@ Virtual stores carry no consolidated metadata in the root zarr.json — nothing 
 
 Crash recovery is automatic: committed refs are durable and the filter skips them on the next cron fire; uncommitted refs and expansions vanish and are re-discovered.
 
-The write loop discovers roughly once per second and commits each tick's usable files. It exits as soon as nothing in its window is pending. An unreadable file is skipped for the rest of that pod's life and retried by the next pod. Files still unpublished at `poll_deadline` remain for the next fire's overlapping window; validation checks currency, manifest completeness and decode health after polling ends.
+The write loop discovers at the region job's `tick_interval` and commits each tick's usable files. An unreadable file is skipped for the rest of that pod's life and retried by the next pod. Files still unpublished at `poll_deadline` remain eligible for a later update.
 
-Virtual CronJobs on `Allow` select one fire at execution start for job construction, the polling cutoff and the manifest/decode validation window; currency checks use the current time. Validation runs once after polling. A failure exits 20 and fails the Job, without creating a validation re-pass Job. See [virtual polling timing](operational_update_timing.md#virtual-polling) for schedule, deadline, overlap and currency rules.
+See [virtual polling](operational_update_timing.md#virtual-polling) for fire selection, polling, validation and legacy retry rules, and [currency and integrity validation](operational_update_timing.md#currency-and-integrity-validation) for validator timing.
 
-CronJobs default to `Replace` until configured for overlapping polling. Virtual datasets still using that policy retain their existing deadlines and immediate validation `-r1`: a retry is admitted only if a full pod duration fits strictly before the next fire. A retry admitted after cutoff gets an initial discovery/ingest sweep and validation without an extended polling window. Serialize manual updates and backfills with scheduled and retry writers, including terminating pods; a CronJob policy provides no store-wide lock.
+Serialize manual updates and backfills with scheduled and retry writers, including terminating pods; a CronJob policy provides no store-wide lock.
 
 Per-tick commit latency is dominated by the manifest read-modify-write of every array the tick's files touch (see [Manifest splitting](#manifest-splitting) for the cost model). Every icechunk repo sets `max_concurrent_manifest_fetches_during_commit` above its default so per-array manifest fetches overlap.
 

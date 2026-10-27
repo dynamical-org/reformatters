@@ -295,11 +295,7 @@ class CronJob(Job):
         return self
 
     def previous_fire_time(self, now: Timestamp) -> Timestamp:
-        """The most recent time this schedule fired, at or before `now`.
-
-        Every pod of one fire derives the same value, including a replacement pod
-        started after an eviction, which its own start time would not give.
-        """
+        """The most recent time this schedule fired, at or before `now`."""
         minutes, hours, days_of_month = _parse_schedule(self.schedule)
         fire_time = now.floor("h")
         while True:

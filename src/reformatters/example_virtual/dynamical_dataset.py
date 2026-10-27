@@ -52,19 +52,17 @@ class ExampleVirtualDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron jobs that operationally update this dataset.
 
-        A virtual update is SINGLE-WRITER (it commits to the icechunk branch directly),
-        so there is no workers_total/parallelism fan-out - one pod that polls through the
-        source's publication window and exits once the manifest is complete, or once its
-        poll deadline passes and the remaining files roll to the next fire.
+        Virtual updates use one worker per Job and commit directly to the Icechunk branch.
         """
         # suspend = True  # Defaults to False, remove after backfilling to run operational updates
+        # See docs/operational_update_timing.md#virtual-polling for deadline and grace budgets.
+        # deadline = timedelta(days=1, minutes=5)
         # operational_update_cron_job = ReformatCronJob(
         #     name=f"{self.dataset_id}-update",
         #     schedule="0 6 * * *",
-        #     # Sets how long a fire chases its own source files (the poll deadline is
-        #     # the fire plus this, less a small grace); keep it under the gap
-        #     # between fires so runs never overlap.
-        #     pod_active_deadline=timedelta(hours=2),
+        #     concurrency_policy="Allow",
+        #     pod_active_deadline=deadline,
+        #     active_deadline=deadline,
         #     image=image_tag,
         #     dataset_id=self.dataset_id,
         #     cpu="1.7",
