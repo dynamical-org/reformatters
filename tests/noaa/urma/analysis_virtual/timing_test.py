@@ -115,8 +115,8 @@ def test_unshifted_window_and_actual_fire_poll_deadline(tmp_path: Path) -> None:
     assert NoaaUrmaAnalysisVirtualRegionJob.tick_interval == pd.Timedelta("1s")
     (cron,) = dataset.operational_kubernetes_resources("test-image")
     assert cron.schedule == "45 * * * *"
-    assert cron.suspend
-    assert cron.as_kubernetes_object()["spec"]["suspend"] is True
+    assert not cron.suspend
+    assert cron.as_kubernetes_object()["spec"]["suspend"] is False
     assert (cron.workers_total, cron.parallelism) == (1, 1)
     assert cron.pod_active_deadline == timedelta(minutes=59)
     for now in (FIRE, FIRE + pd.Timedelta("25min"), CUTOFF):

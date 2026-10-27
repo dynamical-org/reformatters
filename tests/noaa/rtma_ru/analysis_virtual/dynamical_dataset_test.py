@@ -32,11 +32,11 @@ def make_dataset(
     )
 
 
-def test_suspended_quarter_hour_single_writer_configuration(tmp_path: Path) -> None:
+def test_active_quarter_hour_single_writer_configuration(tmp_path: Path) -> None:
     dataset = make_dataset(tmp_path)
     (cron,) = dataset.operational_kubernetes_resources("test-image")
-    assert cron.suspend
-    assert cron.as_kubernetes_object()["spec"]["suspend"] is True
+    assert not cron.suspend
+    assert cron.as_kubernetes_object()["spec"]["suspend"] is False
     assert (cron.workers_total, cron.parallelism) == (1, 1)
     assert (cron.cpu, cron.memory) == ("1.7", "7G")
     assert cron.schedule == "*/15 * * * *"

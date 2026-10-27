@@ -46,7 +46,7 @@ def test_urma_operations_storage_and_validators(tmp_path: Path) -> None:
     assert dataset.dataset_id == "noaa-urma-analysis-virtual"
     assert not dataset.replica_storage_configs
     (cron,) = dataset.operational_kubernetes_resources("test-image")
-    assert cron.as_kubernetes_object()["spec"]["suspend"] is True
+    assert cron.as_kubernetes_object()["spec"]["suspend"] is False
     assert cron.schedule == "45 * * * *"
     assert cron.pod_active_deadline == timedelta(minutes=59)
     assert dataset.virtual_poll_deadline_grace == timedelta(minutes=2)

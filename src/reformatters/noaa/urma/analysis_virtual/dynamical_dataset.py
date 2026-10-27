@@ -21,7 +21,7 @@ class NoaaUrmaAnalysisVirtualDataset(NoaaRtmaAnalysisVirtualDataset):
     update_deadline: ClassVar[timedelta] = timedelta(minutes=59)
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=2)
     max_delay: ClassVar[timedelta] = timedelta(hours=7, minutes=40)
-    update_cron_suspended: ClassVar[bool] = True
+    update_cron_suspended: ClassVar[bool] = False
 
     template_config: NoaaUrmaAnalysisVirtualTemplateConfig = (
         NoaaUrmaAnalysisVirtualTemplateConfig()
