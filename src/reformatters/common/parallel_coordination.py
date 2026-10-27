@@ -7,6 +7,7 @@ import json
 import re
 import time
 from collections.abc import Collection, Mapping, Sequence
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
@@ -23,6 +24,8 @@ from reformatters.common.storage import StoreFactory
 from reformatters.common.zarr import copy_zarr_metadata
 
 log = get_logger(__name__)
+
+_JOB_POLL_INTERVAL = timedelta(seconds=30)
 
 _RESULT_FILE_PATTERN = re.compile(r"worker-(?P<worker_index>\d+)\.json")
 
@@ -82,7 +85,7 @@ def wait_for_older_jobs(
         for other in kubernetes.list_cronjob_jobs(cronjob_name)
     ):
         log.info("Waiting for older Jobs before %s", kubernetes.job_order(job)[1])
-        time.sleep(30)
+        time.sleep(_JOB_POLL_INTERVAL.total_seconds())
 
 
 def backoff_before_repass(
@@ -91,8 +94,9 @@ def backoff_before_repass(
     job: client.V1Job,
     retry_number: int,
 ) -> bool:
-    for _ in range(2 * min(5 * 2 ** (retry_number - 1), 30)):
-        time.sleep(30)
+    backoff = timedelta(minutes=min(5 * 2 ** (retry_number - 1), 30))
+    for _ in range(backoff // _JOB_POLL_INTERVAL):
+        time.sleep(_JOB_POLL_INTERVAL.total_seconds())
         if any(
             kubernetes.job_order(other) > kubernetes.job_order(job)
             and not kubernetes.job_is_terminal(other)

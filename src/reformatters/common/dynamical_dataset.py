@@ -225,7 +225,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     def _prepare_and_wait_materialized_update(
         self, job: client.V1Job, cron: CronJob, *, is_first: bool
     ) -> bool:
-        """Record or reuse the run/skip decision and wait for older writers before returning True."""
+        """Return whether this Job should write, after recording or reusing its decision and, if it runs, waiting for older writers."""
         factory = self.store_factory
         assert job.metadata is not None
         name, uid = job.metadata.name, job.metadata.uid
