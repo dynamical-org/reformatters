@@ -183,3 +183,13 @@ def test_readonly_chunk_reads_send_service_token_without_persisting_it(
         for path in tmp_path.rglob("*")
         if path.is_file()
     )
+
+
+def test_unreadable_service_token_secret_falls_back_to_public(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def load_secret(name: str) -> dict[str, str]:
+        raise PermissionError("forbidden")
+
+    monkeypatch.setattr(listing.kubernetes, "load_secret", load_secret)
+    assert listing.service_token_headers() == {}
