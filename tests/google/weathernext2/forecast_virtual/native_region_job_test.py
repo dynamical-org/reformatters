@@ -11,7 +11,6 @@ from zarr.storage import MemoryStore
 
 from reformatters.common import template_utils
 from reformatters.common.config_models import ROOT
-from reformatters.common.user_agent import HTTPX_USER_AGENT
 from reformatters.google.weathernext2.forecast_historical_virtual.template_config import (
     GoogleWeathernext2ForecastHistoricalVirtualTemplateConfig,
 )
@@ -243,7 +242,7 @@ def _mock_native_listing(
     client.get.side_effect = get
 
     def client_factory(**kwargs: object) -> Mock:
-        assert kwargs["headers"] == {"User-Agent": HTTPX_USER_AGENT}
+        assert kwargs["headers"] == {"User-Agent": "dynamical.org reformatters"}
         return client
 
     monkeypatch.setattr(listing_module.httpx, "Client", client_factory)
