@@ -10,6 +10,7 @@ import xarray as xr
 from pydantic import Field
 
 from reformatters.common.config_models import DataVar
+from reformatters.common.download import USER_AGENT
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     DATA_VAR,
@@ -17,7 +18,6 @@ from reformatters.common.region_job import (
     InitLeadSourceFileCoord,
 )
 from reformatters.common.types import Dim, Timedelta, Timestamp
-from reformatters.common.user_agent import HTTPX_USER_AGENT
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 
 from .listing import NativeObjectMetadata, ObjectListingQuery, list_objects
@@ -107,9 +107,7 @@ class WeatherNextVirtualRegionJob(
             ),
         )
         with (
-            httpx.Client(
-                timeout=30, headers={"User-Agent": HTTPX_USER_AGENT}
-            ) as client,
+            httpx.Client(timeout=30, headers={"User-Agent": USER_AGENT}) as client,
             ThreadPoolExecutor(self.download_concurrency) as pool,
         ):
             listed = dict(

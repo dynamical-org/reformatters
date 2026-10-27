@@ -18,7 +18,6 @@ from zarr.storage import ObjectStore, StoreLike
 
 from reformatters.common.retry import retry
 from reformatters.common.storage import anonymous_virtual_chunk_credentials
-from reformatters.common.user_agent import icechunk_attribution
 from reformatters.common.validation import open_flattened_dataset
 from reformatters.noaa.refs.models import NoaaRefsDataVar
 
@@ -452,7 +451,6 @@ def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
         storage,
         config=config,
         authorize_virtual_chunk_access=_anonymous_virtual_credentials(storage),
-        attribution=icechunk_attribution("validation-report"),
     )
     return repo.readonly_session("main").store
 

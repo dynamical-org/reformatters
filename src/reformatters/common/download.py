@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 DOWNLOAD_DIR = Path("data/download/")
+USER_AGENT = "dynamical.org reformatters"
 
 """
 This module provides utilities for downloading files to disk over http,
@@ -101,7 +102,7 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
     """
     return obstore.store.HTTPStore.from_url(
         base_url,
-        client_options={**_CLIENT_OPTIONS, "user_agent": "dynamical.org reformatters"},
+        client_options={**_CLIENT_OPTIONS, "user_agent": USER_AGENT},
         retry_config=_RETRY_CONFIG,
     )
 
@@ -236,7 +237,7 @@ def _httpx_client() -> httpx.Client:
     return httpx.Client(
         follow_redirects=True,
         timeout=httpx.Timeout(connect=4.0, read=120.0, write=120.0, pool=120.0),
-        headers={"User-Agent": "dynamical.org reformatters"},
+        headers={"User-Agent": USER_AGENT},
     )
 
 
