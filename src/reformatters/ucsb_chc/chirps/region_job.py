@@ -160,10 +160,9 @@ class UcsbChcChirpsAnalysisMaterializedRegionJob(
             if coord.get_url() not in available
             and coord.time < now - self.expected_unavailable_window
         ]
-        if missing_old:
-            log.error(
-                f"CHIRPS {self.product} source listing is missing historical dates: {missing_old}"
-            )
+        assert not missing_old, (
+            f"CHIRPS {self.product} source listing is missing historical dates: {missing_old}"
+        )
         return [coord for coord in coords if coord.get_url() in available]
 
     def download_file(self, coord: UcsbChcChirpsAnalysisSourceFileCoord) -> Path:

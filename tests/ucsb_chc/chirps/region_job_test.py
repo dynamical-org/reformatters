@@ -135,8 +135,12 @@ def test_download_file_propagates_missing_file(
 def test_generate_source_file_coords(
     monkeypatch: pytest.MonkeyPatch,
     product: ChirpsProduct,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-03")),
+    )
     times = pd.date_range("2024-12-31", "2025-01-03", freq="1D")
     processing_region_ds = xr.Dataset(coords={"time": times})
     job = _job(product)
@@ -174,7 +178,6 @@ def test_generate_source_file_coords(
     monkeypatch.setattr(region_job, "httpx_get", get)
     coords = job.generate_source_file_coords(processing_region_ds, [])
     assert coords == present
-    assert "missing historical dates" in caplog.text
     assert coords[0].out_loc() == {"time": times[0]}
     assert len(requested) == 3
 
@@ -183,6 +186,34 @@ def test_generate_source_file_coords(
     )
     assert job.generate_source_file_coords(processing_region_ds, []) == present
     assert len(requested) == 6
+
+
+@pytest.mark.parametrize("product", ["final", "preliminary"])
+@pytest.mark.parametrize("missing_index", [1, 3])
+def test_missing_historical_dates_fail(
+    monkeypatch: pytest.MonkeyPatch,
+    product: ChirpsProduct,
+    missing_index: int,
+) -> None:
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2026-10-26")),
+    )
+    times = pd.date_range("2026-04-14", periods=4)
+    available = {
+        UcsbChcChirpsAnalysisSourceFileCoord(product=product, time=time).get_url()
+        for index, time in enumerate(times)
+        if index != missing_index
+    }
+    monkeypatch.setattr(region_job, "_available_file_urls", lambda *args: available)
+
+    with pytest.raises(
+        AssertionError, match="source listing is missing historical dates"
+    ):
+        _job(product).generate_source_file_coords(
+            xr.Dataset(coords={"time": times}), []
+        )
 
 
 def test_empty_listing_and_empty_region(monkeypatch: pytest.MonkeyPatch) -> None:
