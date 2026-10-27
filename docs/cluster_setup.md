@@ -22,12 +22,12 @@ Container image inputs in `deploy/Dockerfile` are pinned to multi-platform diges
    kubectl apply -f admission.json -f deploy/trigger-binding-deployer.yaml
    uv run main verify-kubernetes-admission admission.json --namespace default
    kubectl create clusterrolebinding reformatters-trigger-binding-deployer \
-     --clusterrole=reformatters-trigger-binding-deployer --user=DEPLOY_IDENTITY
+     --clusterrole=reformatters-trigger-binding-deployer --group=DEPLOY_GROUP
    kubectl create rolebinding reformatters-trigger-binding-deployer --namespace default \
-     --role=reformatters-trigger-binding-deployer --user=DEPLOY_IDENTITY
+     --role=reformatters-trigger-binding-deployer --group=DEPLOY_GROUP
    ```
 
-   The deploy identity also needs ordinary workload permissions and the delegated verbs in RBAC, since external authorizers do not satisfy escalation checks. Never grant wildcard verbs to `reformatters-update-trigger` or its groups. Dataset deploys need no further admin setup. Verification uses server-side dry runs and creates no resources.
+   The bootstrap grants every delegated verb through RBAC, because escalation checks ignore external authorizers; the deploy identity also needs ordinary workload permissions. Never grant wildcard verbs to `reformatters-update-trigger` or its groups. Dataset deploys need no further admin setup. Verification uses server-side dry runs and creates no resources; rerun it after the first deploy to probe each authorized CronJob.
 
    For policy changes, review `kubectl diff -f admission.json`, apply the bundle, and verify. Replace in place only when every changed object relaxes admission or leaves it unchanged; new policies or bindings count as tightening. Otherwise, replace with production and staging deploys paused, none in flight, and the trigger RoleBinding revoked across all API servers. Restore the RoleBinding and resume deploys only after verification passes and the policies are active on all API servers. Revocation blocks all trigger-account clones, including validation re-passes. Roll back by applying the previous bundle under the same rule.
 
