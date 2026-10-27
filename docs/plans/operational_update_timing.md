@@ -10,8 +10,8 @@ Prefer simple mechanisms and existing utilities. Accept occasional late alerts o
 |---|---|---|---|
 | [B: measurement and documentation](https://github.com/dynamical-org/reformatters/pull/1261) | anonymous source timestamps, exported or live read-only check-ins, advisory timing and candidate comparisons; documentation foundation | Draft | No timing constants changed |
 | B′: urgent currency values | audit `max_delay` against existing fires | Not needed: an audit found current `max_delay` values already satisfy the currency rule | No correction required |
-| A: overlap primitives | configurable concurrency; fresh-session conflict recovery; metadata refresh using its committing session | Draft | Conflict recovery and metadata refresh apply to existing datasets; overlap activation waits for a cohort |
-| C: virtual pilot and cohorts | poll windows, deadlines, and currency values; virtual lifecycle documentation | Pending | Pilot: HRRR 18-hour and RRFS sub-hourly; remaining virtual families follow |
+| [A: overlap primitives](https://github.com/dynamical-org/reformatters/pull/1227) | configurable concurrency; fresh-session conflict recovery; metadata refresh using its committing session | Draft; implemented | Conflict recovery and metadata refresh apply to existing datasets; overlap activation is adopted per cohort |
+| [C: virtual pilot](https://github.com/dynamical-org/reformatters/pull/1262) | poll windows, deadlines, and currency values; virtual lifecycle documentation | Draft; pilots implemented | HRRR 18-hour and RRFS sub-hourly virtual use overlapping polling with bounded Jobs and selected-fire validation; remaining virtual families follow |
 | D: materialized pilot and cohorts | queue, deadlines, validation re-passes, untriggered schedules; analysis boundary windows | Pending | Pilot: HRRR 48-hour; remaining materialized families follow |
 | G: completion triggers and cohorts | completion dispatch, Job identity, backstop decisions, admission; move consumer schedules with trigger activation | Pending | After both producer and consumer lifecycles are adopted |
 
