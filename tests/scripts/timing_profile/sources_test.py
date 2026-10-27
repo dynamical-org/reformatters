@@ -28,6 +28,8 @@ from scripts.timing_profile.sources import (
             "gs://ecmwf-open-data/a/b",
         ),
         ("https://example.org/a/b", "https://example.org/a/b"),
+        ("https://data.s3.example.org/a/b", "https://data.s3.example.org/a/b"),
+        ("https://s3.notamazonaws.com/a/b", "https://s3.notamazonaws.com/a/b"),
     ],
 )
 def test_anonymous_object_url_normalization(url: str, expected: str) -> None:

@@ -27,10 +27,12 @@ def canonical_url(url: str) -> str:
     host = parsed.hostname or ""
     if parsed.scheme in {"s3", "gs"}:
         return url
-    if ".s3." in host or host.endswith(".s3.amazonaws.com"):
-        return f"s3://{host.split('.s3')[0]}{parsed.path}"
-    if host.startswith("s3") and host.endswith("amazonaws.com"):
-        return "s3://" + parsed.path.lstrip("/")
+    if host.endswith(".amazonaws.com"):
+        if host.startswith(("s3.", "s3-")):
+            return "s3://" + parsed.path.lstrip("/")
+        bucket, s3_label, _ = host.partition(".s3")
+        if s3_label:
+            return f"s3://{bucket}{parsed.path}"
     if host == "storage.googleapis.com":
         return "gs://" + parsed.path.lstrip("/")
     return url

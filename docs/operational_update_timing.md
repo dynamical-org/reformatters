@@ -1,10 +1,16 @@
 # Operational update timing
 
-Publish as soon as the source has the data. Timing values are hand-set constants in each dataset's code. This document defines the rules for selecting those values; the [adoption plan](plans/operational_update_timing.md) tracks their rollout.
+Timing values are hand-set constants in each dataset's code. This document defines the rules for selecting those values; the [adoption plan](plans/operational_update_timing.md) tracks their rollout.
 
 ## Latency and readiness units
 
-Latency runs from source availability to readability in the primary store. Measure the source inputs the dataset actually consumes:
+Latency runs from source availability to readability in the primary store.
+
+- **Publish as soon as the source has the data.**
+  - Virtual datasets poll from just before the source's earliest normal arrival until the next scheduled run takes over, so each file lands within seconds, even when the source is late.
+  - A materialized dataset runs the moment its virtual sibling (or archive job) sees a complete unit. Datasets with nothing to trigger them run as soon as they are reliably available when the source is publishing normally.
+
+Measure the source inputs the dataset actually consumes:
 
 - A virtual unit is one usable source file, including its index where required.
 - A materialized forecast unit is the complete run, or an explicit tier when lead groups arrive far apart.
