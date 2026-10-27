@@ -713,7 +713,10 @@ class TestFinalize:
                 workers_total=1,
                 update_template_with_results=False,
                 consolidated=True,
+                job_uid="uid-job",
             )
+
+        assert "state.json" not in factory.files.get("job", {})
 
         # Replica took the error path: no commit, no reset.
         assert replica_repo.sessions == []
