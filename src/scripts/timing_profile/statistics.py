@@ -5,6 +5,8 @@ from math import ceil
 
 import numpy as np
 
+VIRTUAL_POLL_LEAD = 15 * 60
+
 
 @dataclass(frozen=True)
 class ArrivalStats:
@@ -119,7 +121,7 @@ def read_rates(
 
 
 def virtual_fire(earliest: float, startup: float) -> float:
-    return earliest - startup - 60
+    return max(60, earliest - startup - VIRTUAL_POLL_LEAD)
 
 
 def virtual_deadline(interval: float, startup: float, validation_max: float) -> float:

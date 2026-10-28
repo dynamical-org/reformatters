@@ -3,18 +3,24 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from itertools import pairwise
 from math import ceil
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import xarray as xr
+from zarr.storage import MemoryStore
 
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import ReformatCronJob
+from reformatters.common.types import DatetimeLike
 from reformatters.common.validation import CheckCurrentData
+from reformatters.common.virtual_region_job import VirtualRegionJob
 
 from .datasets import Unit, anchor_spacing, is_virtual
 from .runtime import RuntimeStats
 from .sources import Listing, listing_prefix
 from .statistics import (
+    VIRTUAL_POLL_LEAD,
     arrival_stats,
     ceil_minute,
     currency_delay,
@@ -338,7 +344,9 @@ def recommend(
     spacing: float,
     manual: bool = False,
     end: pd.Timestamp | None = None,
+    excluded: set[pd.Timestamp] | None = None,
 ) -> Recommendation:
+    raw = [unit.raw_first for unit in units if unit.raw_first is not None]
     if manual or not units:
         return Recommendation(None, None, None, None, ())
     end = (
@@ -347,6 +355,7 @@ def recommend(
         else max(unit.unit.anchor for unit in units) + pd.Timedelta(seconds=1)
     )
     tiers = list(dict.fromkeys(unit.unit.tier for unit in units))
+    units = [unit for unit in units if unit.unit.anchor not in (excluded or set())]
     classes = []
     active_units = []
     for tier in tiers:
@@ -364,7 +373,6 @@ def recommend(
                 continue
             stats = arrival_stats(arrivals)
             threshold = schedule_offset(stats)
-            raw = [unit.raw_first for unit in grouped if unit.raw_first is not None]
             offset = (
                 virtual_fire(min(raw), runtime.startup_estimate)
                 if virtual and raw and runtime.startup_estimate is not None
@@ -398,7 +406,6 @@ def recommend(
             )
     first_tier = [value for value in classes if value.tier == tiers[0]]
     offsets = [value.offset for value in first_tier if value.offset is not None]
-    raw = [unit.raw_first for unit in active_units if unit.raw_first is not None]
     chosen = (
         (virtual_fire(min(raw), runtime.startup_estimate) // 60) * 60
         if virtual and raw and runtime.startup_estimate is not None
@@ -449,6 +456,8 @@ def render_dataset(
     end: pd.Timestamp,
     gap: str | None,
     source_notes: set[str],
+    *,
+    excluded: set[pd.Timestamp] | None = None,
 ) -> str:
     interval = cron_interval(cron, end)
     currency_interval = cron_interval(cron, end, maximum=True)
@@ -489,9 +498,15 @@ def render_dataset(
             "",
         ]
     )
-    tiers: dict[str, list[MeasuredUnit]] = defaultdict(list)
-    for unit in units:
-        tiers[unit.unit.tier].append(unit)
+    polling_units = units
+    tiers = {
+        tier: [
+            unit
+            for unit in units
+            if unit.unit.tier == tier and unit.unit.anchor not in (excluded or set())
+        ]
+        for tier in dict.fromkeys(unit.unit.tier for unit in units)
+    }
     if not tiers:
         lines.extend(
             [
@@ -502,7 +517,7 @@ def render_dataset(
         return "\n".join(lines)
     manual = dataset.dataset_id in NAMED_EXCEPTIONS
     recommendation = recommend(
-        units,
+        polling_units,
         runtime,
         virtual=virtual,
         interval=interval,
@@ -510,13 +525,16 @@ def render_dataset(
         spacing=anchor_spacing(dataset).total_seconds(),
         manual=manual,
         end=end,
+        excluded=excluded,
     )
+    if virtual:
+        lines.extend(render_polling_evidence(polling_units, runtime))
     for tier, tier_units in tiers.items():
         lines.extend(
             [
                 f"### {tier}",
                 "",
-                "| Cycle class | Active complete / expected | Missing old / recent censored | First usable file (virtual: first visibility) n / p50 / p95 / p99; raw E | Unit p50 / p95 / p99 / T | Observed anchors (UTC) |",
+                "| Cycle class | Active complete / expected | Missing old / recent censored | First usable file (virtual: first visibility) n / p50 / p95 / p99 | Unit p50 / p95 / p99 / T | Observed anchors (UTC) |",
                 "|---|---:|---:|---|---|---|",
             ]
         )
@@ -553,14 +571,6 @@ def render_dataset(
                         first_stats.p95,
                         first_stats.p99,
                     )
-                )
-                + "; "
-                + duration(
-                    min(raw)
-                    if (
-                        raw := [u.raw_first for u in grouped if u.raw_first is not None]
-                    )
-                    else None
                 )
                 if first_stats
                 else "not measured"
@@ -638,6 +648,57 @@ def render_dataset(
     return "\n".join(lines)
 
 
+def render_polling_evidence(
+    units: Sequence[MeasuredUnit], runtime: RuntimeStats
+) -> list[str]:
+    raw = [unit.raw_first for unit in units if unit.raw_first is not None]
+    if not raw:
+        return []
+    lines = [
+        f"Polling E over the full requested window, all tiers/classes, without exclusions: {duration(min(raw))}.",
+        "",
+    ]
+    if (
+        runtime.startup_estimate is not None
+        and min(raw) - runtime.startup_estimate - VIRTUAL_POLL_LEAD < 60
+    ):
+        lines.extend(
+            [
+                "**Anchor guard:** polling fire clamped to the first minute after the source anchor: the template end is exclusive.",
+                "",
+            ]
+        )
+    return lines
+
+
+def virtual_window_contains_anchor(
+    dataset: DynamicalDataset[Any, Any], anchor: pd.Timestamp, offset: float
+) -> bool:
+    dim = dataset.template_config.append_dim
+
+    def get_template(end: DatetimeLike) -> xr.DataTree:
+        return xr.DataTree(
+            xr.Dataset(
+                coords={dim: dataset.template_config.append_dim_coordinates(end)}
+            )
+        )
+
+    assert issubclass(dataset.region_job_class, VirtualRegionJob)
+    jobs, _ = dataset.region_job_class.operational_update_jobs(
+        MemoryStore(),
+        Path(),
+        get_template,
+        dim,
+        dataset.template_config.data_vars,
+        "timing-profile",
+        anchor + pd.Timedelta(seconds=offset),
+    )
+    return any(
+        anchor in job.template_ds.to_dataset().get_index(dim)[job.region]
+        for job in jobs
+    )
+
+
 def render_single_cron(
     dataset: DynamicalDataset[Any, Any],
     cron: ReformatCronJob,
@@ -674,11 +735,20 @@ def render_single_cron(
         lines.extend(
             [
                 "",
-                f"One-cron offset: {duration(chosen)}. {'Uses earliest class and first-file E.' if virtual else 'Uses latest class and chosen S; adoption remains manual.'}",
+                f"One-cron offset: {duration(chosen)}. {'Uses raw first-file E across the full requested window, minus L and 15 min, clamped after the anchor.' if virtual else 'Uses latest class and chosen S; adoption remains manual.'}",
                 "",
             ]
         )
         if virtual:
+            if units and not virtual_window_contains_anchor(
+                dataset, units[-1].unit.anchor, chosen
+            ):
+                lines.extend(
+                    [
+                        "**Window guard:** the proposed fire selects an earlier cycle through this dataset's window override. Keep constants or move the fire until the intended anchor is included.",
+                        "",
+                    ]
+                )
             lines.extend(
                 [
                     f"Validation grace: {duration(recommendation.validation_grace) if recommendation.validation_grace is not None else 'unmeasured; keep constants'} (maximum observed V plus allowance).",
