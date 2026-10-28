@@ -269,10 +269,12 @@ def test_hrrr_generated_visibility_does_not_require_next_hour_before_its_gate(
         currency_interval=3600,
         spacing=3600,
     )
-    assert result.delay == 3600
+    assert result.delay is None
+    assert result.classes[0].hand_value
+    assert result.classes[0].delay == 3600
     # Before 13Z's own-cycle gate, the previous pod must not require 13Z.
     assert (
-        pd.Timestamp("2026-10-20T13:48") - pd.Timedelta(seconds=result.delay)
+        pd.Timestamp("2026-10-20T13:48") - pd.Timedelta(seconds=result.classes[0].delay)
     ).floor("h") == anchor
 
 

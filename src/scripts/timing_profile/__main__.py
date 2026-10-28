@@ -1,6 +1,6 @@
 """Measure exact source-arrival units and recommend hand-set timing constants.
 
-uv run python -m scripts.timing_profile --days 180 --output values-table.md
+uv run python -m scripts.timing_profile --days 365 --output values-table.md
 
 wxopticon's anonymous per-artifact history is preferred per complete mapped unit.
 A unit with any unmapped artifact uses anonymous listings in full. Missing recent
@@ -9,10 +9,12 @@ units stay censored; an unavailable shard leaves other history usable. Use
 Source-reported timestamps retain observed/reconstructed provenance; listings can
 reflect overwrites. Published pooled summary percentiles are not imported.
 
-S and backstop T use ceil_minute(p99 + 3 min), with >=~180 days per regime.
+S and backstop T use ceil_minute(p99 + 3 min). Use the longest single-regime
+history available, at least 180 days; --days defaults to 365.
 The max-normal diagnostic walks upward from the median to the first gap larger
-than max(3 min, p90 - p50). A detected recent regime restarts that class's history.
-Tail-dominated classes need a hand value; short histories and small samples warn.
+than max(3 min, p90 - p50). A detected regime break restarts that class's history.
+Tail-dominated and small-sample classes need hand values for p99-derived constants;
+virtual polling fires from raw E remain available. Short episodes flag review.
 Re-pass/page rates are estimates from p50 L/R/V, not observed validation outcomes.
 
 For runtimes, set SENTRY_AUTH_TOKEN to a read-only Sentry token, or pass
@@ -55,8 +57,8 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--days",
         type=int,
-        default=180,
-        help="Trailing history days; p99 needs at least ~180 days per regime.",
+        default=365,
+        help="Use the longest single-regime history available, at least 180 days; default 365.",
     )
     parser.add_argument(
         "--source",
@@ -219,8 +221,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     output.write(
         f"# Operational timing measurements\n\nGenerated {datetime.now(UTC).isoformat()}. Requested window: {start} .. {end} UTC ({args.days} days). Anonymous capture: `{capture}`. Source selection: {args.source}. Check-ins: {'offline exports at ' + str(checkins_dir) if args.checkins_dir else 'live read-only Sentry GET, captured at ' + str(checkins_dir)}. Excluded verified outlier anchors: {args.exclude_anchor or 'none'}.\n\n"
         "Durations are hours:minutes:seconds after the anchor unless stated otherwise. Quantiles use linear interpolation. Writes after as-of are excluded. Each unit uses wxopticon only if every required artifact maps; otherwise the entire unit uses listings. Coverage and observed/reconstructed provenance appear per class. Missing recent units remain censored; older missing objects can reflect retention. A usable file includes its index; a complete unit includes every required file/member. First visibility for gated forecast-derived virtual analyses uses own-cycle inputs; raw E remains the earliest usable file for polling. Forecast-derived analysis units include their accumulated boundary input. Daily observations anchor at valid-period end.\n\n"
-        "S and backstop T = ceil_minute(p99 + 3 min), with the single materialized cron at the latest first-tier class. Use at least ~180 days per regime. Restart a class at a detected recent break: last-14-day p50 differs by ≥15 min from preceding history, or a trailing cluster (at least two units and ≥1% of the window) exceeds earlier max normal. The median-shift break minimizes absolute deviations around the two medians within the last 14 days. The max-normal cut is the first gap above the median larger than max(3 min, p90 - p50). Compare p99 + 3 with max normal + 3; tail-dominated classes need hand values and receive no automatic constants. Small samples (<100 units, or <300 for daily classes) and short histories are flagged.\n\n"
-        "Re-pass/page estimates use measured p50 L/R/V: first read S + L; first re-pass read S + L + R + V + 5 min back-off + L. A first validation failure is quiet when a re-pass is queued. Recent incomplete units are censored; older unresolved units are included as incomplete. These complete-unit estimates can overstate validation failures for multi-position units; trigger rescue is unmeasured. L p95 remains the startup estimate for virtual polling, R p95 covers scheduled-ok materialized processing, and V max bounds validation. Historical check-in schedules classify scheduled runs approximately; starts ≥5 min after fire are excluded, and check-ins do not establish which source init was processed. Missing runtime components leave rates unmeasured. Named exceptions keep hand constants. No production constants are changed.\n\n"
+        "S and backstop T = ceil_minute(p99 + 3 min), with the single materialized cron at the latest first-tier class. Use the longest single-regime history available, at least 180 days (default 365). Search the whole history for the two-segment split minimizing absolute deviations around the segment medians, with at least five samples on each side; restart when their medians differ by ≥15 min. A trailing cluster above earlier max normal (at least two units and ≥1% of observations) can also restart history. A retained segment must span more than 24 hours; otherwise flag a suspected change for review and keep the history. The max-normal cut is the first gap above the median larger than max(3 min, p90 - p50). Compare p99 + 3 with max normal + 3; tail-dominated and small-sample classes (<100 units, or <300 for daily classes) need hand values for p99-derived constants. Virtual raw-E polling fires remain available; short histories are flagged.\n\n"
+        "Re-pass/page estimates use measured p50 L/R/V: first read S + L; first re-pass read S + L + R + V + 5 min back-off + L. A first validation failure is quiet when a re-pass is queued. Recent incomplete units are censored. Unresolved units with an observed file are counted as incomplete; units with no observed files are excluded from rate denominators and counted separately. These complete-unit estimates can overstate validation failures for multi-position units; trigger rescue is unmeasured. L p95 remains the startup estimate for virtual polling, R p95 covers scheduled-ok materialized processing, and V max bounds validation. Historical check-in schedules classify scheduled runs approximately; starts ≥5 min after fire are excluded, and check-ins do not establish which source init was processed. Missing runtime components leave rates unmeasured. Named exceptions keep hand constants. No production constants are changed.\n\n"
     )
     output.flush()
     source = TimestampSource(capture / "sources", args.workers)

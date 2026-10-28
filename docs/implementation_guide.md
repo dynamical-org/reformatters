@@ -140,7 +140,7 @@ For virtual updates, use `workers_total = 1` and `parallelism = 1` (one worker p
 
 For a materialized source whose publication lag exceeds 48 hours, set `expected_unavailable_window` on its region job so not-yet-published days log at info.
 
-Choose the cron schedule, pod and Job deadlines, and `CheckCurrentData.max_delay` using the [operational timing rules](operational_update_timing.md) and `uv run python -m scripts.timing_profile --help`. Measure anonymous source arrivals and update/validation check-ins, review the candidate offsets, and set constants in the dataset code for its adopted lifecycle. Check every cycle class against the final single cron: currency must not require a position before the fire intended to publish it. A deadline must leave room for validation after processing or polling. If source timing is unmeasured, keep the existing constants until evidence supports a change.
+Choose the cron schedule, pod and Job deadlines, and `CheckCurrentData.max_delay` using the [operational timing rules](operational_update_timing.md) and `uv run python -m scripts.timing_profile --help`. Measure anonymous source arrivals and update/validation check-ins, review the S/T recommendation against max-normal, tail and sample-size diagnostics, and set constants in the dataset code for its adopted lifecycle. Check every cycle class against the final single cron: currency must not require a position before the fire intended to publish it. A deadline must leave room for validation after processing or polling. If source timing is unmeasured, keep the existing constants until evidence supports a change.
 
 #### Integration test with snapshot values
 

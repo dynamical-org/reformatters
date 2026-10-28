@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.timing_profile.__main__ import main
+from scripts.timing_profile.__main__ import main, parse_args
 
 
 def test_offline_cli_reports_protected_source_without_changing_constants(
@@ -26,3 +26,7 @@ def test_offline_cli_reports_protected_source_without_changing_constants(
     assert "PPS timestamps require credentials" in report
     assert "No production constants are changed" in report
     assert "offline exports" in report
+
+
+def test_default_history_is_365_days() -> None:
+    assert parse_args([]).days == 365
