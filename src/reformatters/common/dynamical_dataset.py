@@ -950,11 +950,12 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         return self.template_config.get_template(pd.Timestamp(append_dim_end))
 
     def _open_existing_store(self) -> xr.DataTree | None:
-        """The primary store's current contents, or None if no dataset exists there yet.
+        """Open the primary dataset on the selected branch.
 
-        Only store-missing errors mean None; anything else (auth, network) raises —
-        misclassifying an existing store as absent would route a backfill past the
-        overwrite guards."""
+        Return None for a missing main dataset. A missing overridden branch or
+        dataset raises, as do authentication and network errors. Treating a store
+        access error as absence would bypass overwrite guards.
+        """
         if storage.icechunk_branch() != "main":
             self.store_factory.icechunk_repos(sort="primary-first")
             return self.store_factory.open_primary_datatree()

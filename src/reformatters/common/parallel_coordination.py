@@ -134,9 +134,8 @@ def parallel_setup(
         )
         setup_info: SetupInfo = json.loads(existing_setup[0]) if existing_setup else {}
 
-        # Icechunk: write full metadata and commit on the worker branch.
-        # This expands the dataset on the temp branch while readers on "main" are unaffected.
-        # Branch name is deterministic so worker 0 retries reuse the same branch.
+        # Icechunk: expand metadata on the job branch without changing main.
+        # Worker 0 retries use the same branch name.
         if icechunk_repos:
             repo_snapshots = setup_info.setdefault("repo_snapshots", {})
             for role, repo in icechunk_repos:
@@ -299,13 +298,13 @@ def finalize(  # noqa: PLR0912
             exclude_coord_value_chunks=exclude_coord_value_chunks,
         )
 
-    # Icechunk: commit final metadata, publishing temporary branches to main.
+    # Icechunk: commit final metadata on the job branch.
     # Uses copy_zarr_metadata (not write_metadata) because the zarr arrays already exist
-    # on the temp branch from parallel_setup — we only need to update the metadata files.
+    # on the job branch from parallel_setup — we only need to update the metadata files.
     # Process replicas before primary so primary (which drives future work) is last to update.
     if branch_name != "main":
         replicas_first = store_factory.icechunk_repos(sort="primary-last")
-        # First pass: commit final metadata and reset main on each repo.
+        # First pass: commit metadata; publish to main unless a branch override is set.
         diverged_roles: list[str] = []
         for role, repo in replicas_first:
             original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
