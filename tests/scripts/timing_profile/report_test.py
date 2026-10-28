@@ -17,6 +17,7 @@ from scripts.timing_profile.report import (
     recommended_cron,
     render_class_evidence,
     render_dataset,
+    virtual_window_contains_anchor,
 )
 from scripts.timing_profile.runtime import RuntimeStats
 from scripts.timing_profile.sources import Listing
@@ -132,7 +133,7 @@ def measured_units(
             False,
             21600,
             21600,
-            (480, 1080, 21960, 270),
+            (60, 1080, 21960, 270),
         ),
         (
             [(0, (600.5,)), (6, (1800.5,))],
@@ -150,7 +151,7 @@ def measured_units(
             3600,
             (780, 7980, 10800, None),
         ),
-        ([(0, (60, 600, 3000, 6000))], True, True, 3600, 3600, (-60, 1020, 3960, 270)),
+        ([(0, (60, 600, 3000, 6000))], True, True, 3600, 3600, (60, 1020, 3960, 270)),
     ],
     ids=[
         "virtual-forecast-max-validation",
@@ -199,7 +200,7 @@ def test_virtual_classes_split_on_visibility_and_polling_uses_all_tiers() -> Non
         currency_interval=21600,
         spacing=21600,
     )
-    assert result.offset == -60
+    assert result.offset == 60
     assert result.delay == 2220
     assert [value.tier for value in result.classes] == [
         "z first",
@@ -487,7 +488,7 @@ def test_virtual_hand_value_withholds_currency_but_preserves_raw_e_fire() -> Non
         end=end,
     )
     assert recommendation.classes[0].hand_value
-    assert recommendation.offset == 480
+    assert recommendation.offset == 60
     assert recommendation.delay is None
     dataset = next(
         ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-forecast-virtual"
@@ -501,4 +502,83 @@ def test_virtual_hand_value_withholds_currency_but_preserves_raw_e_fire() -> Non
     assert "| Cron |" in rendered
     assert "| max_delay |" in rendered
     assert "hand value needed" in rendered
-    assert "One-cron offset: 00:08:00" in rendered
+    assert "One-cron offset: 00:01:00" in rendered
+
+
+def test_virtual_e_ignores_exclusions_and_regime_trimming() -> None:
+    units = measured_units([(0, (2400,))] * 10 + [(0, (6000,))] * 10)
+    end = units[-1].unit.anchor + pd.Timedelta(hours=12)
+    assert len(class_history(units, end, virtual=True)[0]) == 10
+    result = recommend(
+        units,
+        runtime(),
+        virtual=True,
+        interval=21600,
+        currency_interval=21600,
+        spacing=21600,
+        end=end,
+        excluded={units[0].unit.anchor},
+    )
+    assert result.offset == 1440
+    assert result.classes[0].threshold == 6180
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-forecast-virtual"
+    )
+    cron = next(
+        resource
+        for resource in dataset.operational_kubernetes_resources("test")
+        if isinstance(resource, ReformatCronJob)
+    )
+    report = render_dataset(
+        dataset, cron, measured_units([(0, (60,))]), runtime(), end, None, set()
+    )
+    assert "Anchor guard" in report
+    assert "clamped to the first minute after the source anchor" in report
+
+
+def test_anchor_guard_includes_cycle_in_exclusive_template_window() -> None:
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-forecast-virtual"
+    )
+    units = measured_units([(0, (60,))])
+    result = recommend(
+        units,
+        runtime(),
+        virtual=True,
+        interval=21600,
+        currency_interval=21600,
+        spacing=21600,
+    )
+    assert result.offset is not None
+    anchor = units[0].unit.anchor
+    labels = dataset.template_config.append_dim_coordinates(
+        anchor + pd.Timedelta(seconds=result.offset)
+    )
+    assert labels[-1] == anchor
+
+
+def test_excluding_every_anchor_keeps_virtual_e() -> None:
+    units = measured_units([(0, (2400,))])
+    result = recommend(
+        units,
+        runtime(),
+        virtual=True,
+        interval=21600,
+        currency_interval=21600,
+        spacing=21600,
+        excluded={units[0].unit.anchor},
+    )
+    assert result.offset == 1440
+    assert result.delay is None
+
+
+def test_subhourly_window_guard_checks_actual_window_override() -> None:
+    dataset = next(
+        ds
+        for ds in DYNAMICAL_DATASETS
+        if ds.dataset_id == "noaa-rrfs-forecast-sub-hourly-virtual"
+    )
+    anchor = pd.Timestamp("2026-10-27")
+    assert not virtual_window_contains_anchor(dataset, anchor, 60)
+    assert not virtual_window_contains_anchor(dataset, anchor, 3600)
+    assert virtual_window_contains_anchor(dataset, anchor, 3660)

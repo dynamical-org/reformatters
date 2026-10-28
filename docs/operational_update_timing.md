@@ -31,7 +31,7 @@ Omit `--checkins-dir` to fetch fresh check-ins using a read-only `SENTRY_AUTH_TO
 
 The profiler prefers wxopticon’s anonymous per-artifact history for each readiness unit whose entire expected file/index set maps. Otherwise that whole unit uses anonymous listings. An unavailable day leaves other units usable; in-flight units stay censored. It reports the unit counts by source, timestamp provenance, active history, quantiles, and dated outliers. Use `--source listings` to cross-check, and a fresh `--cache-dir` for each frozen capture. Mirrors and representative batches do not replace exact file evidence.
 
-Use the longest single-regime history available, at least 180 days (`--days`, default 365). Source-reported timestamps retain observed versus reconstructed provenance; overwritten listing timestamps need not represent first publication. A source without anonymous evidence keeps its constants. Cycle classes split at fifteen-minute median differences, using first visibility for virtuals and complete-unit arrival for materialized datasets. `E` is the raw earliest usable-file arrival after explicit verified-outlier exclusions; keep recurring fast episodes.
+Use the longest single-regime history available, at least 180 days (`--days`, default 365). Source-reported timestamps retain observed versus reconstructed provenance; overwritten listing timestamps need not represent first publication. A source without anonymous evidence keeps its constants. Cycle classes split at fifteen-minute median differences, using first visibility for virtuals and complete-unit arrival for materialized datasets. `E` is the raw earliest usable-file arrival across all tiers and cycle classes in the full requested window, without exclusions or regime trimming. `--exclude-anchor` applies only to quantiles and re-pass/page estimates.
 
 Both the untriggered schedule offset `S` and a triggered consumer’s backstop `T` use `ceil_minute(p99 + 3 min)` per class. For virtual currency, apply that same rule to first visibility. Choose the latest first-tier class for a single materialized cron. The provisional max-normal cut walks upward from the median to the first adjacent gap larger than `g = max(3 min, p90 − p50)`. Compare rounded `p99 + 3 min` with rounded `max normal + 3 min`. A class needs a hand value if the former exceeds the latter by more than fifteen minutes, more than 1% of its units exceed max normal, or it has fewer than 100 samples (300 for daily classes). Withhold p99-derived values: materialized S/T and virtual `max_delay`; retain virtual polling fires derived from raw E. Flag histories shorter than 180 sampled days.
 
@@ -43,15 +43,15 @@ The runtime report keeps startup (`L`) p95 for polling, materialized processing 
 
 Use one cron per dataset, with one minute offset across all its cycles:
 
-- Virtual schedules fire at `a + E − L − 1 min`, using raw earliest file arrival across all tiers and cycle classes. Later classes spend the difference polling.
+- Virtual schedules fire at `a + E − L − 15 min`, using raw earliest file arrival across all tiers and cycle classes. Later classes spend the difference polling.
 - Untriggered materialized schedules use the latest class's `S` for the first readiness tier. Earlier classes accept that wait as latency.
 - Where a materialized dataset has a completion trigger, its cron is a backstop at the first readiness tier's `T`. Change a consumer's cron together with activation of its trigger.
 
-Check every cycle class against the resulting single cron. Configure deadlines using measured startup, processing, and validation, leaving room for validation after polling. See [virtual operational updates](virtual_datasets.md#operational-updates) and [parallel processing](parallel_processing.md) for the mechanisms in use.
+Check every cycle class against the resulting single cron; the profiler flags a fire whose dataset-specific window override omits its anchor. Configure deadlines using measured startup, processing, and validation, leaving room for validation after polling. See [virtual operational updates](virtual_datasets.md#operational-updates) and [parallel processing](parallel_processing.md) for the mechanisms in use.
 
 ## Virtual polling
 
-For CronJobs on `Allow`, fire at `a + E − L − 1 min`, where `a` is the source anchor, `E` the earliest normal usable-file arrival after it, and `L` the p95 startup duration. Choose one minute offset from the earliest cycle class. Poll until the next fire plus `L + 1 min`, so a file arriving at the next fire remains observable while its successor starts. Exit early when nothing in the selected window remains pending.
+For CronJobs on `Allow`, fire at `a + E − L − 15 min`, where `a` is the source anchor, `E` the raw earliest usable-file arrival, and `L` the p95 startup duration. Round the fire down to a whole minute and clamp it to at least `a + 1 min`: the pod uses the fire as its exclusive template end, so a fire at or before the anchor omits the intended cycle. Poll until the next fire plus `L + 1 min`, so a file arriving at the next fire remains observable while its successor starts. Exit early when nothing in the selected window remains pending.
 
 Set both pod and Job active deadlines to `Δf + L + 1 min + V + 30 s`, with `Δf` the fire interval and `V` the largest observed validation duration. Set `virtual_poll_deadline_grace = V + 30 s`. The cutoff is the selected fire plus the pod deadline minus that grace. Round Sentry's `max_runtime` up to whole minutes so it does not expire before the pod deadline.
 

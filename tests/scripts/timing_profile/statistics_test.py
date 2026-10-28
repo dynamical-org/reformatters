@@ -47,7 +47,9 @@ def test_read_model_counts_incomplete_at_start_and_first_repass_read() -> None:
 
 
 def test_virtual_fire_and_deadline_use_startup_and_maximum_validation() -> None:
-    assert virtual_fire(3000, 40) == 2900
+    assert virtual_fire(3000, 40) == 2060
+    assert virtual_fire(900, 40) == 60
+    assert virtual_fire(-60, 40) == 60
     assert virtual_deadline(3600, 40, 120) == 3850
 
 
