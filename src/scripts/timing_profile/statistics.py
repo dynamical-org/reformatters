@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 from math import ceil
 
 import numpy as np
@@ -31,8 +32,39 @@ def schedule_candidates(stats: ArrivalStats) -> dict[str, float]:
         "p99+1m": stats.p99 + 60,
         "spread, min 3m": stats.p95 + max(stats.p95 - stats.p50, 3 * 60),
     }
-    candidates["chosen"] = min(candidates["draft"], candidates["p99+1m"])
+    candidates["chosen"] = schedule_offset(stats)
     return candidates
+
+
+def schedule_offset(stats: ArrivalStats) -> float:
+    return min(stats.p95 + max(stats.p95 - stats.p50, 5 * 60), stats.p99 + 60)
+
+
+def max_normal_cut(values: Sequence[float]) -> float:
+    assert values, "At least one arrival is required"
+    ordered = sorted(values)
+    median = float(np.median(ordered))
+    gaps = [
+        (right - left, left)
+        for left, right in pairwise(ordered)
+        if left >= median and right > left
+    ]
+    return max(gaps, key=lambda pair: pair[0])[1] if gaps else ordered[-1]
+
+
+def recent_shift(
+    samples: Sequence[tuple[float, float]], end: float
+) -> tuple[float, float] | None:
+    recent = [value for anchor, value in samples if end - 7 * 86400 <= anchor < end]
+    prior = [
+        value
+        for anchor, value in samples
+        if end - 35 * 86400 <= anchor < end - 7 * 86400
+    ]
+    if len(recent) < 5 or len(prior) < 5:
+        return None
+    before, after = float(np.median(prior)), float(np.median(recent))
+    return (before, after) if abs(after - before) >= 15 * 60 else None
 
 
 def candidate_outcomes(

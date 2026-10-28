@@ -24,14 +24,18 @@ With the source on schedule, the latency targets are less than ten seconds for v
 Run the advisory profiler locally:
 
 ```bash
-uv run python -m scripts.timing_profile --days 35 --checkins-dir /path/to/checkins --output /tmp/values-table.md
+uv run python -m scripts.timing_profile --days 365 --checkins-dir /path/to/checkins --output /tmp/values-table.md
 ```
 
 Omit `--checkins-dir` to fetch fresh check-ins using a read-only `SENTRY_AUTH_TOKEN` supplied in the environment. See `--help` for the export format and measurement limitations. The tool changes no dataset code and has no recurring schedule.
 
+The profiler prefers wxopticon’s anonymous per-file source-arrival archive, including its active shard. It matches every required file and index by source URL, takes the maximum over a unit’s files, and derives cycle classes from those events rather than pooled published percentiles. If any required artifact does not map in the requested window, the entire dataset falls back to anonymous listings and reports the gap. Other mirrors, representative member batches, and cumulative aggregate summaries are not substitutes for exact file evidence. Use `--source listings` to cross-check. Both sources are cached as a frozen capture; use a fresh `--cache-dir` for a new measurement window.
+
 The profiler measures source arrival p50, p95, p99, and earliest normal arrival (`E`) after the anchor. It aggregates timestamps into usable files and complete readiness units before taking percentiles. It reports startup (`L`) as an estimate from scheduled fire to update check-in, materialized processing through publish (`R`), and validation duration (`V`), including both p95 and the observed maximum. Virtual check-in duration includes source waiting and cannot establish processing time. Historical check-in schedules establish the fire time, but check-ins alone do not establish which source initialization a run processed. Missing components remain unmeasured.
 
-Use a trailing window, normally 35 days. Inspect sample count, actual coverage, missing and censored units, source identity, reuploads, and source regime changes. Rewritten or reprocessed timestamps do not establish first availability. A dataset without anonymous arrival evidence keeps its constants. Do not add credentialed source access just to tune its schedule.
+Set the trailing history window with `--days`; prefer a year where exact coverage permits and shorten it explicitly for newer histories. Each class reports the source, sampled days and calendar span, sample count, required-artifact provenance mix, and quantiles. Reconstructed authoritative timestamps remain distinct from directly observed evidence; both describe source-reported timestamps rather than necessarily the time of detection. Histories with fewer than 60 sampled days are flagged. Inspect actual coverage, missing and censored units, source identity, reuploads, and source regime changes. Rewritten or reprocessed timestamps do not establish first availability. A dataset without anonymous arrival evidence keeps its constants. Do not add credentialed source access just to tune its schedule.
+
+The provisional max-normal cut is the lower endpoint of the largest adjacent gap above the median. The report lists every above-cut anchor without removing it from quantiles or changing the schedule rule; this diagnostic does not establish an outage. A recent-shift flag compares the last seven days’ median to the preceding 28 days, requiring at least five samples in each and a difference of at least fifteen minutes. Review flagged temporal regimes separately before setting constants.
 
 `E` is the minimum first-file arrival in the window after excluding verified outliers. Keep recurring fast episodes. Measure cycle classes separately when their median arrivals differ by at least fifteen minutes, using first visibility for virtual datasets and complete-unit arrival for materialized datasets.
 

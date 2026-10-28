@@ -1,6 +1,6 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import ceil
 from typing import Any
 
@@ -19,10 +19,13 @@ from .statistics import (
     ceil_minute,
     currency_delay,
     late_threshold,
+    max_normal_cut,
+    recent_shift,
     schedule_candidates,
     virtual_deadline,
     virtual_fire,
 )
+from .wxopticon import Evidence
 
 NAMED_EXCEPTIONS = frozenset(
     {
@@ -40,15 +43,27 @@ class MeasuredUnit:
     missing_files: int
     raw_first: float | None
     file_arrivals: dict[frozenset[str], float]
+    source: str = "listings"
+    provenance: dict[str, int] = field(default_factory=dict)
 
 
 def aggregate_unit(
-    unit: Unit, listings: dict[str, Listing], *, as_of: pd.Timestamp | None = None
+    unit: Unit,
+    listings: dict[str, Listing],
+    *,
+    as_of: pd.Timestamp | None = None,
+    evidence: dict[str, Evidence] | None = None,
 ) -> MeasuredUnit:
     available: dict[frozenset[str], float] = {}
+    provenance: Counter[str] = Counter()
     missing = 0
     for file in unit.files:
-        timestamps = [listings[listing_prefix(url)].objects.get(url) for url in file]
+        timestamps = [
+            evidence[url].arrival
+            if evidence is not None
+            else listings[listing_prefix(url)].objects.get(url)
+            for url in file
+        ]
         timestamps = [
             value if as_of is None or value is None or value <= as_of else None
             for value in timestamps
@@ -59,6 +74,10 @@ def aggregate_unit(
         usable = max(value for value in timestamps if value is not None)
         offset = (usable - unit.anchor).total_seconds()
         available[file] = offset
+        provenance.update(
+            evidence[url].provenance if evidence is not None else "current_object_write"
+            for url in file
+        )
     raw_first = min(available.values()) if available else None
     visible = [
         max(available[file] for file in group)
@@ -72,6 +91,8 @@ def aggregate_unit(
         missing,
         raw_first,
         available,
+        "wxopticon" if evidence is not None else "listings",
+        dict(provenance),
     )
 
 
@@ -83,6 +104,78 @@ def duration(value: float | None) -> str:
     hours, seconds = divmod(seconds, 3600)
     minutes, seconds = divmod(seconds, 60)
     return f"{sign}{hours:02}:{minutes:02}:{seconds:02}"
+
+
+def render_class_evidence(
+    name: str,
+    units: Sequence[MeasuredUnit],
+    end: pd.Timestamp,
+    *,
+    virtual: bool,
+) -> list[str]:
+    samples = [
+        (unit.unit.anchor, value)
+        for unit in units
+        if (value := unit.first if virtual else unit.complete) is not None
+    ]
+    sources = ", ".join(sorted({unit.source for unit in units}))
+    provenance: Counter[str] = Counter()
+    for unit in units:
+        provenance.update(unit.provenance)
+    mix = (
+        ", ".join(f"{key}={count}" for key, count in sorted(provenance.items()))
+        or "unmeasured"
+    )
+    days = len({anchor.normalize() for anchor, _ in samples})
+    span = (
+        (
+            max(anchor for anchor, _ in samples) - min(anchor for anchor, _ in samples)
+        ).days
+        + 1
+        if samples
+        else 0
+    )
+    lines = [
+        f"Evidence {name}: source **{sources}**; history {days} sampled days / {span} calendar days; n={len(samples)}. Provenance (required artifacts): {mix}.",
+        "",
+    ]
+    if days < 60:
+        lines.extend(
+            [
+                "**Short history (<60 sampled days); review before adopting constants.**",
+                "",
+            ]
+        )
+    if not samples:
+        return lines
+    cut = max_normal_cut([value for _, value in samples])
+    outliers = (
+        "; ".join(
+            f"{anchor.isoformat()}Z ({duration(value)})"
+            for anchor, value in sorted(samples)
+            if value > cut
+        )
+        or "none"
+    )
+    metric = "first visibility" if virtual else "complete unit"
+    lines.extend(
+        [
+            f"Provisional max-normal cut ({metric}): {duration(cut)}. Largest adjacent gap above the median; descriptive only, with no automatic exclusions. Above-cut anchors (UTC): {outliers}.",
+            "",
+        ]
+    )
+    shift = recent_shift(
+        [(anchor.timestamp(), value) for anchor, value in samples], end.timestamp()
+    )
+    if shift is not None:
+        before, after = shift
+        lines.extend(
+            [
+                f"**Recent distribution shift:** last 7 days' {metric} median {duration(after)} versus preceding 28 days {duration(before)} (at least 5 samples each; change ≥15 min). Review temporal regimes separately.",
+                "",
+            ]
+        )
+    return lines
 
 
 def cron_interval(
@@ -329,7 +422,11 @@ def render_dataset(
             ]
         )
         candidates = []
+        evidence_lines = []
         for cycle_class, grouped in cycle_classes(tier_units, virtual=virtual):
+            evidence_lines.extend(
+                render_class_evidence(cycle_class, grouped, end, virtual=virtual)
+            )
             complete = [unit.complete for unit in grouped if unit.complete is not None]
             first = [unit.first for unit in grouped if unit.first is not None]
             horizon = max(complete) if complete else 0
@@ -394,6 +491,7 @@ def render_dataset(
                     candidates.append(
                         f"| {cycle_class} | {name} | {duration(offset)} | {fraction:.2%} | {f'{after_or_never:.2%}' if after_or_never is not None else 'unmeasured'} | {duration(latency)} |"
                     )
+        lines.extend(["", *evidence_lines])
         if candidates:
             lines.extend(
                 [

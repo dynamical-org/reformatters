@@ -316,3 +316,27 @@ def test_hrrr_generated_visibility_does_not_require_next_hour_before_its_gate(
     assert (
         pd.Timestamp("2026-10-20T13:48") - pd.Timedelta(seconds=result.delay)
     ).floor("h") == anchor
+
+
+def test_hrrr_materialized_analysis_includes_current_cycle_f01_boundary(
+    tmp_path: Path,
+) -> None:
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-hrrr-analysis"
+    )
+    source = TimestampSource(tmp_path, 1)
+    (unit,) = expected_units(
+        dataset, pd.Timestamp("2026-10-20T12"), pd.Timestamp("2026-10-20T13"), source
+    )
+    source.close()
+    urls = {url for file in unit.files for url in file}
+    assert len(urls) == 6
+    assert not any("hrrr.t13z" in url for url in urls)
+    assert {url.rsplit("/", 1)[1] for url in urls} == {
+        "hrrr.t11z.wrfsfcf01.grib2",
+        "hrrr.t11z.wrfsfcf01.grib2.idx",
+        "hrrr.t12z.wrfsfcf00.grib2",
+        "hrrr.t12z.wrfsfcf00.grib2.idx",
+        "hrrr.t12z.wrfsfcf01.grib2",
+        "hrrr.t12z.wrfsfcf01.grib2.idx",
+    }
