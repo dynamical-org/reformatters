@@ -13,7 +13,12 @@ from scripts.timing_profile.__main__ import measure_source
 from scripts.timing_profile.datasets import Unit, expected_units
 from scripts.timing_profile.report import aggregate_unit
 from scripts.timing_profile.runtime import RuntimeStats
-from scripts.timing_profile.sources import Listing, TimestampSource
+from scripts.timing_profile.sources import (
+    Listing,
+    TimestampSource,
+    canonical_url,
+    listing_prefix,
+)
 from scripts.timing_profile.wxopticon import (
     Evidence,
     WxopticonSource,
@@ -123,12 +128,12 @@ def test_exact_expected_analysis_file_set_and_one_missing_artifact_falls_back(
         ),
     )
     units = list(expected_units(dataset, ANCHOR, ANCHOR + pd.Timedelta("6h"), source))
-    objects, note = WxopticonSource(source).measure(dataset.dataset_id, units)
+    objects, _ = WxopticonSource(source).measure(dataset.dataset_id, units)
     source.close()
     assert len(units) == 1
     if missing:
-        assert objects is None
-        assert "maps 13/14 required artifacts" in note
+        assert len(objects) == 13
+        assert not all(url in objects for file in units[0].files for url in file)
     else:
         assert objects is not None
         assert set(objects) == {
@@ -188,10 +193,9 @@ def test_unusable_history_falls_back_without_inventing_file_evidence(
         ),
     )
     unit = Unit(ANCHOR, "run", (frozenset([ROOT + "a", ROOT + "a.idx"]),), 0)
-    objects, note = WxopticonSource(source).measure("noaa-gfs-forecast", [unit])
+    objects, _ = WxopticonSource(source).measure("noaa-gfs-forecast", [unit])
     source.close()
-    assert objects is None
-    assert "listings fallback" in note
+    assert not all(canonical_url(url) in objects for file in unit.files for url in file)
 
 
 def test_product_mapping_uses_primary_mirror_and_preserves_hourly_coverage() -> None:
@@ -260,9 +264,11 @@ def test_midnight_hrrr_analysis_reads_previous_init_day(tmp_path: Path) -> None:
     assert set(objects) == urls
 
 
-@pytest.mark.parametrize("missing", [False, True])
-def test_source_selection_applies_to_entire_dataset(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: bool
+@pytest.mark.parametrize("case", ["missing_sidecar", "in_flight", "historical_gap"])
+def test_source_selection_is_per_unit_and_retains_unresolved_units(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
 ) -> None:
     dataset = next(
         ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-analysis"
@@ -273,41 +279,111 @@ def test_source_selection_applies_to_entire_dataset(
         if isinstance(resource, ReformatCronJob)
     )
     source = TimestampSource(tmp_path, 1)
-    units = list(expected_units(dataset, ANCHOR, ANCHOR + pd.Timedelta("6h"), source))
-    urls = {url for unit in units for file in unit.files for url in file}
+    units = list(expected_units(dataset, ANCHOR, ANCHOR + pd.Timedelta("12h"), source))
+    first_urls, second_urls = (
+        {url for file in unit.files for url in file} for unit in units
+    )
     objects = {
-        url: Evidence(ANCHOR + pd.Timedelta(seconds=60), "reconstructed_authoritative")
-        for url in urls
+        url: Evidence(
+            unit.anchor + pd.Timedelta(seconds=60), "reconstructed_authoritative"
+        )
+        for unit in units
+        for file in unit.files
+        for url in file
     }
-    if missing:
-        objects.pop(min(objects))
+    if case == "missing_sidecar":
+        objects.pop(next(url for url in second_urls if url.endswith(".idx")))
+    else:
+        for url in second_urls:
+            objects.pop(url)
     monkeypatch.setattr(WxopticonSource, "read", lambda self, product, key: objects)
     called = []
 
     def list_many(prefixes: set[str]) -> dict[str, Listing]:
         called.append(prefixes)
-        return {
-            prefix: Listing(
-                {url: ANCHOR + pd.Timedelta(seconds=120) for url in urls}, "S3"
-            )
-            for prefix in prefixes
-        }
+        available = (
+            {url: units[1].anchor + pd.Timedelta(seconds=120) for url in second_urls}
+            if case == "missing_sidecar"
+            else {}
+        )
+        return {prefix: Listing(available, "S3") for prefix in prefixes}
 
     monkeypatch.setattr(source, "list_many", list_many)
+    end = ANCHOR + (
+        pd.Timedelta(hours=6, seconds=10)
+        if case == "in_flight"
+        else pd.Timedelta("12h")
+    )
     rendered = measure_source(
         dataset,
         cron,
         RuntimeStats(None, None, None, None, 0, 0, 0, 0, None, None),
         source,
         ANCHOR,
-        ANCHOR + pd.Timedelta("6h"),
+        end,
         set(),
     )
     source.close()
-    assert bool(called[0]) == missing
-    assert ("source **listings**" if missing else "source **wxopticon**") in rendered
-    if missing:
-        assert "listings fallback" in rendered
-        assert "reconstructed_authoritative" not in rendered
+    assert called == [{listing_prefix(url) for url in second_urls}]
+    assert not (called[0] & {listing_prefix(url) for url in first_urls})
+    assert "reconstructed_authoritative=14" in rendered
+    if case == "missing_sidecar":
+        assert "wxopticon 1/2 units; listings for the rest (first unmapped:" in rendered
+        assert "current_object_write=14" in rendered
+        assert "00:01:30 / 00:01:57 / 00:01:59" in rendered
+        assert "| 00/06Z | 2 / 2 | 0 / 0 |" in rendered
+    elif case == "in_flight":
+        assert "wxopticon 1/1 units" in rendered
+        assert "wxopticon 0/1 units" in rendered
+        assert "| 06Z | 0 / 1 | 0 / 1 |" in rendered
     else:
-        assert "reconstructed_authoritative=14" in rendered
+        assert "wxopticon 1/1 units" in rendered
+        assert "wxopticon 0/1 units" in rendered
+        assert "| 06Z | 0 / 1 | 1 / 0 |" in rendered
+
+
+@pytest.mark.parametrize("failure", ["http", "schema"])
+def test_failed_day_does_not_discard_other_days(tmp_path: Path, failure: str) -> None:
+    first = event("a", 60)
+    second = event("b", 60)
+    second["schema_version"] = 5
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("2026-10-20.jsonl"):
+            return httpx.Response(200, text=json.dumps(first))
+        return httpx.Response(
+            503 if failure == "http" else 200, text=json.dumps(second)
+        )
+
+    source = source_with_transport(tmp_path, handler)
+    units = [
+        Unit(ANCHOR, "run", (frozenset([ROOT + "a", ROOT + "a.idx"]),), 0),
+        Unit(
+            ANCHOR + pd.Timedelta(days=1),
+            "run",
+            (frozenset([ROOT + "b", ROOT + "b.idx"]),),
+            0,
+        ),
+    ]
+    objects, _ = WxopticonSource(source).measure("noaa-gfs-forecast", units)
+    source.close()
+    assert len(objects) == 2
+    assert all(canonical_url(url) in objects for file in units[0].files for url in file)
+    assert not any(
+        canonical_url(url) in objects for file in units[1].files for url in file
+    )
+
+
+def test_unsupported_grouped_products_do_not_download_history(tmp_path: Path) -> None:
+    def unexpected(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("No exact mapping should issue a history GET")
+
+    source = source_with_transport(tmp_path, unexpected)
+    unit = Unit(ANCHOR, "run", (frozenset(["s3://bucket/file"]),), 0)
+    for dataset in (
+        "noaa-gefs-analysis",
+        "noaa-gefs-forecast-35-day",
+        "eccc-hrdps-forecast",
+    ):
+        assert WxopticonSource(source).measure(dataset, [unit])[0] == {}
+    source.close()

@@ -1,30 +1,26 @@
-"""Measure source arrivals and recommend hand-set operational timing constants.
+"""Measure exact source-arrival units and recommend hand-set timing constants.
 
-Run with `uv run python -m scripts.timing_profile --days 35 --output values-table.md`.
-This is a local, advisory tool: it does not change dataset code or deploy anything.
+uv run python -m scripts.timing_profile --days 180 --output values-table.md
 
-For live runtimes, set SENTRY_AUTH_TOKEN to a read-only Sentry token. The tool
-makes only GET requests, and never persists the token. Alternatively, export each
-update and validate monitor's check-ins from Sentry's
-GET /api/0/organizations/<org>/monitors/<slug>/checkins/ endpoint. Follow Link's
-next cursor until the requested window is covered, concatenate the JSON arrays,
-and save one <slug>.json file per monitor. Pass that directory to --checkins-dir.
-The monitor slugs come from the dataset's ReformatCronJob.name and its -validate
-counterpart, not necessarily the dataset ID.
+wxopticon's anonymous per-artifact history is preferred per complete mapped unit.
+A unit with any unmapped artifact uses anonymous listings in full. Missing recent
+units stay censored; an unavailable shard leaves other history usable. Use
+--source listings to cross-check. A fresh --cache-dir captures a new frozen window.
+Source-reported timestamps retain observed/reconstructed provenance; listings can
+reflect overwrites. Published pooled summary percentiles are not imported.
 
-Anonymous S3 LastModified, GCS updated and HTTP directory Last modified timestamps
-are evidence of the current object write, not necessarily first publication. Review overwrites, short retention, small samples and regime
-changes before adopting constants. Use a fresh --cache-dir for each new window;
-a cache is a frozen capture, including missing objects. E is the observed minimum;
-exclude only verified outlier anchors explicitly, retaining recurring fast periods.
+S and backstop T use ceil_minute(p99 + 3 min), with >=~180 days per regime.
+The max-normal diagnostic walks upward from the median to the first gap larger
+than max(3 min, p90 - p50). A detected recent regime restarts that class's history.
+Tail-dominated classes need a hand value; short histories and small samples warn.
+Re-pass/page rates are estimates from p50 L/R/V, not observed validation outcomes.
 
-wxopticon's anonymous per-file archive is preferred when every required artifact
-in the requested --days window maps exactly. Otherwise the whole dataset uses
-anonymous listings, with the coverage gap reported. Mirrors and grouped events
-are not substituted for exact files. Use --source listings for a cross-check.
-Use --days 365 for long history where coverage permits. Reports show provenance,
-short histories, a provisional largest-gap max-normal cut and recent median shifts.
-Published summary percentiles pool cycles; this tool derives classes from events.
+For runtimes, set SENTRY_AUTH_TOKEN to a read-only Sentry token, or pass
+--checkins-dir with offline monitor exports. Export GET /api/0/organizations/<org>/
+monitors/<slug>/checkins/, following Link's next cursor through the window, and
+save concatenated JSON arrays as <slug>.json. Slugs are ReformatCronJob.name and
+its -validate counterpart, not necessarily the dataset ID. Tokens are not saved.
+This advisory tool changes no dataset code and deploys nothing.
 """
 
 import argparse
@@ -34,7 +30,7 @@ import tempfile
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 
@@ -56,12 +52,17 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--days", type=int, default=35)
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=180,
+        help="Trailing history days; p99 needs at least ~180 days per regime.",
+    )
     parser.add_argument(
         "--source",
         choices=["auto", "listings"],
         default="auto",
-        help="Prefer exact wxopticon per-file history, falling back per dataset; or force anonymous listings.",
+        help="Prefer exact wxopticon per-file history, falling back per unit; or force anonymous listings.",
     )
     parser.add_argument(
         "--as-of",
@@ -114,7 +115,7 @@ def measure_source(
     end: pd.Timestamp,
     excluded: set[pd.Timestamp],
     *,
-    source_mode: str = "auto",
+    source_mode: Literal["auto", "listings"] = "auto",
 ) -> str:
     gap = source_gap(dataset.dataset_id)
     if "weathernext" in dataset.dataset_id and gap is None:
@@ -129,13 +130,23 @@ def measure_source(
     evidence, source_note = (
         WxopticonSource(source).measure(dataset.dataset_id, units)
         if source_mode == "auto" and not gap
-        else (None, "anonymous listings explicitly selected")
+        else (
+            {},
+            "anonymous listings explicitly selected"
+            if source_mode == "listings"
+            else "no anonymous source evidence",
+        )
     )
-    prefixes = (
-        {listing_prefix(url) for unit in units for file in unit.files for url in file}
-        if evidence is None
-        else set()
-    )
+    mapped = [
+        all(url in evidence for file in unit.files for url in file) for unit in units
+    ]
+    prefixes = {
+        listing_prefix(url)
+        for unit, covered in zip(units, mapped, strict=True)
+        if not covered
+        for file in unit.files
+        for url in file
+    }
     log.info(
         "%s: %d readiness units, %d listing prefixes",
         dataset.dataset_id,
@@ -144,7 +155,24 @@ def measure_source(
     )
     listings = source.list_many(prefixes)
     measured = [
-        aggregate_unit(unit, listings, as_of=end, evidence=evidence) for unit in units
+        aggregate_unit(
+            unit,
+            listings,
+            as_of=end,
+            evidence=evidence if covered else None,
+            first_unmapped=next(
+                (
+                    url
+                    for file in unit.files
+                    for url in sorted(file)
+                    if url not in evidence
+                ),
+                None,
+            )
+            if not covered
+            else None,
+        )
+        for unit, covered in zip(units, mapped, strict=True)
     ]
     return render_dataset(
         dataset,
@@ -189,7 +217,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     }, "Unknown dataset ID"
     output = args.output.open("w") if args.output else sys.stdout
     output.write(
-        f"# Operational timing measurements\n\nGenerated {datetime.now(UTC).isoformat()}. Requested window: {start} .. {end} UTC ({args.days} days). Anonymous source capture: `{capture}`. Check-ins: {'offline exports at ' + str(checkins_dir) if args.checkins_dir else 'live read-only Sentry GET, captured at ' + str(checkins_dir)}. Excluded verified outlier anchors: {args.exclude_anchor or 'none'}.\n\nAll durations are hours:minutes:seconds after the anchor unless stated otherwise. Quantiles use linear interpolation. Object writes after the requested as-of time are excluded, even if collected later. Source identity and observed coverage appear per dataset. Source selection: {args.source}; wxopticon requires exact coverage of the entire requested file set, otherwise listings are used for the dataset. Provenance counts distinguish directly_observed from reconstructed_authoritative; neither implies observation time is the publication timestamp. A provisional max-normal cut uses the largest adjacent gap above the median and leaves every sample in the percentiles. Recent shifts compare last-7-day and preceding-28-day medians (at least 5 samples each, 15-minute difference). A usable file includes its required index; a complete unit includes every required file/member. First visibility is min(files) for forecasts; gated HRRR/GFS/GEFS analysis virtuals use min over positions of max(own-cycle files). Raw E remains min(files) for polling. Virtual cycle classes split on first visibility; materialized classes split on complete-unit arrival. Tier order follows expected-unit generation. MRMS pass 1 is printed separately; its hourly schedule remains a named exception. GFS, GEFS and materialized HRRR analyses include the accumulated boundary input required by their final trim. Daily observations use the end of the valid day as anchor. GEFS 35-day tiers are separate; expected counts include only units the dataset coordinate factory emits, so age-gated units not yet eligible can be absent. WeatherNext units contain every required member/level of a variable and lead.\n\nL is a schedule-to-check-in estimate including scheduling, imports and initialization. R is scheduled-ok materialized update duration through publish; virtual R is unmeasured because update duration includes source waiting. V includes completed inline validations (ok or error) matched within 120 seconds after update completion; p95 and maximum are both shown. Failed/killed updates and validations without a closing duration are censored from durations. Runs starting at least 5 minutes after the previous fire are excluded as likely manual/retry/trigger runs; classification from timestamps is approximate. Historical per-check-in schedules are used, never expectedTime. Runtime statistics pool the available runs; check-ins do not establish which source initialization an update processed. The validation maximum includes matched manual/retry/trigger runs.\n\nS candidates are advisory. The chosen S is min(p95 + max(p95 - p50, 5 min), p99 + 1 min); materialized cron and currency recommendations use it. Fraction of units arriving after S uses complete observed units only, excluding missing/censored units; short retention can bias it. After S or never includes older missing units in numerator and denominator, excluding recent censored units; missing objects can mean expired retention rather than never published. Recent censoring denotes an incomplete anchor no older than the slowest complete observed unit; older absent units can reflect missing data or source retention, which listing timestamps cannot distinguish. Median latency estimates cover units ready by S only; late-unit re-pass timing is unmeasured. Multi-position units can pass validation with a complete prefix. E includes every observed first-file arrival except explicit exclusions; inspect the lower tail before adoption. Named exception constants require manual review. Primary operational sources are measured; mirror fallback timing is unmeasured unless shown as its own dataset source. No production constants are changed.\n\n"
+        f"# Operational timing measurements\n\nGenerated {datetime.now(UTC).isoformat()}. Requested window: {start} .. {end} UTC ({args.days} days). Anonymous capture: `{capture}`. Source selection: {args.source}. Check-ins: {'offline exports at ' + str(checkins_dir) if args.checkins_dir else 'live read-only Sentry GET, captured at ' + str(checkins_dir)}. Excluded verified outlier anchors: {args.exclude_anchor or 'none'}.\n\n"
+        "Durations are hours:minutes:seconds after the anchor unless stated otherwise. Quantiles use linear interpolation. Writes after as-of are excluded. Each unit uses wxopticon only if every required artifact maps; otherwise the entire unit uses listings. Coverage and observed/reconstructed provenance appear per class. Missing recent units remain censored; older missing objects can reflect retention. A usable file includes its index; a complete unit includes every required file/member. First visibility for gated forecast-derived virtual analyses uses own-cycle inputs; raw E remains the earliest usable file for polling. Forecast-derived analysis units include their accumulated boundary input. Daily observations anchor at valid-period end.\n\n"
+        "S and backstop T = ceil_minute(p99 + 3 min), with the single materialized cron at the latest first-tier class. Use at least ~180 days per regime. Restart a class at a detected recent break: last-14-day p50 differs by ≥15 min from preceding history, or a trailing cluster (at least two units and ≥1% of the window) exceeds earlier max normal. The median-shift break minimizes absolute deviations around the two medians within the last 14 days. The max-normal cut is the first gap above the median larger than max(3 min, p90 - p50). Compare p99 + 3 with max normal + 3; tail-dominated classes need hand values and receive no automatic constants. Small samples (<100 units, or <300 for daily classes) and short histories are flagged.\n\n"
+        "Re-pass/page estimates use measured p50 L/R/V: first read S + L; first re-pass read S + L + R + V + 5 min back-off + L. A first validation failure is quiet when a re-pass is queued. Recent incomplete units are censored; older unresolved units are included as incomplete. These complete-unit estimates can overstate validation failures for multi-position units; trigger rescue is unmeasured. L p95 remains the startup estimate for virtual polling, R p95 covers scheduled-ok materialized processing, and V max bounds validation. Historical check-in schedules classify scheduled runs approximately; starts ≥5 min after fire are excluded, and check-ins do not establish which source init was processed. Missing runtime components leave rates unmeasured. Named exceptions keep hand constants. No production constants are changed.\n\n"
     )
     output.flush()
     source = TimestampSource(capture / "sources", args.workers)
