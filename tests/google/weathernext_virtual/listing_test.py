@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
+from typing import Any
 from unittest.mock import Mock
 
 import httpx
@@ -133,9 +134,11 @@ def chunk_server_prefix(
 def mock_service_token_secret(
     monkeypatch: pytest.MonkeyPatch, token: str | None
 ) -> None:
-    def load_secret(name: str) -> dict[str, str]:
-        assert name == "wn-service-token"
-        return {} if token is None else {"WN_SERVICE_TOKEN": token}
+    def load_secret(name: str) -> dict[str, Any]:
+        assert name == "wn-proxy-storage-options-key"
+        return (
+            {} if token is None else {"headers": {"X-Dynamical-Service-Token": token}}
+        )
 
     monkeypatch.setattr(listing.kubernetes, "load_secret", load_secret)
 
@@ -289,3 +292,38 @@ def test_service_token_outside_the_safe_alphabet_falls_back_without_echo(
     assert listing.service_token_headers() == {}
     assert "public tier" in caplog.text
     assert token not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {},
+        {"headers": None},
+        {"headers": "x"},
+        {"headers": {}},
+        {"headers": {"X-Dynamical-Service-Token": ""}},
+        {"headers": {"X-Dynamical-Service-Token": 12345678901234567}},
+        {"headers": {"X-Dynamical-Service-Token": [TOKEN]}},
+        # The secret's earlier shape is not read.
+        {"WN_SERVICE_TOKEN": TOKEN},
+    ],
+)
+def test_secret_without_a_usable_header_token_falls_back_to_public(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    options: dict[str, object],
+) -> None:
+    monkeypatch.setattr(listing.kubernetes, "load_secret", lambda name: options)
+    assert listing.service_token_headers() == {}
+    assert "public tier" in caplog.text
+    assert TOKEN not in caplog.text
+
+
+def test_service_token_secret_holds_http_store_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    options: dict[str, Any] = {"headers": {"X-Dynamical-Service-Token": TOKEN}}
+    monkeypatch.setattr(listing.kubernetes, "load_secret", lambda name: options)
+    assert listing.service_token_headers() == options["headers"]
+    # Like the other storage-options secrets, the contents are opener keyword arguments.
+    icechunk.http_store(**options)

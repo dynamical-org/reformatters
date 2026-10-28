@@ -12,7 +12,10 @@ from reformatters.common.retry import retry
 
 PROXY_LOCATION_PREFIX = "https://wn.dynamical.org/chunks/"
 OBJECTS_LOCATION = "https://wn.dynamical.org/objects"
-SERVICE_TOKEN_SECRET_NAME = "wn-service-token"  # noqa: S105
+# Like the other `*-storage-options-key` secrets, its `contents` holds keyword arguments for
+# the store opener, here `icechunk.http_store`: {"headers": {SERVICE_TOKEN_HEADER: token}}.
+SERVICE_TOKEN_SECRET_NAME = "wn-proxy-storage-options-key"  # noqa: S105
+SERVICE_TOKEN_HEADER = "X-Dynamical-Service-Token"  # noqa: S105
 _SERVICE_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9._~-]{16,512}")
 
 log = get_logger(__name__)
@@ -34,10 +37,10 @@ def weathernext_virtual_chunk_containers() -> tuple[
 def service_token_headers() -> dict[str, str]:
     """The proxy's service-tier header, or none. The token only selects a rate-limit
     allowance, so a secret that is absent or not readable by this caller (404/403 from
-    the Kubernetes API outside a job) falls back to the public tier. Anything else,
-    such as a malformed secret, still fails."""
+    the Kubernetes API outside a job) falls back to the public tier, as does one without
+    a usable token. Anything else, such as a secret that isn't JSON, still fails."""
     try:
-        secret = kubernetes.load_secret(SERVICE_TOKEN_SECRET_NAME)
+        options = kubernetes.load_secret(SERVICE_TOKEN_SECRET_NAME)
     except ApiException as error:
         if error.status not in (403, 404):
             raise
@@ -46,24 +49,25 @@ def service_token_headers() -> dict[str, str]:
             "reading wn.dynamical.org on the public tier"
         )
         return {}
-    token = secret.get("WN_SERVICE_TOKEN")
+    headers = options.get("headers")
+    token = headers.get(SERVICE_TOKEN_HEADER) if isinstance(headers, dict) else None
     if not token:
         log.warning(
-            f"{SERVICE_TOKEN_SECRET_NAME} has no WN_SERVICE_TOKEN; "
+            f"{SERVICE_TOKEN_SECRET_NAME} has no headers.{SERVICE_TOKEN_HEADER}; "
             "reading wn.dynamical.org on the public tier"
         )
         return {}
-    if not _SERVICE_TOKEN_PATTERN.fullmatch(token):
+    if not isinstance(token, str) or not _SERVICE_TOKEN_PATTERN.fullmatch(token):
         # Never echo the value. Only this alphabet is sent: it needs no escaping in any
         # repr, so the telemetry scrubber's exact-value redaction can always find it.
         log.warning(
-            f"{SERVICE_TOKEN_SECRET_NAME} WN_SERVICE_TOKEN is not 16-512 characters of "
-            "A-Z, a-z, 0-9, '.', '_', '~' or '-'; reading wn.dynamical.org on the "
-            "public tier"
+            f"{SERVICE_TOKEN_SECRET_NAME} headers.{SERVICE_TOKEN_HEADER} is not 16-512 "
+            "characters of A-Z, a-z, 0-9, '.', '_', '~' or '-'; reading "
+            "wn.dynamical.org on the public tier"
         )
         return {}
     monitoring.register_sensitive_value(token)
-    return {"X-Dynamical-Service-Token": token}
+    return {SERVICE_TOKEN_HEADER: token}
 
 
 def weathernext_read_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...]:
