@@ -63,7 +63,7 @@ Roll out each cohort in a quiet source window after review. Mechanism reviews tr
 | IFS ENS 46-day 6-hourly | +58h05m backstop and currency | Draft |
 | AIFS single | +7h38m, post-October-20 source regime | Draft |
 | AIFS ensemble | +7h44m, post-October-20 source regime | Draft |
-| ICON-EU | Keep timing; insufficient complete units | Draft |
+| ICON-EU | Keep +3h52m fire; +3h52m currency matches the fire | Draft |
 | HRDPS | Keep deployed +4h30m; hand value pending source-tail decision | Draft |
 | IMERG early / late | Keep unmeasured timing | Draft |
 | SWANN / SMAP | Keep unmeasured timing; rewrites are not arrival evidence | Draft |
@@ -72,4 +72,4 @@ Roll out each cohort in a quiet source window after review. Mechanism reviews tr
 
 All datasets in this cohort use Allow concurrency and pod/Job deadlines equal to their fire interval; CHIRPS final uses the minimum calendar interval. Every materialized builder takes a required reference time. Existing IFS 46-day archiver submissions stay unannotated until the trigger cohort enables the backstop check.
 
-AIFS single/ensemble use the source regime beginning October 20. HRDPS keeps its deployed +4h30m schedule; its tail-dominated p99 and short history require a separate timing decision. ICON-EU keeps its timing because the available complete-run sample is insufficient. IMERG, SWANN and SMAP keep unmeasured source timing; CHIRPS and NDVI keep manual timing. IFS ENS 15-day keeps its source, schedule and currency behind its separate measurement gate while adopting lifecycle budgets.
+AIFS single/ensemble use the source regime beginning October 20. HRDPS keeps its deployed +4h30m schedule; its tail-dominated p99 and short history require a separate timing decision. ICON-EU keeps its +3h52m fire and sets currency to that same offset. IMERG, SWANN and SMAP keep unmeasured source timing; CHIRPS and NDVI keep manual timing. IFS ENS 15-day keeps its source, schedule and currency behind its separate measurement gate while adopting lifecycle budgets.
