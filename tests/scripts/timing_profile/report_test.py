@@ -11,6 +11,7 @@ from scripts.timing_profile.report import (
     cycle_classes,
     recommend,
     recommended_cron,
+    render_class_evidence,
     render_dataset,
 )
 from scripts.timing_profile.runtime import RuntimeStats
@@ -295,3 +296,21 @@ def test_chosen_schedule_drives_final_cron_offset_and_currency(
     assert result.offset == expected
     assert result.delay == expected
     assert result.classes[0].offset == expected
+
+
+def test_evidence_reports_short_history_cut_dates_and_recent_regime_shift() -> None:
+    units = measured_units(
+        [(0, (600,)) for _ in range(28)]
+        + [(0, (1800,)) for _ in range(7)]
+        + [(0, (9000,))]
+    )
+    rendered = "\n".join(
+        render_class_evidence("00Z", units, pd.Timestamp("2026-11-25"), virtual=False)
+    )
+    assert "source **listings**" in rendered
+    assert "history 36 sampled days / 36 calendar days; n=36" in rendered
+    assert "current_object_write=36" in rendered
+    assert "Short history" in rendered
+    assert "max-normal cut (complete unit): 00:30:00" in rendered
+    assert "2026-11-24T00:00:00Z (02:30:00)" in rendered
+    assert "Recent distribution shift" in rendered

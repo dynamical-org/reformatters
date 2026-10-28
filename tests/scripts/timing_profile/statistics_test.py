@@ -6,6 +6,8 @@ from scripts.timing_profile.statistics import (
     ceil_minute,
     currency_delay,
     late_threshold,
+    max_normal_cut,
+    recent_shift,
     schedule_candidates,
     virtual_deadline,
     virtual_fire,
@@ -60,3 +62,28 @@ def test_currency_delay_accounts_for_labels_and_multiple_anchors() -> None:
     assert currency_delay(3600, 86400, 86400, 86400, virtual=False) == 90000
     assert currency_delay(3000, 1800, 3600, 1800, virtual=True) == 5040
     assert ceil_minute(3000.1) == 3060
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([600], 600),
+        ([600, 600, 600], 600),
+        ([0, 1000, 1001, 1002, 1100, 5000], 1100),
+        ([0, 1000, 1001, 1002, 1003], 1001),
+    ],
+)
+def test_max_normal_cut_uses_largest_gap_above_median(
+    values: list[float], expected: float
+) -> None:
+    assert max_normal_cut(values) == expected
+
+
+def test_recent_shift_requires_samples_in_both_windows_and_fifteen_minutes() -> None:
+    end = 40 * 86400
+    prior = [(day * 86400, 600) for day in range(5, 33)]
+    recent = [(day * 86400, 1800) for day in range(33, 40)]
+    assert recent_shift(prior + recent, end) == (600, 1800)
+    assert recent_shift(prior + recent[:4], end) is None
+    assert recent_shift(recent, end) is None
+    assert recent_shift(prior + [(anchor, 1200) for anchor, _ in recent], end) is None

@@ -45,6 +45,7 @@ from reformatters.noaa.gfs.analysis_virtual.region_job import (
     NoaaGfsAnalysisVirtualSourceFileCoord,
 )
 from reformatters.noaa.gfs.region_job import NoaaGfsSourceFileCoord
+from reformatters.noaa.hrrr.analysis.region_job import NoaaHrrrAnalysisRegionJob
 from reformatters.noaa.hrrr.analysis_virtual.region_job import (
     NoaaHrrrAnalysisVirtualSourceFileCoord,
 )
@@ -202,6 +203,9 @@ def expected_units(
     config = dataset.template_config
     spacing = anchor_spacing(dataset)
     frequency = config.append_dim_frequency
+    include_boundary = spacing > frequency or issubclass(
+        dataset.region_job_class, NoaaHrrrAnalysisRegionJob
+    )
     observational = config.append_dim == "time" and not dataset_id.startswith(
         ("noaa-gfs", "noaa-gefs", "noaa-hrrr")
     )
@@ -222,7 +226,7 @@ def expected_units(
     for anchor in anchors:
         if config.append_dim == "init_time":
             times = pd.DatetimeIndex([anchor])
-        elif spacing > frequency:
+        elif include_boundary:
             # The boundary supplies accumulated values for the cycle's last position.
             times = pd.date_range(anchor, anchor + spacing, freq=frequency)
         else:
@@ -248,8 +252,11 @@ def expected_units(
             for coord in job.generate_source_file_coords(processing, group):
                 if (
                     spacing > frequency
-                    and getattr(coord, "init_time", anchor) != anchor
-                ):
+                    or (
+                        include_boundary
+                        and coord.out_loc()[config.append_dim] != anchor
+                    )
+                ) and getattr(coord, "init_time", anchor) != anchor:
                     continue
                 tier = "run" if config.append_dim == "init_time" else "position"
                 if dataset_id.startswith("noaa-gefs-forecast-35-day"):
