@@ -64,8 +64,8 @@ _OPERATIONAL_CHUNK_KEY = re.compile(r"\d+\.(?P<lead>\d+)(\.\d+)+")
 # A variable with probed leads still incomplete ("lagging") gets its own probe each
 # tick, and its probed leads are re-listed with this backoff in case members land out
 # of order.
-_INCOMPLETE_RETRY_INITIAL_SECONDS = 10.0
-_INCOMPLETE_RETRY_MAX_SECONDS = 30.0
+_INCOMPLETE_RETRY_INITIAL_SECONDS = 3.0
+_INCOMPLETE_RETRY_MAX_SECONDS = 15.0
 # Every pending coord is re-listed this often, whatever the probe shows.
 _FULL_LISTING_INTERVAL_SECONDS = 600.0
 # A per-lead query pages through its variable's whole directory (keys are member-first),

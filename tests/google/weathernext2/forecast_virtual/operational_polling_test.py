@@ -235,9 +235,9 @@ def test_incomplete_lead_is_relisted_with_backoff(
         assert _probe(var=PRESSURE) in queries
         if _per_lead(PRESSURE, 0) in queries:
             relisted_at.append(tick * 3)
-    # Its own probe first shows lead 0 at once; then a 10 s backoff doubling to 30 s,
+    # Its own probe first shows lead 0 at once; then a 3 s backoff doubling to 15 s,
     # checked on 3 s ticks.
-    assert relisted_at == [3, 12, 33, 63, 93, 123, 153]
+    assert relisted_at == [3, 9, 21, *range(36, 178, 15)]
 
     source.publish(job, _coords([PRESSURE], [0]))
     while pending[0].lead_index == 0:
@@ -305,33 +305,25 @@ def test_lagging_variable_is_listed_when_its_own_probe_shows_new_leads(
     _available(job, pending)
     source.take()
 
-    # The pressure variable lags: its listing for lead 0 comes back empty.
+    # The pressure variable lags: its listing for lead 0 comes back empty, and its
+    # retries back off to the cap.
     source.publish(job, _coords([SURFACE], [0]))
-    clock.now += 3
-    assert _available(job, pending) == [(0, SURFACE.path)]
-    source.take()
-
-    # Later surface leads don't trigger listings of the lagging variable...
-    for lead in range(1, 4):
-        source.publish(job, _coords([SURFACE], [lead]))
+    retried_at = []
+    for _ in range(40):
         clock.now += 1.5
-        assert _available(job, pending) == [(lead, SURFACE.path)]
-        assert sorted(source.take()) == sorted(
-            [_probe(), _probe(var=PRESSURE), _per_lead(SURFACE, lead)]
-        )
+        _available(job, pending)
+        if _per_lead(PRESSURE, 0) in source.take():
+            retried_at.append(clock.now)
+    assert retried_at[-1] - retried_at[-2] >= 15
 
-    # ...its own probe does, on the tick its data lands.
-    source.publish(job, _coords([PRESSURE], [0, 1]))
+    # Right after a retry, its data lands: its own probe finds it on the next tick,
+    # well before the next retry is due.
+    while _per_lead(PRESSURE, 0) not in source.take():
+        clock.now += 1.5
+        _available(job, pending)
+    source.publish(job, _coords([PRESSURE], [0]))
     clock.now += 1.5
-    assert _available(job, pending) == [(0, PRESSURE.path), (1, PRESSURE.path)]
-    assert sorted(source.take()) == sorted(
-        [
-            _probe(),
-            _probe(var=PRESSURE),
-            _per_lead(PRESSURE, 0),
-            _per_lead(PRESSURE, 1),
-        ]
-    )
+    assert _available(job, pending) == [(0, PRESSURE.path)]
 
 
 def test_member_landing_after_a_retry_is_found_within_the_backoff_cap(
@@ -353,7 +345,7 @@ def test_member_landing_after_a_retry_is_found_within_the_backoff_cap(
     ):
         clock.now += 3
         _available(job, pending)
-    assert clock.now - published_at <= 30 + 3
+    assert clock.now - published_at <= 15 + 3
 
 
 def test_refused_listing_fails_loudly(
