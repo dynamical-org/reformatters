@@ -300,10 +300,12 @@ def test_service_token_outside_the_safe_alphabet_falls_back_without_echo(
         {},
         {"headers": None},
         {"headers": "x"},
+        {"headers": [TOKEN]},
         {"headers": {}},
         {"headers": {"X-Dynamical-Service-Token": ""}},
         {"headers": {"X-Dynamical-Service-Token": 12345678901234567}},
         {"headers": {"X-Dynamical-Service-Token": [TOKEN]}},
+        {"headers": {"X-Dynamical-Service-Token": {"value": TOKEN}}},
         # The secret's earlier shape is not read.
         {"WN_SERVICE_TOKEN": TOKEN},
     ],
