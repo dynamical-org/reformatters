@@ -56,14 +56,16 @@ OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT = 32
 OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT = 4
 
 # An operational update usually fires before Google has published the whole init, then
-# polls. Each tick lists one probe per pending init (one member of one variable, all
-# leads: a single page) and lists only leads the probe newly shows, rather than
+# polls. Each tick lists one probe per pending init (one member of one surface variable,
+# all leads: a single page) and lists only leads the probe newly shows, rather than
 # re-listing every pending (lead, variable) directory each tick.
 _PROBE_MEMBER = 63
 _OPERATIONAL_CHUNK_KEY = re.compile(r"\d+\.(?P<lead>\d+)(\.\d+)+")
-# A lead the probe shows but whose listing is still incomplete is re-listed with backoff.
+# A variable with probed leads still incomplete ("lagging") gets its own probe each
+# tick, and its probed leads are re-listed with this backoff in case members land out
+# of order.
 _INCOMPLETE_RETRY_INITIAL_SECONDS = 10.0
-_INCOMPLETE_RETRY_MAX_SECONDS = 60.0
+_INCOMPLETE_RETRY_MAX_SECONDS = 30.0
 # Every pending coord is re-listed this often, whatever the probe shows.
 _FULL_LISTING_INTERVAL_SECONDS = 600.0
 # A per-lead query pages through its variable's whole directory (keys are member-first),
@@ -124,27 +126,21 @@ class _InitPoll:
     """One init's polling state across an operational update's ticks."""
 
     next_full_listing: float = float("-inf")
-    probed_leads: set[int] = field(default_factory=set)
-    # Variable path -> (next listing time, current backoff seconds), for a variable
-    # with leads the probe shows but whose listing was incomplete. Batching retries per
-    # variable lets them use one all-leads listing.
+    # Variable path -> lead indices its probe member has been listed with.
+    probed_leads: dict[str, set[int]] = field(default_factory=dict)
+    # Lagging variable path -> (next re-listing time, current backoff seconds).
     retry_at: dict[str, tuple[float, float]] = field(default_factory=dict)
 
-    def retry_due(
-        self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord, now: float
-    ) -> bool:
-        scheduled = self.retry_at.get(coord.data_vars[0].path)
-        return (
-            scheduled is not None
-            and now >= scheduled[0]
-            and coord.lead_index in self.probed_leads
+    def known_leads(self, var_path: str, probe_var_path: str) -> set[int]:
+        return self.probed_leads.get(probe_var_path, set()) | self.probed_leads.get(
+            var_path, set()
         )
 
     def update_retry(
-        self, var_path: str, now: float, *, incomplete: bool, progressed: bool
+        self, var_path: str, now: float, *, lagging: bool, progressed: bool
     ) -> None:
         previous = self.retry_at.get(var_path)
-        if not incomplete:
+        if not lagging:
             self.retry_at.pop(var_path, None)
             return
         if previous is None:
@@ -163,6 +159,20 @@ def _variable_prefix(
     var: GoogleWeathernext2DataVar,
 ) -> str:
     return f"{_store_key(coord.get_url())}/{var.internal_attrs.source_name}/"
+
+
+def _required(
+    objects: dict[str, NativeObjectMetadata] | None, query: ObjectListingQuery
+) -> dict[str, NativeObjectMetadata]:
+    """The proxy answers a listing of a valid init with a (possibly empty) page, even
+    before the store exists, so a 403/404 means it refused the query, e.g. a proxy
+    deployed without support for these listing forms. Fail rather than wait silently."""
+    if objects is None:
+        raise RuntimeError(
+            f"wn.dynamical.org refused listing prefix={query.prefix} "
+            f"matchGlob={query.match_glob}; deploy proxy support for it first"
+        )
+    return objects
 
 
 def _listed_leads(objects: Mapping[str, NativeObjectMetadata]) -> set[int]:
@@ -343,82 +353,127 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
         self, pending: list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
     ) -> list[tuple[GoogleWeathernext2ForecastVirtualSourceFileCoord, int]]:
         now = _monotonic()
+        probe_var = self._probe_var().path
         by_init: dict[
             Timestamp, list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
         ] = {}
         for coord in pending:
             by_init.setdefault(coord.init_time, []).append(coord)
         polls = {init: self._polls.setdefault(init, _InitPoll()) for init in by_init}
+        full = {init for init, poll in polls.items() if now >= poll.next_full_listing}
         probes = {
-            init: self._probe_query(coords[0])
-            for init, coords in by_init.items()
-            if now < polls[init].next_full_listing
+            (init, var_path): self._probe_query(by_init[init][0], var_path)
+            for init, poll in polls.items()
+            if init not in full
+            for var_path in {probe_var, *poll.retry_at}
         }
         probed = self._list(set(probes.values())) if probes else {}
+        new_leads: dict[tuple[Timestamp, str], set[int]] = {}
+        for (init, var_path), query in probes.items():
+            leads = _listed_leads(_required(probed[query], query))
+            seen = polls[init].probed_leads.setdefault(var_path, set())
+            new_leads[init, var_path] = leads - seen
+            seen |= leads
 
-        due: list[GoogleWeathernext2ForecastVirtualSourceFileCoord] = []
-        for init, coords in by_init.items():
-            poll = polls[init]
-            if init in probes:
-                leads = _listed_leads(probed[probes[init]] or {})
-                new_leads = leads - poll.probed_leads
-                poll.probed_leads |= leads
-                due.extend(
-                    coord
-                    for coord in coords
-                    if poll.retry_due(coord, now)
-                    # A variable already behind the probe waits for its batched retry.
-                    or (
-                        coord.lead_index in new_leads
-                        and coord.data_vars[0].path not in poll.retry_at
-                    )
-                )
-            else:
-                poll.next_full_listing = now + _FULL_LISTING_INTERVAL_SECONDS
-                due.extend(coords)
+        due = [
+            coord
+            for init, coords in by_init.items()
+            for coord in self._due_coords(
+                coords, polls[init], now, full=init in full, new_leads=new_leads
+            )
+        ]
         if not due:
             return []
 
-        listed = self._list(self._due_queries(due))
+        queries = self._due_queries(due)
         objects: dict[str, NativeObjectMetadata] = {}
-        for query_objects in listed.values():
-            objects.update(query_objects or {})
-        for init in by_init:
-            if init not in probes:
-                # A full listing also covers the probe, so its leads aren't "new" next tick.
-                prefix = self._probe_query(by_init[init][0]).prefix
-                polls[init].probed_leads |= _listed_leads(
+        for query, query_objects in self._list(queries).items():
+            objects.update(_required(query_objects, query))
+        for init in full:
+            self._record_probe_leads(by_init[init][0], polls[init], objects)
+        available = []
+        ready_ids = set()
+        for coord in due:
+            locations = {chunk.location for chunk in self._source_chunks(coord)}
+            if locations <= objects.keys():
+                coord.chunk_metadata.clear()
+                coord.chunk_metadata.update(
+                    {location: objects[location] for location in locations}
+                )
+                available.append((coord, 0))
+                ready_ids.add(id(coord))
+        for init, coords in by_init.items():
+            self._update_lagging(coords, polls[init], now, ready_ids)
+        return available
+
+    def _due_coords(
+        self,
+        coords: Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord],
+        poll: _InitPoll,
+        now: float,
+        *,
+        full: bool,
+        new_leads: Mapping[tuple[Timestamp, str], set[int]],
+    ) -> list[GoogleWeathernext2ForecastVirtualSourceFileCoord]:
+        if full:
+            poll.next_full_listing = now + _FULL_LISTING_INTERVAL_SECONDS
+            return list(coords)
+        probe_var = self._probe_var().path
+        due = []
+        for coord in coords:
+            var_path = coord.data_vars[0].path
+            lead = coord.lead_index
+            retry = poll.retry_at.get(var_path)
+            if retry is None:
+                is_due = lead in new_leads.get((coord.init_time, probe_var), set())
+            else:
+                # A lagging variable waits for its own probe or its batched retry.
+                is_due = lead in new_leads.get((coord.init_time, var_path), set()) or (
+                    now >= retry[0] and lead in poll.known_leads(var_path, probe_var)
+                )
+            if is_due:
+                due.append(coord)
+        return due
+
+    def _record_probe_leads(
+        self,
+        coord: GoogleWeathernext2ForecastVirtualSourceFileCoord,
+        poll: _InitPoll,
+        objects: Mapping[str, NativeObjectMetadata],
+    ) -> None:
+        """A full listing also covers each probe, so its leads aren't "new" next tick."""
+        for var in self.data_vars:
+            prefix = self._probe_query(coord, var.path).prefix
+            poll.probed_leads.setdefault(var.path, set()).update(
+                _listed_leads(
                     {
                         location: metadata
                         for location, metadata in objects.items()
                         if location.startswith(f"{PROXY_LOCATION_PREFIX}{prefix}")
                     }
                 )
+            )
 
-        available = []
-        # (init, variable path) -> (still incomplete with a probed lead, any ingested)
-        outcomes: dict[tuple[Timestamp, str], tuple[bool, bool]] = {}
-        for coord in due:
-            poll = polls[coord.init_time]
-            locations = {chunk.location for chunk in self._source_chunks(coord)}
-            ready = locations <= objects.keys()
-            if ready:
-                coord.chunk_metadata.clear()
-                coord.chunk_metadata.update(
-                    {location: objects[location] for location in locations}
-                )
-                available.append((coord, 0))
-            key = (coord.init_time, coord.data_vars[0].path)
-            incomplete, progressed = outcomes.get(key, (False, False))
-            outcomes[key] = (
-                incomplete or (not ready and coord.lead_index in poll.probed_leads),
-                progressed or ready,
-            )
-        for (init, var_path), (incomplete, progressed) in outcomes.items():
-            polls[init].update_retry(
-                var_path, now, incomplete=incomplete, progressed=progressed
-            )
-        return available
+    def _update_lagging(
+        self,
+        coords: Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord],
+        poll: _InitPoll,
+        now: float,
+        ready_ids: set[int],
+    ) -> None:
+        """A variable lags while any pending coord of it has a probed lead."""
+        probe_var = self._probe_var().path
+        outcomes: dict[str, tuple[bool, bool]] = {}  # var -> (lagging, progressed)
+        for coord in coords:
+            var_path = coord.data_vars[0].path
+            lagging, progressed = outcomes.get(var_path, (False, False))
+            if id(coord) in ready_ids:
+                progressed = True
+            elif coord.lead_index in poll.known_leads(var_path, probe_var):
+                lagging = True
+            outcomes[var_path] = (lagging, progressed)
+        for var_path, (lagging, progressed) in outcomes.items():
+            poll.update_retry(var_path, now, lagging=lagging, progressed=progressed)
 
     def _probe_var(self) -> GoogleWeathernext2DataVar:
         return next(
@@ -426,14 +481,11 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
         )
 
     def _probe_query(
-        self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
+        self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord, var_path: str
     ) -> ObjectListingQuery:
-        prefix = _variable_prefix(coord, self._probe_var())
-        return ObjectListingQuery(
-            prefix=f"{prefix}{_PROBE_MEMBER}.",
-            match_glob=f"{prefix}{_PROBE_MEMBER}.*",
-            delimiter="/",
-        )
+        var = next(var for var in self.data_vars if var.path == var_path)
+        prefix = f"{_variable_prefix(coord, var)}{_PROBE_MEMBER}."
+        return ObjectListingQuery(prefix=prefix, match_glob=f"{prefix}*", delimiter="/")
 
     def _due_queries(
         self, due: Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord]

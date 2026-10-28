@@ -142,9 +142,11 @@ def _prefix(var: GoogleWeathernext2DataVar, init: pd.Timestamp = INIT) -> str:
     )
 
 
-def _probe(init: pd.Timestamp = INIT) -> ObjectListingQuery:
-    prefix = _prefix(SURFACE, init)
-    return ObjectListingQuery(f"{prefix}63.", f"{prefix}63.*", "/")
+def _probe(
+    init: pd.Timestamp = INIT, var: GoogleWeathernext2DataVar = SURFACE
+) -> ObjectListingQuery:
+    prefix = f"{_prefix(var, init)}63."
+    return ObjectListingQuery(prefix, f"{prefix}*", "/")
 
 
 def _per_lead(
@@ -228,10 +230,14 @@ def test_incomplete_lead_is_relisted_with_backoff(
     for tick in range(1, 60):
         clock.now += 3
         _available(job, pending)
-        if _per_lead(PRESSURE, 0) in source.take():
+        queries = source.take()
+        # The lagging variable gets its own probe each tick.
+        assert _probe(var=PRESSURE) in queries
+        if _per_lead(PRESSURE, 0) in queries:
             relisted_at.append(tick * 3)
-    # Backoff from 10 s doubling to 60 s, checked on 3 s ticks.
-    assert relisted_at == [12, 33, 75, 135]
+    # Its own probe first shows lead 0 at once; then a 10 s backoff doubling to 30 s,
+    # checked on 3 s ticks.
+    assert relisted_at == [3, 12, 33, 63, 93, 123, 153]
 
     source.publish(job, _coords([PRESSURE], [0]))
     while pending[0].lead_index == 0:
@@ -291,7 +297,7 @@ def test_few_due_leads_use_per_lead_queries(source: FakeSource, clock: Clock) ->
     )
 
 
-def test_lagging_variable_waits_for_its_batched_retry(
+def test_lagging_variable_is_listed_when_its_own_probe_shows_new_leads(
     source: FakeSource, clock: Clock
 ) -> None:
     job = _update_job([SURFACE, PRESSURE])
@@ -305,21 +311,55 @@ def test_lagging_variable_waits_for_its_batched_retry(
     assert _available(job, pending) == [(0, SURFACE.path)]
     source.take()
 
-    # Later leads of the lagging variable aren't listed as they appear...
-    for lead in range(1, 6):
+    # Later surface leads don't trigger listings of the lagging variable...
+    for lead in range(1, 4):
         source.publish(job, _coords([SURFACE], [lead]))
         clock.now += 1.5
         assert _available(job, pending) == [(lead, SURFACE.path)]
-        assert sorted(source.take()) == sorted([_probe(), _per_lead(SURFACE, lead)])
+        assert sorted(source.take()) == sorted(
+            [_probe(), _probe(var=PRESSURE), _per_lead(SURFACE, lead)]
+        )
 
-    # ...but together at its retry, as one all-leads listing.
-    source.publish(job, _coords([PRESSURE], range(6)))
-    clock.now += 3
-    assert _available(job, pending) == [(lead, PRESSURE.path) for lead in range(6)]
-    assert sorted(source.take(), key=str) == sorted(
+    # ...its own probe does, on the tick its data lands.
+    source.publish(job, _coords([PRESSURE], [0, 1]))
+    clock.now += 1.5
+    assert _available(job, pending) == [(0, PRESSURE.path), (1, PRESSURE.path)]
+    assert sorted(source.take()) == sorted(
         [
             _probe(),
-            ObjectListingQuery(_prefix(PRESSURE), _all_leads(PRESSURE), "/"),
-        ],
-        key=str,
+            _probe(var=PRESSURE),
+            _per_lead(PRESSURE, 0),
+            _per_lead(PRESSURE, 1),
+        ]
     )
+
+
+def test_member_landing_after_a_retry_is_found_within_the_backoff_cap(
+    source: FakeSource, clock: Clock
+) -> None:
+    job = _update_job([SURFACE, PRESSURE])
+    pending = _coords([SURFACE, PRESSURE], range(60))
+    _available(job, pending)
+    source.publish(job, _coords([SURFACE], [0]))
+    source.publish(job, _coords([PRESSURE], [0]), skip_last=True)
+    for _ in range(40):  # reach the backoff cap
+        clock.now += 3
+        _available(job, pending)
+
+    published_at = clock.now
+    source.publish(job, _coords([PRESSURE], [0]))
+    while any(
+        coord.data_vars[0] == PRESSURE and coord.lead_index == 0 for coord in pending
+    ):
+        clock.now += 3
+        _available(job, pending)
+    assert clock.now - published_at <= 30 + 3
+
+
+def test_refused_listing_fails_loudly(
+    monkeypatch: pytest.MonkeyPatch, clock: Clock
+) -> None:
+    monkeypatch.setattr(region_job, "list_objects", lambda client, query: None)
+    job = _update_job([SURFACE])
+    with pytest.raises(RuntimeError, match="refused listing"):
+        job.discover_available(_coords([SURFACE], range(60)))
