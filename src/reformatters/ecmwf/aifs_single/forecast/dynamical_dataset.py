@@ -28,7 +28,7 @@ class EcmwfAifsSingleForecastDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # Source GRIB/index pairs normally finish near init+7h35m.
-            schedule="40 1,7,13,19 * * *",
+            schedule="38 1,7,13,19 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),
             active_deadline=timedelta(hours=6),
@@ -47,6 +47,6 @@ class EcmwfAifsSingleForecastDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=40)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=38)),
             validation.CheckRecentNans(append_dim_window=3),
         )

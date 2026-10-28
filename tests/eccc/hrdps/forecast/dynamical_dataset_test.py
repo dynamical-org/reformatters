@@ -195,7 +195,7 @@ def test_operational_kubernetes_resources(
     assert archive_grib_files_job.suspend is False
 
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
-    assert update_cron_job.schedule == "45 3,9,15,21 * * *"
+    assert update_cron_job.schedule == "30 4,10,16,22 * * *"
     # One worker for the newest init time and one for the previous, which the update
     # reprocesses. Each is a whole shard, so neither splits further.
     assert update_cron_job.workers_total == 2
@@ -209,7 +209,7 @@ def test_operational_kubernetes_resources(
 def test_validators(dataset: EcccHrdpsForecastDataset) -> None:
     validators = tuple(dataset.validators())
     assert validators == (
-        validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=45)),
+        validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=30)),
         validation.CheckRecentNans(append_dim_window=4),
     )
 

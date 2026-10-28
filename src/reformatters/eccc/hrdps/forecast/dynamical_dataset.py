@@ -56,7 +56,7 @@ class EcccHrdpsForecastDataset(
         workers = 2
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="45 3,9,15,21 * * *",
+            schedule="30 4,10,16,22 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),
             active_deadline=timedelta(hours=6),
@@ -79,7 +79,7 @@ class EcccHrdpsForecastDataset(
     def validators(self) -> Sequence[validation.Validator]:
         """Return the operational validation checks to run on this dataset."""
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=45)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=30)),
             # append_dim_window=4 covers a day of 6-hourly cycles, so a truncated or missing
             # forecast is caught even after newer cycles land.
             validation.CheckRecentNans(append_dim_window=4),
