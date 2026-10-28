@@ -129,3 +129,7 @@ The dataset implementations define the values and boundaries of these exceptions
 - MRMS uses one hourly run; pass 1 is an exception.
 
 Arrivals beyond a fire's chosen offset alert when currency or integrity checks detect them. Choose offsets to make this rare under normal source operation.
+
+## Possible follow-up: quiet re-pass window
+
+Not implemented. If an untriggered materialized dataset with a high-variance source alerts more often than is acceptable, give it a per-dataset quiet window: re-pass validation failures stay quiet until the fire plus that window, and page only if the unit is still missing after it. Late units still publish through re-passes as soon as they arrive; only the alert waits.
