@@ -55,7 +55,7 @@ class NoaaGfsForecastVirtualDataset(
         # deadline bounds waiting on a file that never publishes.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="29 3,9,15,21 * * *",
+            schedule="13 3,9,15,21 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6, minutes=4, seconds=12),
             active_deadline=timedelta(hours=6, minutes=4, seconds=12),

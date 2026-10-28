@@ -60,7 +60,7 @@ class EcmwfAifsSingleForecastVirtualDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="35 5,11,17,23 * * *",
+            schedule="49 4,10,16,22 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6, minutes=2),
             active_deadline=timedelta(hours=6, minutes=2),

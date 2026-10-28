@@ -11,7 +11,7 @@ from .template_config import NoaaRrfsForecast84HourVirtualTemplateConfig
 
 
 class NoaaRrfsForecast84HourVirtualDataset(NoaaRrfsDataset):
-    update_offset_minutes: NonNegativeInt = 71
+    update_offset_minutes: NonNegativeInt = 57
     update_deadline: timedelta = timedelta(hours=6, minutes=5, seconds=10)
     concurrency_policy: ClassVar[ConcurrencyPolicy] = "Allow"
     max_delay: ClassVar[timedelta] = timedelta(minutes=133)

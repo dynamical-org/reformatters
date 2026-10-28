@@ -52,7 +52,7 @@ class NoaaGefsAnalysis025DegreeVirtualDataset(
         # Fire a few minutes before that and poll until they land.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="44 3,9,15,21 * * *",
+            schedule="29 3,9,15,21 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6, minutes=2, seconds=27),
             active_deadline=timedelta(hours=6, minutes=2, seconds=27),

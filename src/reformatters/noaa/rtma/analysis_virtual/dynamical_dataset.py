@@ -23,7 +23,7 @@ from .template_config import NoaaRtmaAnalysisVirtualTemplateConfig
 class NoaaRtmaAnalysisVirtualDataset(
     DynamicalDataset[RtmaDataVar, NoaaRtmaAnalysisVirtualSourceFileCoord]
 ):
-    update_schedule: ClassVar[str] = "41 * * * *"
+    update_schedule: ClassVar[str] = "26 * * * *"
     update_deadline: ClassVar[timedelta] = timedelta(hours=1, minutes=2, seconds=9)
     update_cron_suspended: ClassVar[bool] = False
     max_delay: ClassVar[timedelta] = timedelta(minutes=73)

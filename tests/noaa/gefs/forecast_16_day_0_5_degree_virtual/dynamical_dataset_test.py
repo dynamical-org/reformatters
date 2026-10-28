@@ -275,7 +275,7 @@ def test_operational_kubernetes_resources(
     # The first file lands ~init+3h46m and the last member's f384 ~init+7h11m, so the
     # fire leads the burst and the deadline covers its end and
     # overlaps the next cycle's fire.
-    assert update_cron_job.schedule == "43 3,9,15,21 * * *"
+    assert update_cron_job.schedule == "29 3,9,15,21 * * *"
     assert update_cron_job.pod_active_deadline == timedelta(
         hours=6, minutes=8, seconds=22
     )

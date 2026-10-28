@@ -193,7 +193,7 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
-    assert update_cron_job.schedule == "29 3,9,15,21 * * *"
+    assert update_cron_job.schedule == "13 3,9,15,21 * * *"
     assert update_cron_job.pod_active_deadline == timedelta(
         hours=6, minutes=3, seconds=22
     )

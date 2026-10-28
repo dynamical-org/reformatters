@@ -182,7 +182,7 @@ def test_hrrr48_dispatch_precedes_validation_on_the_selected_fire(
         _create_template_ds(1), region=slice(0, 1), processing_mode="update"
     )
     (cron,) = producer.operational_kubernetes_resources("test")
-    fire = pd.Timestamp("2024-01-01T00:44")
+    fire = cron.next_fire_time(pd.Timestamp("2024-01-01"))
     successor = cron.next_fire_time(fire)
     now = [successor - pd.Timedelta("1s")]
     monkeypatch.setattr(

@@ -153,8 +153,8 @@ def assert_offset_gdal_samples(
 @pytest.mark.parametrize(
     ("dataset_class", "offset", "duration", "grace", "max_delay"),
     [
-        (NoaaRefsForecastHourlyVirtualDataset, 108, "6h6m", "4m44s", "150m"),
-        (NoaaRefsForecast3HourlyVirtualDataset, 110, "6h2m55s", "1m39s", "2h36m"),
+        (NoaaRefsForecastHourlyVirtualDataset, 94, "6h6m", "4m44s", "150m"),
+        (NoaaRefsForecast3HourlyVirtualDataset, 96, "6h2m55s", "1m39s", "2h36m"),
     ],
 )
 def test_operational_configuration_requires_complete_manifests(

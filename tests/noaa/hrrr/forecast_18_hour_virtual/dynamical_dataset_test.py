@@ -47,10 +47,10 @@ def test_polling_overlaps_next_fire_and_leaves_validation_time(
     dataset: NoaaHrrrForecast18HourVirtualDataset,
 ) -> None:
     cron = dataset.operational_kubernetes_resources("test")[0]
-    fire = pd.Timestamp("2026-10-02T00:44")
-    deadline = pd.Timestamp("2026-10-02T01:45:44")
+    fire = pd.Timestamp("2026-10-02T00:30")
+    deadline = pd.Timestamp("2026-10-02T01:31:44")
 
-    assert cron.schedule == "44 * * * *"
+    assert cron.schedule == "30 * * * *"
     assert cron.concurrency_policy == "Allow"
     assert (
         cron.active_deadline
@@ -200,7 +200,7 @@ def test_operational_kubernetes_resources(
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
     assert update_cron_job.workers_total == 1
     assert update_cron_job.parallelism == 1
-    assert update_cron_job.schedule == "44 * * * *"
+    assert update_cron_job.schedule == "30 * * * *"
     assert update_cron_job.pod_active_deadline == timedelta(minutes=63, seconds=31)
     assert update_cron_job.cpu == "4"
     assert not update_cron_job.suspend

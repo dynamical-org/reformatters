@@ -223,11 +223,11 @@ def test_polling_covers_late_delivery_across_the_next_fire(
     dataset: EcmwfAifsSingleForecastVirtualDataset, hour: int
 ) -> None:
     init = pd.Timestamp("2026-10-20") + timedelta(hours=hour)
-    fire = init + timedelta(hours=5, minutes=35)
+    fire = init + timedelta(hours=4, minutes=49)
     (cron,) = dataset.operational_kubernetes_resources("test-image-tag")
     cutoff = dataset._virtual_poll_deadline(fire + timedelta(minutes=1))
 
-    assert cutoff == init + timedelta(hours=11, minutes=36, seconds=16)
+    assert cutoff == init + timedelta(hours=10, minutes=50, seconds=16)
     assert cron.previous_fire_time(fire) == fire
     assert (
         cron.next_fire_time(fire)

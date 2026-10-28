@@ -217,7 +217,7 @@ def test_operational_kubernetes_resources(
 
     # f000 publishes ~init+3h47m and the last member's f240 ~init+5h37m, so the fire
     # leads the burst and the deadline covers its end with over half an hour to spare.
-    assert update_cron_job.schedule == "44 3,9,15,21 * * *"
+    assert update_cron_job.schedule == "29 3,9,15,21 * * *"
     assert update_cron_job.pod_active_deadline == timedelta(
         hours=6, minutes=4, seconds=27
     )
