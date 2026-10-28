@@ -39,7 +39,7 @@ type NoaaMaterializedDataset = (
 VALUES = (
     (NoaaGfsForecastDataset, "44 5,11,17,23 * * *", "5h44m", 6),
     (NoaaGfsAnalysisDataset, "58 3,9,15,21 * * *", "3h58m", 6),
-    (GefsAnalysisDataset, "8 4,10,16,22 * * *", "4h08m", 6),
+    (GefsAnalysisDataset, "3 4,10,16,22 * * *", "4h03m", 6),
     (GefsForecast35DayDataset, "15 7 * * *", "7h15m", 24),
     (NoaaHrrrAnalysisDataset, "10 1,4,7,10,13,16,19,22 * * *", "3h10m", 3),
     (NoaaMrmsConusAnalysisHourlyDataset, "3 * * * *", "5m", 1),
@@ -142,7 +142,7 @@ def test_hrrr_currency_requires_the_first_covered_anchor_at_each_fire(
 
 @pytest.mark.parametrize(
     ("dataset_class", "fire_offset", "last_complete"),
-    [(NoaaGfsAnalysisDataset, "3h58m", "5h"), (GefsAnalysisDataset, "4h08m", "3h")],
+    [(NoaaGfsAnalysisDataset, "3h58m", "5h"), (GefsAnalysisDataset, "4h03m", "3h")],
 )
 def test_analysis_boundary_input_publishes_complete_cycle_and_trims_boundary(
     dataset_class: type[NoaaMaterializedDataset],

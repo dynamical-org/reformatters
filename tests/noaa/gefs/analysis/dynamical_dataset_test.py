@@ -30,7 +30,7 @@ def test_operational_kubernetes_resources(dataset: GefsAnalysisDataset) -> None:
 
     # Check update job
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
-    assert update_cron_job.schedule == "8 4,10,16,22 * * *"
+    assert update_cron_job.schedule == "3 4,10,16,22 * * *"
     assert update_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
     assert update_cron_job.cpu == "14"
     assert update_cron_job.memory == "30G"
@@ -42,7 +42,7 @@ def test_validators(dataset: GefsAnalysisDataset) -> None:
     """Test that validators are properly configured."""
     current_data, recent_nans = dataset.validators()
     assert isinstance(current_data, validation.CheckCurrentData)
-    assert current_data.max_delay == timedelta(hours=4, minutes=8)
+    assert current_data.max_delay == timedelta(hours=4, minutes=3)
     assert isinstance(recent_nans, validation.CheckRecentNans)
 
 
