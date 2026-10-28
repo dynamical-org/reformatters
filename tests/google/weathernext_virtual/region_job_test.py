@@ -6,6 +6,9 @@ import pandas as pd
 import pytest
 
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
+from reformatters.google.weathernext2.forecast_virtual import (
+    region_job as wn2_region_job,
+)
 from reformatters.google.weathernext2.forecast_virtual.region_job import (
     GoogleWeathernext2ForecastHistoricalVirtualRegionJob,
     GoogleWeathernext2ForecastOperationalVirtualRegionJob,
@@ -57,8 +60,22 @@ def test_discovery_deduplicates_queries_and_requires_every_object(
 
     objects[missing] = NativeObjectMetadata(101, '"new"')
     listing.reset_mock()
-    assert job.discover_available([first, second]) == [(first, 0), (second, 0)]
-    assert listing.call_count == (1 if historical else 2)
+    if historical:
+        assert job.discover_available([first, second]) == [(first, 0), (second, 0)]
+        assert listing.call_count == 1
+    else:
+        # An operational update re-lists only the incomplete lead, after a backoff, and
+        # probes the init once per tick.
+        clock = iter([1000.0, 1010.0])
+        monkeypatch.setattr(wn2_region_job, "_monotonic", lambda: next(clock))
+        job = _job(cls, config, config.get_template(init + pd.Timedelta("6h")), [var])
+        second.chunk_metadata.clear()
+        del objects[missing]
+        assert job.discover_available([second]) == []
+        objects[missing] = NativeObjectMetadata(101, '"new"')
+        listing.reset_mock()
+        assert job.discover_available([second]) == [(second, 0)]
+        assert listing.call_count == 2
     assert second.chunk_metadata[missing] == NativeObjectMetadata(101, '"new"')
 
 

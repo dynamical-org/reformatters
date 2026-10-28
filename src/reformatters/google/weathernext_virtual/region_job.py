@@ -98,25 +98,9 @@ class WeatherNextVirtualRegionJob(
     def discover_available(
         self, pending: list[SOURCE_COORD]
     ) -> list[tuple[SOURCE_COORD, int]]:
-        queries = sorted(
-            {query for coord in pending for query in self._listing_queries(coord)},
-            key=lambda query: (
-                query.prefix,
-                query.match_glob or "",
-                query.delimiter or "",
-            ),
+        listed = self._list(
+            {query for coord in pending for query in self._listing_queries(coord)}
         )
-        with (
-            httpx.Client(timeout=30, headers={"User-Agent": USER_AGENT}) as client,
-            ThreadPoolExecutor(self.download_concurrency) as pool,
-        ):
-            listed = dict(
-                zip(
-                    queries,
-                    pool.map(partial(list_objects, client), queries),
-                    strict=True,
-                )
-            )
 
         available = []
         for coord in pending:
@@ -142,6 +126,30 @@ class WeatherNextVirtualRegionJob(
                         f"first: {min(missing)}"
                     )
         return available
+
+    def _list(
+        self, queries: set[ObjectListingQuery]
+    ) -> dict[ObjectListingQuery, dict[str, NativeObjectMetadata] | None]:
+        """List every query concurrently; None for a query whose prefix is absent."""
+        ordered = sorted(
+            queries,
+            key=lambda query: (
+                query.prefix,
+                query.match_glob or "",
+                query.delimiter or "",
+            ),
+        )
+        with (
+            httpx.Client(timeout=30, headers={"User-Agent": USER_AGENT}) as client,
+            ThreadPoolExecutor(self.download_concurrency) as pool,
+        ):
+            return dict(
+                zip(
+                    ordered,
+                    pool.map(partial(list_objects, client), ordered),
+                    strict=True,
+                )
+            )
 
     def process_virtual_refs(
         self,
