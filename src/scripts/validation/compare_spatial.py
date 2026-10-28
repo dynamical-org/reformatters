@@ -107,7 +107,7 @@ def _roll_longitude_seam_to_edge(data: xr.DataArray) -> xr.DataArray:
     cell spanning the globe. Fields without such a wrap are returned unchanged."""
     if "x" not in data.dims or data["longitude"].dims != ("y", "x"):
         return data
-    wraps = np.flatnonzero(np.diff(data["longitude"].values[0]) < 0)
+    wraps = np.flatnonzero(np.diff(data["longitude"].values[0]) < -180)
     if wraps.size == 0:
         return data
     return data.roll(x=-(int(wraps[0]) + 1), roll_coords=True)

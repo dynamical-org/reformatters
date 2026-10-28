@@ -55,8 +55,13 @@ def test_roll_longitude_seam_to_edge_makes_longitude_increase(
     np.testing.assert_array_equal(rolled.sel(x=225.0).values, data.sel(x=225.0).values)
 
 
-def test_roll_longitude_seam_to_edge_leaves_increasing_longitude_unchanged() -> None:
-    longitude = np.array([[-100.0, -99.0, -98.0], [-100.5, -99.5, -98.5]])
+@pytest.mark.parametrize(
+    "longitude_row", [[-100.0, -99.0, -98.0], [-98.0, -99.0, -100.0]]
+)
+def test_roll_longitude_seam_to_edge_leaves_unwrapped_longitude_unchanged(
+    longitude_row: list[float],
+) -> None:
+    longitude = np.array([longitude_row, longitude_row])
     data = xr.DataArray(
         np.arange(6.0).reshape(2, 3),
         dims=("y", "x"),
