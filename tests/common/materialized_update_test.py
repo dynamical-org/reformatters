@@ -1,4 +1,5 @@
-from collections.abc import Sequence
+import logging
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -6,15 +7,26 @@ from unittest.mock import Mock
 
 import pandas as pd
 import pytest
+import sentry_sdk
+import sentry_sdk.crons
 import typer
 import xarray as xr
 from kubernetes import client
+from sentry_sdk.envelope import Envelope
+from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.transport import Transport
 from zarr.storage import MemoryStore
 
-from reformatters.common import dynamical_dataset, kubernetes, operational, validation
+from reformatters.common import (
+    dynamical_dataset,
+    kubernetes,
+    monitoring,
+    operational,
+    validation,
+)
 from reformatters.common import parallel_coordination as pc
 from reformatters.common.config import Config, Env
-from reformatters.common.iterating import get_worker_jobs
+from reformatters.common.iterating import digest, get_worker_jobs
 from reformatters.common.region_job import RegionJob
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
@@ -129,6 +141,32 @@ def pilot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Pilot:
     monkeypatch.setattr(StoreFactory, "primary_store", Mock(return_value=MemoryStore()))
     monkeypatch.setattr(StoreFactory, "replica_stores", Mock(return_value=[]))
     return Pilot(dataset, jobs, api, compute, process, validate, sleep)
+
+
+@pytest.fixture
+def telemetry(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[Mock, Mock]]:
+    checkins, events = Mock(), Mock()
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
+    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", checkins)
+    monkeypatch.setattr(sentry_sdk, "flush", Mock())
+    operational.register_run_monitor(monitoring.monitor_cron)
+
+    class RecordingTransport(Transport):
+        def capture_envelope(self, envelope: Envelope) -> None:
+            events(envelope)
+
+    sdk_client = sentry_sdk.Client(
+        dsn="https://key@example.invalid/1",
+        transport=RecordingTransport(),
+        default_integrations=False,
+        integrations=[LoggingIntegration()],
+    )
+    try:
+        with sentry_sdk.new_scope() as scope:
+            scope.set_client(sdk_client)
+            yield checkins, events
+    finally:
+        sdk_client.close()
 
 
 def test_job_listing_uses_cronjob_label_and_stable_order(pilot: Pilot) -> None:
@@ -518,37 +556,149 @@ def test_healthy_untriggered_update_validates_without_repass(
         RuntimeError("store read failed"),
     ],
 )
-def test_validation_pages_then_backs_off_outside_update_checkin_and_repasses(
-    pilot: Pilot, failure: Exception, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("name", "kind"),
+    [
+        ("job-12345", "scheduled"),
+        ("job-t202610260600z", "trigger"),
+        ("operator-job", "manual"),
+        ("a" * 52, "manual"),
+    ],
+)
+def test_first_validation_failure_is_quiet_only_after_repass_submission(
+    pilot: Pilot,
+    telemetry: tuple[Mock, Mock],
+    failure: Exception,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    name: str,
+    kind: Literal["scheduled", "trigger", "manual"],
 ) -> None:
-    job = _job("job")
+    checkins, events = telemetry
+    job = _job(name, kind=kind)
     pilot.jobs[:] = [job]
-    events: list[tuple[str, str]] = []
-    operational.register_run_monitor(_recording_monitor(events))
     pilot.validate.side_effect = failure
     pilot.process.side_effect = lambda **kwargs: pilot.write(job, "finalized")
-    submit = Mock()
+    submit = Mock(return_value=True)
     monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
 
     def backoff(seconds: int) -> None:
         assert seconds == 30
         assert pilot.state(job) == "finalized"
-        assert events == [
-            ("enter", _CRON),
-            ("ok", _CRON),
-            ("enter", _CRON.removesuffix("-update") + "-validate"),
-            ("error", _CRON.removesuffix("-update") + "-validate"),
+        assert [call.kwargs["status"] for call in checkins.call_args_list] == [
+            "in_progress",
+            "ok",
         ]
+        assert all(
+            call.kwargs["monitor_slug"] == _CRON for call in checkins.call_args_list
+        )
+        assert not any(record.levelno >= logging.ERROR for record in caplog.records)
 
     pilot.sleep.side_effect = backoff
     with pytest.raises(typer.Exit) as exc:
-        pilot.dataset.update("job")
+        pilot.dataset.update(name)
     assert exc.value.exit_code == 20
     assert exc.value.__cause__ is failure
     submit.assert_called_once_with(
-        _CRON, "job-r1", skip_if_next_run_within_deadline=False
+        _CRON,
+        kubernetes.retry_job_name(name, max_retries=16)[1],
+        skip_if_next_run_within_deadline=False,
     )
     assert pilot.sleep.call_count == 10
+    assert len(checkins.call_args_list) == 2
+    events.assert_not_called()
+    warnings = [
+        record for record in caplog.records if record.levelno >= logging.WARNING
+    ]
+    assert len(warnings) == 1
+    assert warnings[0].levelno == logging.WARNING
+    assert str(failure) in warnings[0].getMessage()
+
+
+@pytest.mark.parametrize("name", ["job", "job-t202610260600z", "job-r1", "job-r2"])
+def test_validation_success_checkins_keep_per_job_ids(
+    pilot: Pilot, telemetry: tuple[Mock, Mock], name: str
+) -> None:
+    checkins, events = telemetry
+    monitor = _CRON.removesuffix("-update") + "-validate"
+    pilot.dataset._validate_after_update(name, materialized_job=_job(name))
+    statuses = [call.kwargs["status"] for call in checkins.call_args_list]
+    assert statuses == (["in_progress", "ok"] if "-r" in name else ["ok"])
+    for call in checkins.call_args_list:
+        assert call.kwargs["check_in_id"] == digest([monitor, name], length=32)
+        assert call.kwargs["monitor_config"]["max_runtime"] == 360
+        assert call.kwargs["monitor_config"]["checkin_margin"] == 370
+    events.assert_not_called()
+
+
+@pytest.mark.parametrize("name", ["job-r1", "job-r2", "job-r16"])
+def test_every_repass_validation_failure_pages_before_backoff(
+    pilot: Pilot,
+    telemetry: tuple[Mock, Mock],
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+) -> None:
+    checkins, events = telemetry
+    pilot.validate.side_effect = validation.OperationalValidationError("missing data")
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", Mock(return_value=True))
+
+    def backoff(seconds: int) -> None:
+        assert [call.kwargs["status"] for call in checkins.call_args_list] == [
+            "in_progress",
+            "error",
+        ]
+        assert events.called
+
+    pilot.sleep.side_effect = backoff
+    with pytest.raises(typer.Exit) as exc:
+        pilot.dataset._validate_after_update(name, materialized_job=_job(name))
+    assert exc.value.exit_code == 20
+    assert [call.kwargs["status"] for call in checkins.call_args_list] == [
+        "in_progress",
+        "error",
+    ]
+    assert checkins.call_args.kwargs["check_in_id"] == digest(
+        [_CRON.removesuffix("-update") + "-validate", name], length=32
+    )
+    assert events.called
+
+
+@pytest.mark.parametrize(
+    "reason", ["superseded", "suspended", "submission-error", "budget"]
+)
+def test_first_validation_failure_pages_without_submitted_repass(
+    pilot: Pilot,
+    telemetry: tuple[Mock, Mock],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    reason: str,
+) -> None:
+    checkins, events = telemetry
+    failure = validation.OperationalValidationError("missing data")
+    pilot.validate.side_effect = failure
+    submit = Mock(return_value=reason != "suspended")
+    if reason == "submission-error":
+        submit.side_effect = RuntimeError("submission failed")
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
+    backoff = Mock(return_value=reason != "superseded")
+    monkeypatch.setattr(pc, "backoff_before_repass", backoff)
+    if reason == "budget":
+        monkeypatch.setattr(
+            kubernetes, "retry_job_name", Mock(return_value=(False, "job-r1"))
+        )
+    with pytest.raises(typer.Exit) as exc:
+        pilot.dataset._validate_after_update("job", materialized_job=_job("job"))
+    assert exc.value.exit_code == 20
+    assert exc.value.__cause__ is failure
+    assert [call.kwargs["status"] for call in checkins.call_args_list] == ["error"]
+    assert events.called
+    assert any(
+        record.levelno == logging.ERROR
+        and record.getMessage() == "Operational validation failed for job"
+        for record in caplog.records
+    )
+    if reason in {"superseded", "budget"}:
+        submit.assert_not_called()
 
 
 def test_late_file_repass_succeeds_and_chain_stops_at_r16(
@@ -901,8 +1051,12 @@ def test_nonzero_index_waits_for_writing_predecessor_before_computing(
 
 
 def test_backoff_error_is_not_logged_as_submission_failure(
-    pilot: Pilot, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    pilot: Pilot,
+    telemetry: tuple[Mock, Mock],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
+    checkins, events = telemetry
     job = _job("job")
     pilot.jobs[:] = [job]
     pilot.validate.side_effect = validation.OperationalValidationError("missing data")
@@ -917,6 +1071,12 @@ def test_backoff_error_is_not_logged_as_submission_failure(
     submit.assert_not_called()
     assert "Operational validation failed for job" in caplog.text
     assert "Could not submit" not in caplog.text
+    assert [
+        call.kwargs["status"]
+        for call in checkins.call_args_list
+        if call.kwargs["monitor_slug"].endswith("-validate")
+    ] == ["error"]
+    assert events.called
 
 
 def test_finalized_marker_requires_temporary_branch(

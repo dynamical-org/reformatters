@@ -5,6 +5,7 @@ import os
 import subprocess
 import time
 from collections.abc import Sequence
+from contextlib import AbstractContextManager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar, cast
@@ -284,45 +285,101 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         materialized_job: client.V1Job | None = None,
         job_fire_time: Timestamp | None = None,
     ) -> None:
+        is_first_pass = materialized_job is not None and kubernetes.retry_job_name(
+            reformat_job_name, max_retries=16
+        )[1].endswith("-r1")
+        first_failure: Exception | None = None
+        if is_first_pass:
+            try:
+                self._validate_dataset(reformat_job_name, job_fire_time=job_fire_time)
+            except Exception as error:
+                log.warning(
+                    "Operational validation failed for %s: %s",
+                    reformat_job_name,
+                    error,
+                    exc_info=True,
+                )
+                first_failure = error
+            if first_failure is not None:
+                try:
+                    submitted = self._submit_validation_retry(
+                        reformat_job_name,
+                        first_failure,
+                        materialized_job=materialized_job,
+                    )
+                except Exception:
+                    with self._validation_monitor(
+                        reformat_job_name, send_in_progress=False
+                    ):
+                        log.exception(
+                            "Operational validation failed for %s", reformat_job_name
+                        )
+                        raise
+                if submitted:
+                    raise typer.Exit(
+                        kubernetes.VALIDATION_FAILURE_EXIT_CODE
+                    ) from first_failure
         try:
-            self._validate_with_monitor(reformat_job_name, job_fire_time=job_fire_time)
+            with self._validation_monitor(
+                reformat_job_name, send_in_progress=not is_first_pass
+            ):
+                if is_first_pass:
+                    if first_failure is not None:
+                        raise first_failure
+                else:
+                    self._validate_dataset(
+                        reformat_job_name, job_fire_time=job_fire_time
+                    )
         except Exception as error:
             log.exception("Operational validation failed for %s", reformat_job_name)
-            if (
-                (
-                    materialized_job is not None
-                    or isinstance(error, validation.OperationalValidationError)
+            if not is_first_pass:
+                self._submit_validation_retry(
+                    reformat_job_name, error, materialized_job=materialized_job
                 )
-                and Config.is_prod
-                and not (
-                    issubclass(self.region_job_class, VirtualRegionJob)
-                    and self._operational_cron_job(ReformatCronJob).concurrency_policy
-                    == "Allow"
-                )
-            ):
-                should_retry, retry_job_name = kubernetes.retry_job_name(
-                    reformat_job_name,
-                    max_retries=16 if materialized_job is not None else 1,
-                )
-                if should_retry and (
-                    materialized_job is None
-                    or parallel_coordination.backoff_before_repass(
-                        self.store_factory,
-                        os.environ["CRON_JOB_NAME"],
-                        materialized_job,
-                        int(retry_job_name.rsplit("-r", 1)[1]),
-                    )
-                ):
-                    try:
-                        kubernetes.create_job_from_cronjob(
-                            os.environ["CRON_JOB_NAME"],
-                            retry_job_name,
-                            skip_if_next_run_within_deadline=materialized_job is None,
-                        )
-                    except Exception:
-                        log.exception("Could not submit %s", retry_job_name)
             # Stop with exit code that fails the job rather than having this pod retry
             raise typer.Exit(kubernetes.VALIDATION_FAILURE_EXIT_CODE) from error
+
+    def _submit_validation_retry(
+        self,
+        reformat_job_name: str,
+        error: Exception,
+        *,
+        materialized_job: client.V1Job | None,
+    ) -> bool:
+        if (
+            (
+                materialized_job is not None
+                or isinstance(error, validation.OperationalValidationError)
+            )
+            and Config.is_prod
+            and not (
+                issubclass(self.region_job_class, VirtualRegionJob)
+                and self._operational_cron_job(ReformatCronJob).concurrency_policy
+                == "Allow"
+            )
+        ):
+            should_retry, retry_job_name = kubernetes.retry_job_name(
+                reformat_job_name,
+                max_retries=16 if materialized_job is not None else 1,
+            )
+            if should_retry and (
+                materialized_job is None
+                or parallel_coordination.backoff_before_repass(
+                    self.store_factory,
+                    os.environ["CRON_JOB_NAME"],
+                    materialized_job,
+                    int(retry_job_name.rsplit("-r", 1)[1]),
+                )
+            ):
+                try:
+                    return kubernetes.create_job_from_cronjob(
+                        os.environ["CRON_JOB_NAME"],
+                        retry_job_name,
+                        skip_if_next_run_within_deadline=materialized_job is None,
+                    )
+                except Exception:
+                    log.exception("Could not submit %s", retry_job_name)
+        return False
 
     def backfill_kubernetes(
         self,
@@ -730,22 +787,23 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         references rather than shards), and CheckReplicaMatchesPrimary on every
         replica.
         """
-        self._validate_with_monitor(reformat_job_name)
+        with self._validation_monitor(reformat_job_name):
+            self._validate_dataset(reformat_job_name)
 
-    def _validate_with_monitor(
-        self, reformat_job_name: str, *, job_fire_time: Timestamp | None = None
-    ) -> None:
-        with self._monitor(
+    def _validation_monitor(
+        self, reformat_job_name: str, *, send_in_progress: bool = True
+    ) -> AbstractContextManager[None]:
+        return self._monitor(
             ReformatCronJob,
             reformat_job_name,
+            send_in_progress=send_in_progress,
             monitor_name=self._validation_monitor_name,
             # Validate shares the same cron schedule as update, but we give it margin
             # so it's not expected to start until after the update work completes.
             checkin_margin=lambda cron: (
                 math.ceil(cron.pod_active_deadline.total_seconds() / 60) + 10
             ),
-        ):
-            self._validate_dataset(reformat_job_name, job_fire_time=job_fire_time)
+        )
 
     def _validation_monitor_name(self) -> str:
         if os.getenv("CRON_JOB_NAME") in {
