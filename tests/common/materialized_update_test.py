@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import pytest
 import sentry_sdk
@@ -34,6 +35,7 @@ from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
 )
 from tests.common.dynamical_dataset_test import _recording_monitor
 from tests.common.parallel_coordination_test import FakeRepo
+from tests.common.validation_test import _replica_and_primary
 
 _CRON = "noaa-hrrr-forecast-48-hour-update"
 
@@ -699,6 +701,69 @@ def test_first_validation_failure_pages_without_submitted_repass(
     )
     if reason in {"superseded", "budget"}:
         submit.assert_not_called()
+
+
+@pytest.mark.parametrize("mismatch", ["coordinate", "variable"])
+@pytest.mark.parametrize(
+    ("name", "submitted"), [("job", True), ("job", False), ("job-r1", True)]
+)
+def test_real_replica_mismatch_alerts_only_without_first_repass(
+    pilot: Pilot,
+    telemetry: tuple[Mock, Mock],
+    monkeypatch: pytest.MonkeyPatch,
+    rng: np.random.Generator,
+    caplog: pytest.LogCaptureFixture,
+    mismatch: str,
+    name: str,
+    submitted: bool,
+) -> None:
+    checkins, events = telemetry
+    replica, primary = _replica_and_primary(rng)
+    if mismatch == "coordinate":
+        replica = replica.isel(time=slice(None, -1))
+    else:
+        replica["temperature"].values[-8:, 0, 0] = 999.0
+    primary = primary.rename(time="init_time")
+    replica = replica.rename(time="init_time")
+    monkeypatch.setattr(
+        type(pilot.dataset),
+        "_validate_dataset",
+        dynamical_dataset.DynamicalDataset._validate_dataset,
+    )
+    monkeypatch.setattr(type(pilot.dataset), "validators", lambda self: ())
+    monkeypatch.setattr(
+        validation.CheckExpectedShards,
+        "check",
+        Mock(return_value=validation.ValidationResult(passed=True, message="ok")),
+    )
+    monkeypatch.setattr(
+        StoreFactory, "replica_stores", Mock(return_value=[MemoryStore()])
+    )
+    open_dataset = Mock(side_effect=[primary, primary, replica, replica])
+    monkeypatch.setattr(validation, "open_flattened_dataset", open_dataset)
+    submit = Mock(return_value=submitted)
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
+    pilot.sleep.side_effect = None
+
+    with pytest.raises(typer.Exit) as exc:
+        pilot.dataset._validate_after_update(name, materialized_job=_job(name))
+
+    assert exc.value.exit_code == 20
+    assert isinstance(exc.value.__cause__, validation.OperationalValidationError)
+    assert "CheckReplicaMatchesPrimary" in str(exc.value.__cause__)
+    assert ("coords" if mismatch == "coordinate" else "vars") in str(
+        exc.value.__cause__
+    )
+    assert open_dataset.call_count == 4
+    submit.assert_called_once()
+    statuses = [call.kwargs["status"] for call in checkins.call_args_list]
+    if name == "job" and submitted:
+        assert statuses == []
+        events.assert_not_called()
+        assert all(record.levelno < logging.ERROR for record in caplog.records)
+    else:
+        assert statuses == (["error"] if name == "job" else ["in_progress", "error"])
+        assert events.called
 
 
 def test_late_file_repass_succeeds_and_chain_stops_at_r16(

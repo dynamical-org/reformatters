@@ -7,7 +7,7 @@ For each dataset an update (`-update`) CronJob runs processing in parallel acros
 ## Sentry monitoring
 _Requires sentry organization invitation._
 
-`-update` alerts mean an update failed, timed out, or missed its run; `-validate` alerts mean checks failed or never ran; if both fire, start with `-update`. Queued materialized updates suppress the first validation failure only when a re-pass is submitted; every re-pass failure alerts.
+`-update` alerts mean an update failed, timed out, or missed its run; `-validate` alerts mean checks failed or never ran; if both fire, start with `-update`. Materialized updates on the [re-pass lifecycle](operational_update_timing.md#materialized-queue-and-re-passes) suppress the first validation failure only when a re-pass is submitted; every re-pass failure alerts.
 - [Crons overview](https://dynamical.sentry.io/insights/crons/) - Start here. If all green, we're good. If red, click in to see the issue and logs.
 - [Issues](https://dynamical.sentry.io/issues/?statsPeriod=12h)
 - [Logs](https://dynamical.sentry.io/explore/logs/) - You can filter these by `cron_job_name` / `job_name` / `pod_name` attributes.
@@ -22,7 +22,7 @@ Accessible via manually triggered github actions. Follow link and click "run wor
 
 ## Troubleshooting
 - **Completion triggers**: Jobs ending in `-t<time>z` are completion triggers. The next scheduled update covers missed triggers; use "Create job from cronjob" to rerun sooner. Manual runs never skip.
-- **Validation fails**: Missing source data is common. A queued materialized update's first failure is quiet if it submits a re-pass. Check "Get jobs" for an active update. If none is running, rerun it with "Create job from cronjob".
+- **Validation fails**: Missing source data is common. Check "Get jobs" for an active update. If none is running, rerun it with "Create job from cronjob".
 - **Update times out**: Use "Get jobs" and "Get pods" to check status. A run whose logs end with `Received SIGTERM, exiting` was stopped by kubernetes (eviction, pod active deadline, or a replacing fire); one whose logs stop with no such line was killed outright (e.g. out of memory) or stopped making progress on its own.
 - **Update fails**: Look at issues and logs. Jobs that raise an error usually require a code change to fix (e.g. structural change to data at the source). If it appears a code change is needed, make a PR, merge it, wait for the deploy action to complete, then re-run the update. If it appears transient, re-run the update job.
 

@@ -285,59 +285,55 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         materialized_job: client.V1Job | None = None,
         job_fire_time: Timestamp | None = None,
     ) -> None:
-        is_first_pass = materialized_job is not None and kubernetes.retry_job_name(
-            reformat_job_name, max_retries=16
-        )[1].endswith("-r1")
-        first_failure: Exception | None = None
-        if is_first_pass:
+        if materialized_job is None or kubernetes.retry_number(reformat_job_name) > 0:
             try:
-                self._validate_dataset(reformat_job_name, job_fire_time=job_fire_time)
-            except Exception as error:
-                log.warning(
-                    "Operational validation failed for %s: %s",
-                    reformat_job_name,
-                    error,
-                    exc_info=True,
-                )
-                first_failure = error
-            if first_failure is not None:
-                try:
-                    submitted = self._submit_validation_retry(
-                        reformat_job_name,
-                        first_failure,
-                        materialized_job=materialized_job,
-                    )
-                except Exception:
-                    with self._validation_monitor(
-                        reformat_job_name, send_in_progress=False
-                    ):
-                        log.exception(
-                            "Operational validation failed for %s", reformat_job_name
-                        )
-                        raise
-                if submitted:
-                    raise typer.Exit(
-                        kubernetes.VALIDATION_FAILURE_EXIT_CODE
-                    ) from first_failure
-        try:
-            with self._validation_monitor(
-                reformat_job_name, send_in_progress=not is_first_pass
-            ):
-                if is_first_pass:
-                    if first_failure is not None:
-                        raise first_failure
-                else:
+                with self._validation_monitor(reformat_job_name):
                     self._validate_dataset(
                         reformat_job_name, job_fire_time=job_fire_time
                     )
-        except Exception as error:
-            log.exception("Operational validation failed for %s", reformat_job_name)
-            if not is_first_pass:
+            except Exception as error:
+                log.exception("Operational validation failed for %s", reformat_job_name)
                 self._submit_validation_retry(
+                    reformat_job_name,
+                    error,
+                    materialized_job=materialized_job,
+                )
+                # Stop with exit code that fails the job rather than having this pod retry
+                raise typer.Exit(kubernetes.VALIDATION_FAILURE_EXIT_CODE) from error
+            return
+
+        def report(error: Exception | None = None) -> None:
+            try:
+                with self._validation_monitor(
+                    reformat_job_name, send_in_progress=False
+                ):
+                    if error is not None:
+                        raise error
+            except Exception as reported_error:
+                if reported_error is not error:
+                    raise
+                log.exception("Operational validation failed for %s", reformat_job_name)
+
+        try:
+            self._validate_dataset(reformat_job_name, job_fire_time=job_fire_time)
+        except Exception as error:
+            log.warning(
+                "Operational validation failed for %s: %s",
+                reformat_job_name,
+                error,
+                exc_info=True,
+            )
+            try:
+                submitted = self._submit_validation_retry(
                     reformat_job_name, error, materialized_job=materialized_job
                 )
-            # Stop with exit code that fails the job rather than having this pod retry
+            except Exception as retry_error:
+                report(retry_error)
+                raise
+            if not submitted:
+                report(error)
             raise typer.Exit(kubernetes.VALIDATION_FAILURE_EXIT_CODE) from error
+        report()
 
     def _submit_validation_retry(
         self,
@@ -368,7 +364,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     self.store_factory,
                     os.environ["CRON_JOB_NAME"],
                     materialized_job,
-                    int(retry_job_name.rsplit("-r", 1)[1]),
+                    kubernetes.retry_number(retry_job_name),
                 )
             ):
                 try:

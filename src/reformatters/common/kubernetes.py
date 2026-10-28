@@ -509,11 +509,15 @@ def job_kind(job: client.V1Job) -> Literal["trigger", "scheduled", "manual"]:
     return "scheduled"
 
 
-def retry_job_name(job_name: str, max_retries: int = 1) -> tuple[bool, str]:
+def retry_number(job_name: str) -> int:
     match = re.search(r"-r([1-9]\d*)$", job_name)
-    retry = int(match[1]) if match else 0
+    return int(match[1]) if match else 0
+
+
+def retry_job_name(job_name: str, max_retries: int = 1) -> tuple[bool, str]:
+    retry = retry_number(job_name)
     should_retry = retry < max_retries
-    parent = job_name[: match.start()] if match else job_name
+    parent = job_name.removesuffix(f"-r{retry}") if retry else job_name
     suffix = f"-r{retry + 1}"
     # Indexed pod hostnames append a hyphen and an int32 completion index.
     max_name_length = 52
