@@ -1,3 +1,7 @@
+import json
+from pathlib import Path
+
+import pandas as pd
 import pytest
 
 from scripts.timing_profile.statistics import (
@@ -79,19 +83,45 @@ def test_median_shift_restarts_at_the_break_in_both_directions(
     before: float, after: float
 ) -> None:
     samples = [(day * 86400, before if day < 172 else after) for day in range(180)]
-    assert regime_start(samples, 180 * 86400) == 172 * 86400
+    assert regime_start(samples, 180 * 86400) == (172 * 86400, False)
 
 
-def test_trailing_outlier_cluster_restarts_before_recent_median_changes() -> None:
+def test_trailing_cluster_needs_more_than_one_day_of_persistence() -> None:
     samples = [(day * 86400, 1800 if day >= 178 else 600) for day in range(180)]
-    assert regime_start(samples, 180 * 86400) == 178 * 86400
-    assert regime_start([*samples[:-1], (179 * 86400, 600)], 180 * 86400) is None
-    assert regime_start(samples[-4:], 180 * 86400) is None
+    assert regime_start(samples, 180 * 86400) == (None, True)
+    assert regime_start([*samples[:-1], (179 * 86400, 600)], 180 * 86400) == (
+        None,
+        False,
+    )
+    assert regime_start(samples[-4:], 180 * 86400) == (None, False)
+
+
+@pytest.mark.parametrize(
+    ("days_back", "before", "after"),
+    [(30, 600, 2400), (120, 2400, 600), (170, 2400, 600)],
+)
+def test_whole_history_split_keeps_the_entire_new_regime(
+    days_back: int, before: float, after: float
+) -> None:
+    boundary = (180 - days_back) * 4
+    samples = [
+        (index * 21600, before if index < boundary else after) for index in range(720)
+    ]
+    assert regime_start(samples, 180 * 86400) == (boundary * 21600, False)
+
+
+@pytest.mark.parametrize("usable_days", [77, 100])
+def test_one_slow_day_with_partial_history_stays_suspected(usable_days: int) -> None:
+    samples = [
+        (index * 21600, 7200 if index >= 716 else 3600)
+        for index in range((180 - usable_days) * 4, 720)
+    ]
+    assert regime_start(samples, 180 * 86400) == (None, True)
 
 
 def test_scattered_outliers_do_not_restart_history() -> None:
     samples = [(day * 86400, 1800 if day in {174, 177} else 600) for day in range(180)]
-    assert regime_start(samples, 180 * 86400) is None
+    assert regime_start(samples, 180 * 86400) == (None, False)
 
 
 @pytest.mark.parametrize("outliers", [1, 2])
@@ -102,3 +132,27 @@ def test_tail_dominated_checks_spread_and_outlier_mass(outliers: int) -> None:
     assert tail_dominated([600] * 98 + [3000, 9000])
     assert tail_dominated([600] * 99 + [900000])
     assert not tail_dominated([600] * 100)
+
+
+@pytest.mark.parametrize("days_after_last", [1, 30])
+def test_real_aifs_step_keeps_the_same_break_as_history_ages(
+    days_after_last: int,
+) -> None:
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures/aifs_ens_arrivals.json").read_text()
+    )
+    anchors = pd.date_range(
+        fixture["start"],
+        periods=len(fixture["arrivals_s"]),
+        freq=pd.Timedelta(hours=fixture["frequency_hours"]),
+    )
+    samples = [
+        (anchor.timestamp(), value)
+        for anchor, value in zip(anchors, fixture["arrivals_s"], strict=True)
+    ]
+    end = (anchors[-1] + pd.Timedelta(days=days_after_last)).timestamp()
+    boundary, suspected = regime_start(samples, end)
+    assert not suspected
+    assert boundary is not None
+    assert boundary == pd.Timestamp("2026-10-20T06:00Z").timestamp()
+    assert sum(anchor >= boundary for anchor, _ in samples) == 31

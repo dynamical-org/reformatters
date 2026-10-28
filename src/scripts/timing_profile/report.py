@@ -116,17 +116,43 @@ def class_history(
     end: pd.Timestamp,
     *,
     virtual: bool,
-) -> tuple[list[MeasuredUnit], pd.Timestamp | None]:
+) -> tuple[list[MeasuredUnit], pd.Timestamp | None, bool]:
     samples = [
         (unit.unit.anchor.timestamp(), value)
         for unit in units
         if (value := unit.first if virtual else unit.complete) is not None
     ]
-    start = regime_start(samples, end.timestamp())
+    start, suspected = regime_start(samples, end.timestamp())
     boundary = pd.Timestamp(start, unit="s") if start is not None else None
+    return (
+        [unit for unit in units if boundary is None or unit.unit.anchor >= boundary],
+        boundary,
+        suspected,
+    )
+
+
+def small_sample(anchors: Sequence[pd.Timestamp]) -> bool:
+    ordered = sorted(anchors)
+    daily = (
+        len(ordered) > 1
+        and min((right - left).total_seconds() for left, right in pairwise(ordered))
+        >= 86400
+    )
+    return len(ordered) < (300 if daily else 100)
+
+
+def rate_arrivals(
+    units: Sequence[MeasuredUnit], end: pd.Timestamp, horizon: float
+) -> list[float | None]:
     return [
-        unit for unit in units if boundary is None or unit.unit.anchor >= boundary
-    ], boundary
+        unit.complete
+        for unit in units
+        if unit.missing_files < len(unit.unit.files)
+        and (
+            unit.complete is not None
+            or (end - unit.unit.anchor).total_seconds() > horizon
+        )
+    ]
 
 
 def render_class_evidence(
@@ -136,7 +162,7 @@ def render_class_evidence(
     *,
     virtual: bool,
 ) -> list[str]:
-    active, boundary = class_history(units, end, virtual=virtual)
+    active, boundary, suspected = class_history(units, end, virtual=virtual)
     samples = [
         (unit, value)
         for unit in active
@@ -164,7 +190,14 @@ def render_class_evidence(
     if boundary is not None:
         lines.extend(
             [
-                f"**Regime restart at {boundary.isoformat()}Z:** retained {len(active)}/{len(units)} requested units. Last-14-day median shift ≥15 min or a trailing cluster above the earlier max normal; statistics and recommendations use this history.",
+                f"**Regime restart at {boundary.isoformat()}Z:** retained {len(active)}/{len(units)} requested units. Whole-history segment medians differ by ≥15 min, or a trailing cluster exceeds the earlier max normal; the retained segment spans more than 24 hours.",
+                "",
+            ]
+        )
+    if suspected:
+        lines.extend(
+            [
+                "**suspected change, review:** the terminal episode spans at most 24 hours; history is retained.",
                 "",
             ]
         )
@@ -175,15 +208,10 @@ def render_class_evidence(
                 "",
             ]
         )
-    daily = (
-        len(anchors) > 1
-        and min((right - left).total_seconds() for left, right in pairwise(anchors))
-        >= 86400
-    )
-    if len(samples) < (300 if daily else 100):
+    if small_sample(anchors):
         lines.extend(
             [
-                f"**Small sample: n={len(samples)}; need ~{'300 for daily classes' if daily else '100 units'} before relying on p99.**",
+                f"**Small sample: n={len(samples)}; hand value needed.** Require ~100 units, or ~300 for daily classes, before using p99-derived constants.",
                 "",
             ]
         )
@@ -211,7 +239,7 @@ def render_class_evidence(
     if tail_dominated(values):
         lines.extend(
             [
-                "**tail-dominated, hand value needed:** p99 + 3 exceeds max normal + 3 by >15 min, or >1% of units exceed max normal. Automatic constants are withheld for the affected readiness tier.",
+                "**tail-dominated, hand value needed:** p99 + 3 exceeds max normal + 3 by >15 min, or >1% of units exceed max normal. p99-derived constants are withheld for the affected readiness tier; virtual raw-E polling fires remain available.",
                 "",
             ]
         )
@@ -325,7 +353,7 @@ def recommend(
         for name, original in cycle_classes(
             [unit for unit in units if unit.unit.tier == tier], virtual=virtual
         ):
-            grouped, _ = class_history(original, end, virtual=virtual)
+            grouped, _, _ = class_history(original, end, virtual=virtual)
             active_units.extend(grouped)
             arrivals = [
                 value
@@ -353,7 +381,19 @@ def recommend(
             )
             classes.append(
                 ClassRecommendation(
-                    tier, name, offset, delay, threshold, tail_dominated(arrivals)
+                    tier,
+                    name,
+                    offset,
+                    delay,
+                    threshold,
+                    tail_dominated(arrivals)
+                    or small_sample(
+                        [
+                            unit.unit.anchor
+                            for unit in grouped
+                            if (unit.first if virtual else unit.complete) is not None
+                        ]
+                    ),
                 )
             )
     first_tier = [value for value in classes if value.tier == tiers[0]]
@@ -364,7 +404,7 @@ def recommend(
         if virtual and raw and runtime.startup_estimate is not None
         else (None if virtual or not offsets else ceil_minute(max(offsets)))
     )
-    if any(value.hand_value for value in first_tier):
+    if not virtual and any(value.hand_value for value in first_tier):
         chosen = None
     delays = (
         [value.delay for value in first_tier]
@@ -486,7 +526,7 @@ def render_dataset(
             evidence_lines.extend(
                 render_class_evidence(cycle_class, original, end, virtual=virtual)
             )
-            grouped, _ = class_history(original, end, virtual=virtual)
+            grouped, _, _ = class_history(original, end, virtual=virtual)
             complete = [unit.complete for unit in grouped if unit.complete is not None]
             first = [unit.first for unit in grouped if unit.first is not None]
             horizon = max(
@@ -549,12 +589,13 @@ def render_dataset(
             )
             if not manual and not virtual:
                 fire = recommendation.offset
-                eligible = [
-                    unit.complete
+                eligible = rate_arrivals(grouped, end, horizon)
+                empty = sum(
+                    unit.complete is None
+                    and unit.missing_files == len(unit.unit.files)
+                    and (end - unit.unit.anchor).total_seconds() > horizon
                     for unit in grouped
-                    if unit.complete is not None
-                    or (end - unit.unit.anchor).total_seconds() > horizon
-                ]
+                )
                 repass, page = (
                     read_rates(
                         eligible,
@@ -567,17 +608,17 @@ def render_dataset(
                     else (None, None)
                 )
                 rates.append(
-                    f"| {cycle_class} | {duration(schedule_offset(stats) if stats else None)} | {duration(fire)} | {f'{repass:.2%}' if repass is not None else 'unmeasured'} | {f'{page:.2%}' if page is not None else 'unmeasured'} | {missing} |"
+                    f"| {cycle_class} | {duration(schedule_offset(stats) if stats else None)} | {duration(fire)} | {f'{repass:.2%}' if repass is not None else 'unmeasured'} | {f'{page:.2%}' if page is not None else 'unmeasured'} | {empty} |"
                 )
         lines.extend(["", *evidence_lines])
         if rates:
             lines.extend(
                 [
-                    "| Cycle class | Class S/T = p99 + 3 min | Single-cron S used | Estimated re-pass rate | Estimated page rate | Older unresolved units included |",
+                    "| Cycle class | Class S/T = p99 + 3 min | Single-cron S used | Estimated re-pass rate | Estimated page rate | Older units with no observed files (excluded) |",
                     "|---|---:|---:|---:|---:|---:|",
                     *rates,
                     "",
-                    "Estimates use p50 L/R/V: re-pass means incomplete at S + L; page means still incomplete at S + L + R + V + 5 min back-off + L. The first validation failure is quiet when a re-pass is queued. Recent incomplete units are censored; older unresolved units are included as incomplete and can reflect source retention. Complete-unit lateness can overstate validation failures for multi-position units; trigger rescue is unmeasured. These are read-model estimates, not observed pages.",
+                    "Estimates use p50 L/R/V: re-pass means incomplete at S + L; page means still incomplete at S + L + R + V + 5 min back-off + L. The first validation failure is quiet when a re-pass is queued. Recent incomplete units are censored. Unresolved units with an observed file count as incomplete; units with no observed files are excluded from the rate denominator and counted separately because retention is indistinguishable from nonarrival. Complete-unit lateness can overstate validation failures for multi-position units; trigger rescue is unmeasured. These are read-model estimates, not observed pages.",
                     "",
                 ]
             )
@@ -590,7 +631,7 @@ def render_dataset(
         ]
     )
     lines.extend(
-        f"| {value.tier} / {value.cycle_class}{' (hand value needed)' if value.hand_value else ''} | {duration(value.offset) if not value.hand_value else 'hand value needed'} | {duration(ceil_minute(value.delay)) if not value.hand_value else 'hand value needed'} | {duration(value.threshold) if not value.hand_value else 'hand value needed'} |"
+        f"| {value.tier} / {value.cycle_class}{' (hand value needed)' if value.hand_value else ''} | {duration(value.offset) if virtual or not value.hand_value else 'hand value needed'} | {duration(ceil_minute(value.delay)) if not value.hand_value else 'hand value needed'} | {duration(value.threshold) if not value.hand_value else 'hand value needed'} |"
         for value in recommendation.classes
     )
     lines.extend(render_single_cron(dataset, cron, recommendation, units, interval))
@@ -609,7 +650,7 @@ def render_single_cron(
     chosen = recommendation.offset
     deadline = recommendation.deadline
     scalar_delay = recommendation.delay
-    if chosen is not None and scalar_delay is not None:
+    if chosen is not None:
         current_delay = next(
             (
                 validator.max_delay.total_seconds()
@@ -625,7 +666,7 @@ def render_single_cron(
                 "| Constant | Current | Recommended | Recommended minus current |",
                 "|---|---|---|---:|",
                 f"| Cron | `{cron.schedule}` | `{new_cron}` | anchor attribution not inferred |",
-                f"| max_delay | {duration(current_delay)} | {duration(scalar_delay)} | {duration(scalar_delay - current_delay) if current_delay is not None else 'unmeasured'} |",
+                f"| max_delay | {duration(current_delay)} | {duration(scalar_delay) if scalar_delay is not None else 'hand value needed'} | {duration(scalar_delay - current_delay) if current_delay is not None and scalar_delay is not None else 'unmeasured'} |",
                 f"| Pod deadline | {duration(cron.pod_active_deadline.total_seconds())} | {duration(ceil(deadline)) if deadline is not None else 'unmeasured; keep constants'} | {duration(ceil(deadline) - cron.pod_active_deadline.total_seconds()) if deadline is not None else 'unmeasured'} |",
                 f"| Job deadline | {duration(cron.active_deadline.total_seconds()) if cron.active_deadline else 'unset'} | {duration(ceil(deadline)) if deadline is not None else 'unmeasured; keep constants'} | {duration(ceil(deadline) - cron.active_deadline.total_seconds()) if deadline is not None and cron.active_deadline else 'unset or unmeasured'} |",
             ]

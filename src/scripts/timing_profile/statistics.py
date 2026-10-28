@@ -46,37 +46,44 @@ def max_normal_cut(values: Sequence[float]) -> float:
     )
 
 
-def regime_start(samples: Sequence[tuple[float, float]], end: float) -> float | None:
+def regime_start(
+    samples: Sequence[tuple[float, float]], end: float
+) -> tuple[float | None, bool]:
     ordered = sorted(samples)
-    split = next(
-        (i for i, (anchor, _) in enumerate(ordered) if anchor >= end - 14 * 86400),
-        len(ordered),
-    )
-    if split < 5 or len(ordered) - split < 5:
-        return None
+    if len(ordered) < 10:
+        return None, False
     values = np.array([value for _, value in ordered])
-    before, after = float(np.median(values[:split])), float(np.median(values[split:]))
-    if abs(after - before) >= 15 * 60:
 
-        def loss(index: int) -> float:
-            left, right = values[:index], values[index:]
-            return float(
-                np.abs(left - np.median(left)).sum()
-                + np.abs(right - np.median(right)).sum()
-            )
+    def loss(index: int) -> float:
+        left, right = values[:index], values[index:]
+        return float(
+            np.abs(left - np.median(left)).sum()
+            + np.abs(right - np.median(right)).sum()
+        )
 
-        boundary = min(range(split, len(ordered) - 4), key=loss)
-        return ordered[boundary][0]
-    cut = max_normal_cut(values[:split].tolist())
-    boundary = len(ordered)
-    while boundary > split and values[boundary - 1] > cut:
-        boundary -= 1
+    boundary = min(range(5, len(ordered) - 4), key=loss)
     if (
-        len(ordered) - boundary >= 2
-        and (len(ordered) - boundary) / len(ordered) >= 0.01
+        abs(float(np.median(values[:boundary]) - np.median(values[boundary:])))
+        < 15 * 60
     ):
-        return ordered[boundary][0]
-    return None
+        split = next(
+            (i for i, (anchor, _) in enumerate(ordered) if anchor >= end - 14 * 86400),
+            len(ordered),
+        )
+        if split < 5:
+            return None, False
+        cut = max_normal_cut(values[:split].tolist())
+        boundary = len(ordered)
+        while boundary > split and values[boundary - 1] > cut:
+            boundary -= 1
+        if (
+            len(ordered) - boundary < 2
+            or (len(ordered) - boundary) / len(ordered) < 0.01
+        ):
+            return None, False
+    if ordered[-1][0] - ordered[boundary][0] <= 86400:
+        return None, True
+    return ordered[boundary][0], False
 
 
 def tail_dominated(values: Sequence[float]) -> bool:

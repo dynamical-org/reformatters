@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pandas as pd
 import pytest
 
@@ -10,6 +12,7 @@ from scripts.timing_profile.report import (
     class_history,
     cron_interval,
     cycle_classes,
+    rate_arrivals,
     recommend,
     recommended_cron,
     render_class_evidence,
@@ -17,6 +20,7 @@ from scripts.timing_profile.report import (
 )
 from scripts.timing_profile.runtime import RuntimeStats
 from scripts.timing_profile.sources import Listing
+from scripts.timing_profile.statistics import read_rates
 
 
 def test_index_arrival_controls_usable_file_and_missing_member_blocks_unit() -> None:
@@ -97,9 +101,10 @@ def measured_units(
     *,
     gated: bool = False,
     tier: str = "run",
+    copies: int = 1,
 ) -> list[MeasuredUnit]:
     result = []
-    for index, (hour, offsets) in enumerate(samples):
+    for index, (hour, offsets) in enumerate(samples * copies):
         anchor = pd.Timestamp("2026-10-20") + pd.Timedelta(days=index, hours=hour)
         files = tuple(
             frozenset([f"s3://bucket/data/{index}-{number}"])
@@ -162,7 +167,7 @@ def test_final_recommendations(
     spacing: float,
     expected: tuple[float | None, ...],
 ) -> None:
-    units = measured_units(samples, gated=gated)
+    units = measured_units(samples, gated=gated, copies=300)
     recommendation = recommend(
         units,
         runtime(),
@@ -180,10 +185,12 @@ def test_final_recommendations(
 
 
 def test_virtual_classes_split_on_visibility_and_polling_uses_all_tiers() -> None:
-    units = measured_units([(0, (600, 3000)), (6, (1800, 3000))], tier="z first")
+    units = measured_units(
+        [(0, (600, 3000)), (6, (1800, 3000))], tier="z first", copies=300
+    )
     assert len(cycle_classes(units, virtual=True)) == 2
     assert len(cycle_classes(units)) == 1
-    units += measured_units([(0, (60, 5000))], tier="a second")
+    units += measured_units([(0, (60, 5000))], tier="a second", copies=300)
     result = recommend(
         units,
         runtime(),
@@ -246,7 +253,7 @@ def test_mrms_reports_pass_one_and_keeps_constants() -> None:
     assert "| chosen |" not in rendered
 
 
-def test_rates_at_recommended_single_cron_include_older_missing_unit() -> None:
+def test_rates_at_recommended_single_cron_exclude_unobserved_units() -> None:
     dataset = next(
         ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-forecast"
     )
@@ -255,7 +262,7 @@ def test_rates_at_recommended_single_cron_include_older_missing_unit() -> None:
         for resource in dataset.operational_kubernetes_resources("test")
         if isinstance(resource, ReformatCronJob)
     )
-    units = measured_units([(0, (600,)), (0, (1200,))])
+    units = measured_units([(0, (600,)), (0, (1200,))], copies=300)
     missing = Unit(
         pd.Timestamp("2026-10-22"), "run", (frozenset(["s3://bucket/data/missing"]),), 0
     )
@@ -263,7 +270,7 @@ def test_rates_at_recommended_single_cron_include_older_missing_unit() -> None:
     rendered = render_dataset(
         dataset, cron, units, runtime(), pd.Timestamp("2026-10-26"), None, {"S3"}
     )
-    assert "| 00Z | 00:23:00 | 00:23:00 | 33.33% | 33.33% | 1 |" in rendered
+    assert "| 00Z | 00:23:00 | 00:23:00 | 0.00% | 0.00% | 1 |" in rendered
     assert "| Cron |" in rendered
     assert "first validation failure is quiet" in rendered
     assert "`23 0,6,12,18 * * *`" in rendered
@@ -285,7 +292,7 @@ def test_rates_at_recommended_single_cron_include_older_missing_unit() -> None:
 def test_chosen_schedule_drives_final_cron_offset_and_currency(
     arrivals: list[float], expected: float | None
 ) -> None:
-    units = measured_units([(0, (arrival,)) for arrival in arrivals])
+    units = measured_units([(0, (arrival,)) for arrival in arrivals], copies=300)
     result = recommend(
         units,
         runtime(),
@@ -304,7 +311,8 @@ def test_evidence_restarts_shifted_history_and_flags_daily_small_samples() -> No
         [(0, (600,)) for _ in range(172)] + [(0, (1800,)) for _ in range(8)]
     )
     end = pd.Timestamp("2026-10-20") + pd.Timedelta(days=180)
-    active, boundary = class_history(units, end, virtual=False)
+    active, boundary, suspected = class_history(units, end, virtual=False)
+    assert not suspected
     assert active == units[172:]
     assert boundary == units[172].unit.anchor
     rendered = "\n".join(render_class_evidence("00Z", units, end, virtual=False))
@@ -325,7 +333,8 @@ def test_evidence_restarts_shifted_history_and_flags_daily_small_samples() -> No
         spacing=86400,
         end=end,
     )
-    assert result.offset == 1980
+    assert result.offset is None
+    assert result.classes[0].hand_value
     assert result.classes[0].threshold == 1980
 
 
@@ -360,7 +369,9 @@ def test_rates_use_latest_class_single_cron() -> None:
         for resource in dataset.operational_kubernetes_resources("test")
         if isinstance(resource, ReformatCronJob)
     )
-    units = measured_units([(0, (600,)), (0, (900,)), (6, (1800,)), (6, (1800,))])
+    units = measured_units(
+        [(0, (600,)), (0, (900,)), (6, (1800,)), (6, (1800,))], copies=300
+    )
     rendered = render_dataset(
         dataset, cron, units, runtime(), pd.Timestamp("2026-10-26"), None, {"S3"}
     )
@@ -377,8 +388,117 @@ def test_rate_estimates_use_runtime_medians_rather_than_budget_p95s() -> None:
         for resource in dataset.operational_kubernetes_resources("test")
         if isinstance(resource, ReformatCronJob)
     )
-    units = measured_units([(0, (600,)) for _ in range(100)] + [(0, (900,))])
+    units = measured_units([(0, (600,)) for _ in range(100)] + [(0, (900,))], copies=3)
     budgets = RuntimeStats(200, 1000, 1000, 1200, 10, 10, 0, 0, None, None, 10, 30, 20)
     end = units[-1].unit.anchor + pd.Timedelta(hours=12)
     rendered = render_dataset(dataset, cron, units, budgets, end, None, {"S3"})
     assert "| 00Z | 00:13:00 | 00:13:00 | 0.99% | 0.00% |" in rendered
+
+
+@pytest.mark.parametrize("slow_days", [2, 3])
+def test_short_daily_outage_requires_a_hand_value(slow_days: int) -> None:
+    units = measured_units(
+        [(0, (600,))] * (180 - slow_days) + [(0, (7200,))] * slow_days
+    )
+    end = units[-1].unit.anchor + pd.Timedelta(days=1)
+    active, boundary, suspected = class_history(units, end, virtual=False)
+    assert len(active) == (180 if slow_days == 2 else 5)
+    assert suspected == (slow_days == 2)
+    assert (boundary is None) == (slow_days == 2)
+    recommendation = recommend(
+        units,
+        runtime(),
+        virtual=False,
+        interval=86400,
+        currency_interval=86400,
+        spacing=86400,
+        end=end,
+    )
+    assert recommendation.offset is None
+    assert recommendation.delay is None
+    assert recommendation.classes[0].hand_value
+
+
+@pytest.mark.parametrize("usable_days", [77, 100])
+def test_single_slow_day_does_not_erase_partial_history(usable_days: int) -> None:
+    units = measured_units([(0, (3600,))] * (usable_days * 4))
+    units = [
+        replace(
+            unit,
+            unit=replace(
+                unit.unit,
+                anchor=pd.Timestamp("2026-01-01") + pd.Timedelta(hours=6 * index),
+            ),
+        )
+        for index, unit in enumerate(units)
+    ]
+    units = [
+        replace(unit, complete=7200, first=7200, raw_first=7200)
+        if index >= len(units) - 4
+        else unit
+        for index, unit in enumerate(units)
+    ]
+    end = units[-1].unit.anchor + pd.Timedelta(hours=6)
+    active, boundary, suspected = class_history(units, end, virtual=False)
+    assert active == units
+    assert boundary is None
+    assert suspected
+    rendered = "\n".join(
+        render_class_evidence("00/06/12/18Z", units, end, virtual=False)
+    )
+    assert "suspected change, review" in rendered
+    assert "Regime restart" not in rendered
+
+
+def test_icon_shaped_rate_denominator_excludes_empty_but_keeps_partial_units() -> None:
+    units = measured_units([(0, (600,)), (0, (700,)), (0, (900,))])
+    old = Unit(
+        pd.Timestamp("2026-01-01"), "run", (frozenset(["s3://bucket/data/none"]),), 0
+    )
+    units.extend(
+        [
+            aggregate_unit(old, {"s3://bucket/data/": Listing({}, "S3")})
+            for _ in range(10)
+        ]
+    )
+    end = pd.Timestamp("2027-01-01")
+    arrivals = rate_arrivals(units, end, 900)
+    assert arrivals == [600, 700, 900]
+    assert read_rates(arrivals, 750, 10, 30, 20) == (1 / 3, 0)
+    partial = measured_units([(0, (600, 700))])[0]
+    partial = replace(partial, complete=None, missing_files=1)
+    arrivals = rate_arrivals([*units, partial], end, 900)
+    assert arrivals == [600, 700, 900, None]
+    assert read_rates(arrivals, 750, 10, 30, 20) == (0.5, 0.25)
+
+
+def test_virtual_hand_value_withholds_currency_but_preserves_raw_e_fire() -> None:
+    units = measured_units(
+        [(0, (600,))] * 97 + [(0, (3000,)), (0, (600,)), (0, (9000,))], copies=4
+    )
+    end = units[-1].unit.anchor + pd.Timedelta(hours=12)
+    recommendation = recommend(
+        units,
+        runtime(),
+        virtual=True,
+        interval=21600,
+        currency_interval=21600,
+        spacing=21600,
+        end=end,
+    )
+    assert recommendation.classes[0].hand_value
+    assert recommendation.offset == 480
+    assert recommendation.delay is None
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-forecast-virtual"
+    )
+    cron = next(
+        resource
+        for resource in dataset.operational_kubernetes_resources("test")
+        if isinstance(resource, ReformatCronJob)
+    )
+    rendered = render_dataset(dataset, cron, units, runtime(), end, None, {"S3"})
+    assert "| Cron |" in rendered
+    assert "| max_delay |" in rendered
+    assert "hand value needed" in rendered
+    assert "One-cron offset: 00:08:00" in rendered

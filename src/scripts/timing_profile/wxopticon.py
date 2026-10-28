@@ -58,12 +58,12 @@ def parse_events(body: str, product: str) -> dict[str, Evidence]:
         if not line.strip():
             continue
         event = json.loads(line)
+        if event["kind"] != "found":
+            continue
         if event.get("schema_version") != 4 or event.get("product_id") != product:
             raise UnavailableError(
                 "unsupported wxopticon event schema or product identity"
             )
-        if event["kind"] != "found":
-            continue
         for artifact in event.get("artifact_bundle") or [event]:
             url = artifact.get("url")
             if url is None:

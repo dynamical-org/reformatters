@@ -387,3 +387,14 @@ def test_unsupported_grouped_products_do_not_download_history(tmp_path: Path) ->
     ):
         assert WxopticonSource(source).measure(dataset, [unit])[0] == {}
     source.close()
+
+
+def test_legacy_non_found_events_do_not_discard_modern_artifact_evidence() -> None:
+    observed = {"kind": "observed", "schema_version": 3, "product_id": "legacy-product"}
+    objects = parse_events(
+        "\n".join(map(json.dumps, [observed, event("a", 60)])), PRODUCT
+    )
+    assert set(objects) == {canonical_url(ROOT + "a"), canonical_url(ROOT + "a.idx")}
+    assert objects[canonical_url(ROOT + "a.idx")].arrival == ANCHOR + pd.Timedelta(
+        seconds=70
+    )
