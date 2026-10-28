@@ -22,65 +22,93 @@ def arrival_stats(values: Sequence[float]) -> ArrivalStats:
     return ArrivalStats(len(values), float(p50), float(p95), float(p99), min(values))
 
 
-def late_threshold(stats: ArrivalStats) -> float:
-    return stats.p95 + max(stats.p95 - stats.p50, 15 * 60)
-
-
-def schedule_candidates(stats: ArrivalStats) -> dict[str, float]:
-    candidates = {
-        "draft": stats.p95 + max(stats.p95 - stats.p50, 5 * 60),
-        "p99+1m": stats.p99 + 60,
-        "spread, min 3m": stats.p95 + max(stats.p95 - stats.p50, 3 * 60),
-    }
-    candidates["chosen"] = schedule_offset(stats)
-    return candidates
-
-
 def schedule_offset(stats: ArrivalStats) -> float:
-    return min(stats.p95 + max(stats.p95 - stats.p50, 5 * 60), stats.p99 + 60)
+    return ceil_minute(stats.p99 + 3 * 60)
+
+
+def max_normal_gap(values: Sequence[float]) -> float:
+    p50, p90 = np.percentile(values, [50, 90])
+    return max(3 * 60, float(p90 - p50))
 
 
 def max_normal_cut(values: Sequence[float]) -> float:
     assert values, "At least one arrival is required"
     ordered = sorted(values)
     median = float(np.median(ordered))
-    gaps = [
-        (right - left, left)
-        for left, right in pairwise(ordered)
-        if left >= median and right > left
-    ]
-    return max(gaps, key=lambda pair: pair[0])[1] if gaps else ordered[-1]
+    gap = max_normal_gap(values)
+    return next(
+        (
+            left
+            for left, right in pairwise(ordered)
+            if left >= median and right - left > gap
+        ),
+        ordered[-1],
+    )
 
 
-def recent_shift(
-    samples: Sequence[tuple[float, float]], end: float
-) -> tuple[float, float] | None:
-    recent = [value for anchor, value in samples if end - 7 * 86400 <= anchor < end]
-    prior = [
-        value
-        for anchor, value in samples
-        if end - 35 * 86400 <= anchor < end - 7 * 86400
-    ]
-    if len(recent) < 5 or len(prior) < 5:
+def regime_start(samples: Sequence[tuple[float, float]], end: float) -> float | None:
+    ordered = sorted(samples)
+    split = next(
+        (i for i, (anchor, _) in enumerate(ordered) if anchor >= end - 14 * 86400),
+        len(ordered),
+    )
+    if split < 5 or len(ordered) - split < 5:
         return None
-    before, after = float(np.median(prior)), float(np.median(recent))
-    return (before, after) if abs(after - before) >= 15 * 60 else None
+    values = np.array([value for _, value in ordered])
+    before, after = float(np.median(values[:split])), float(np.median(values[split:]))
+    if abs(after - before) >= 15 * 60:
+
+        def loss(index: int) -> float:
+            left, right = values[:index], values[index:]
+            return float(
+                np.abs(left - np.median(left)).sum()
+                + np.abs(right - np.median(right)).sum()
+            )
+
+        boundary = min(range(split, len(ordered) - 4), key=loss)
+        return ordered[boundary][0]
+    cut = max_normal_cut(values[:split].tolist())
+    boundary = len(ordered)
+    while boundary > split and values[boundary - 1] > cut:
+        boundary -= 1
+    if (
+        len(ordered) - boundary >= 2
+        and (len(ordered) - boundary) / len(ordered) >= 0.01
+    ):
+        return ordered[boundary][0]
+    return None
 
 
-def candidate_outcomes(
-    arrivals: Sequence[float],
-    offset: float,
+def tail_dominated(values: Sequence[float]) -> bool:
+    cut = max_normal_cut(values)
+    return (
+        schedule_offset(arrival_stats(values)) - ceil_minute(cut + 3 * 60) > 15 * 60
+        or sum(value > cut for value in values) / len(values) > 0.01
+    )
+
+
+def read_rates(
+    arrivals: Sequence[float | None],
+    fire: float,
     startup: float | None,
     runtime: float | None,
-) -> tuple[float, float | None]:
-    fraction = sum(value > offset for value in arrivals) / len(arrivals)
-    on_time = [offset - value for value in arrivals if value <= offset]
-    latency = (
-        float(np.median(on_time)) + startup + runtime
-        if on_time and startup is not None and runtime is not None
+    validation: float | None,
+) -> tuple[float | None, float | None]:
+    if not arrivals or startup is None:
+        return None, None
+
+    def incomplete(offset: float) -> float:
+        return sum(value is None or value > offset for value in arrivals) / len(
+            arrivals
+        )
+
+    repass = incomplete(fire + startup)
+    page = (
+        incomplete(fire + 2 * startup + runtime + validation + 5 * 60)
+        if runtime is not None and validation is not None
         else None
     )
-    return fraction, latency
+    return repass, page
 
 
 def virtual_fire(earliest: float, startup: float) -> float:

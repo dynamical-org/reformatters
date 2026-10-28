@@ -7,24 +7,18 @@ from dataclasses import dataclass
 import httpx
 import pandas as pd
 
+from reformatters.common.logging import get_logger
+
 from .datasets import Unit
 from .sources import TimestampSource, canonical_url
 
 BASE_URL = "https://assets.dynamical.org/wxopticon"
+log = get_logger(__name__)
 
 PRODUCTS = {
     "noaa-gfs": ("external-noaa-gfs-aws",),
     "noaa-hrrr-forecast-48-hour": ("external-noaa-hrrr-aws",),
     "noaa-hrrr": ("external-noaa-hrrr-18h-aws", "external-noaa-hrrr-aws"),
-    "noaa-gefs-forecast-35-day": ("external-noaa-gefs-long-aws",),
-    "noaa-gefs-forecast-10-day": ("external-noaa-gefs-10-day-aws",),
-    "noaa-gefs-forecast-16-day": ("external-noaa-gefs-16-day-aws",),
-    "noaa-gefs-analysis": (
-        "external-noaa-gefs-long-aws",
-        "external-noaa-gefs-short-aws",
-        "external-noaa-gefs-10-day-aws",
-        "external-noaa-gefs-16-day-aws",
-    ),
     "noaa-rrfs-forecast-84-hour": ("external-noaa-rrfs-84h-aws",),
     "noaa-rrfs-forecast-18-hour": ("external-noaa-rrfs-18h-aws",),
     "noaa-rrfs-forecast-sub-hourly": ("external-noaa-rrfs-subh-aws",),
@@ -34,7 +28,6 @@ PRODUCTS = {
     "ecmwf-aifs-single": ("external-ecmwf-aifs-gcs",),
     "ecmwf-aifs-ens": ("external-ecmwf-aifs-ens-aws",),
     "dwd-icon-eu": ("external-dwd-icon-eu",),
-    "eccc-hrdps": ("external-eccc-hrdps-datamart",),
 }
 
 
@@ -96,6 +89,13 @@ class WxopticonSource:
         return self.read(product, f"archive/{product}/{day:%Y-%m-%d}.jsonl")
 
     def read(self, product: str, key: str) -> dict[str, Evidence]:
+        try:
+            return self._read(product, key)
+        except (httpx.HTTPError, UnavailableError, json.JSONDecodeError) as error:
+            log.info("wxopticon shard unavailable: %s (%s)", key, error)
+            return {}
+
+    def _read(self, product: str, key: str) -> dict[str, Evidence]:
         url = f"{BASE_URL}/{key}"
         path = self.source.cache_dir / (
             hashlib.sha256(url.encode()).hexdigest() + ".wxopticon.json"
@@ -120,57 +120,39 @@ class WxopticonSource:
 
     def measure(
         self, dataset_id: str, units: Sequence[Unit]
-    ) -> tuple[dict[str, Evidence] | None, str]:
+    ) -> tuple[dict[str, Evidence], str]:
         products = products_for(dataset_id)
         if not products or not units:
-            return None, "listings fallback: no wxopticon per-file product mapping"
+            return {}, "listings fallback: no wxopticon per-file product mapping"
         required = {
             canonical_url(url) for unit in units for file in unit.files for url in file
         }
         days = pd.date_range(
-            min(unit.anchor for unit in units).normalize()
-            - (
-                pd.Timedelta(days=1)
-                if dataset_id.startswith("noaa-hrrr-analysis")
-                else pd.Timedelta(0)
-            ),
+            min(unit.anchor for unit in units).normalize() - pd.Timedelta(days=1),
             max(unit.anchor for unit in units).normalize(),
             freq="1D",
         )
         requests = [(product, day) for product in products for day in days]
         objects: dict[str, Evidence] = {}
-        try:
-            with ThreadPoolExecutor(self.source.workers) as pool:
-                results = pool.map(
-                    lambda request: self.day(*request),
-                    requests,
-                    buffersize=self.source.workers,
-                )
-                for result in results:
-                    for url, evidence in result.items():
-                        if url in required and (
-                            url not in objects
-                            or evidence.arrival < objects[url].arrival
-                        ):
-                            objects[url] = evidence
-            if required - objects.keys():
-                for product in products:
-                    for url, evidence in self.read(
-                        product, f"state/active/{product}.jsonl"
-                    ).items():
-                        if url in required and (
-                            url not in objects
-                            or evidence.arrival < objects[url].arrival
-                        ):
-                            objects[url] = evidence
-        except (httpx.HTTPError, UnavailableError, json.JSONDecodeError) as error:
-            return None, f"listings fallback: wxopticon unavailable ({error})"
-        missing = required - objects.keys()
-        if missing:
-            return None, (
-                f"listings fallback: wxopticon maps {len(required) - len(missing)}/{len(required)} required artifacts; "
-                f"missing example: {min(missing)}. History gaps and grouped evidence cannot establish exact file arrival."
+        with ThreadPoolExecutor(self.source.workers) as pool:
+            results = pool.map(
+                lambda request: self.day(*request),
+                requests,
+                buffersize=self.source.workers,
             )
-        return {
-            url: objects[url] for url in required
-        }, f"wxopticon per-file history: {', '.join(products)}"
+            for result in results:
+                for url, evidence in result.items():
+                    if url in required and (
+                        url not in objects or evidence.arrival < objects[url].arrival
+                    ):
+                        objects[url] = evidence
+        if required - objects.keys():
+            for product in products:
+                for url, evidence in self.read(
+                    product, f"state/active/{product}.jsonl"
+                ).items():
+                    if url in required and (
+                        url not in objects or evidence.arrival < objects[url].arrival
+                    ):
+                        objects[url] = evidence
+        return objects, f"wxopticon per-file history: {', '.join(products)}"

@@ -7,6 +7,7 @@ from scripts.timing_profile.datasets import Unit
 from scripts.timing_profile.report import (
     MeasuredUnit,
     aggregate_unit,
+    class_history,
     cron_interval,
     cycle_classes,
     recommend,
@@ -88,7 +89,7 @@ def test_calendar_intervals_bound_deadline_and_scalar_currency() -> None:
 
 
 def runtime() -> RuntimeStats:
-    return RuntimeStats(30, 120, 20, 240, 10, 10, 0, 0, None, None)
+    return RuntimeStats(30, 120, 20, 240, 10, 10, 0, 0, None, None, 10, 30, 20)
 
 
 def measured_units(
@@ -126,7 +127,7 @@ def measured_units(
             False,
             21600,
             21600,
-            (480, 1800, 21960, 270),
+            (480, 1080, 21960, 270),
         ),
         (
             [(0, (600.5,)), (6, (1800.5,))],
@@ -134,7 +135,7 @@ def measured_units(
             False,
             21600,
             21600,
-            (1920, 1920, 21600, None),
+            (2040, 2040, 21600, None),
         ),
         (
             [(0, (600,)), (1, (600,))],
@@ -142,9 +143,9 @@ def measured_units(
             False,
             10800,
             3600,
-            (660, 7860, 10800, None),
+            (780, 7980, 10800, None),
         ),
-        ([(0, (60, 600, 3000, 6000))], True, True, 3600, 3600, (-60, 1740, 3960, 270)),
+        ([(0, (60, 600, 3000, 6000))], True, True, 3600, 3600, (-60, 1020, 3960, 270)),
     ],
     ids=[
         "virtual-forecast-max-validation",
@@ -192,7 +193,7 @@ def test_virtual_classes_split_on_visibility_and_polling_uses_all_tiers() -> Non
         spacing=21600,
     )
     assert result.offset == -60
-    assert result.delay == 2940
+    assert result.delay == 2220
     assert [value.tier for value in result.classes] == [
         "z first",
         "z first",
@@ -206,7 +207,7 @@ def test_virtual_classes_split_on_visibility_and_polling_uses_all_tiers() -> Non
         currency_interval=21600,
         spacing=21600,
     )
-    assert materialized.offset == 3060
+    assert materialized.offset == 3180
 
 
 def test_mrms_reports_pass_one_and_keeps_constants() -> None:
@@ -245,7 +246,7 @@ def test_mrms_reports_pass_one_and_keeps_constants() -> None:
     assert "| chosen |" not in rendered
 
 
-def test_rendered_constants_and_after_s_or_never_include_older_missing_unit() -> None:
+def test_rates_at_recommended_single_cron_include_older_missing_unit() -> None:
     dataset = next(
         ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-forecast"
     )
@@ -262,27 +263,27 @@ def test_rendered_constants_and_after_s_or_never_include_older_missing_unit() ->
     rendered = render_dataset(
         dataset, cron, units, runtime(), pd.Timestamp("2026-10-26"), None, {"S3"}
     )
-    assert "| 00Z | draft | 00:24:30 | 0.00% | 33.33% |" in rendered
+    assert "| 00Z | 00:23:00 | 00:23:00 | 33.33% | 33.33% | 1 |" in rendered
     assert "| Cron |" in rendered
-    assert "| 00Z | chosen | 00:20:54 | 0.00% | 33.33% |" in rendered
-    assert "`21 0,6,12,18 * * *`" in rendered
+    assert "first validation failure is quiet" in rendered
+    assert "`23 0,6,12,18 * * *`" in rendered
     rows = {
         cells[1].strip(): cells[3].strip()
         for line in rendered.splitlines()
         if line.startswith("| ") and len(cells := line.split("|")) == 6
     }
-    assert rows["max_delay"] == "00:21:00"
+    assert rows["max_delay"] == "00:23:00"
     assert rows["Pod deadline"] == "06:00:00"
     assert rows["Job deadline"] == "06:00:00"
 
 
 @pytest.mark.parametrize(
     ("arrivals", "expected"),
-    [([600] * 20, 660), ([600] * 20 + [3600], 900)],
-    ids=["p99-cap-wins", "spread-wins-with-rare-outlier"],
+    [([600] * 20, 780), ([600] * 20 + [3600], None)],
+    ids=["p99-plus-three", "tail-needs-hand-value"],
 )
 def test_chosen_schedule_drives_final_cron_offset_and_currency(
-    arrivals: list[float], expected: float
+    arrivals: list[float], expected: float | None
 ) -> None:
     units = measured_units([(0, (arrival,)) for arrival in arrivals])
     result = recommend(
@@ -295,22 +296,89 @@ def test_chosen_schedule_drives_final_cron_offset_and_currency(
     )
     assert result.offset == expected
     assert result.delay == expected
-    assert result.classes[0].offset == expected
+    assert result.classes[0].hand_value == (expected is None)
 
 
-def test_evidence_reports_short_history_cut_dates_and_recent_regime_shift() -> None:
+def test_evidence_restarts_shifted_history_and_flags_daily_small_samples() -> None:
     units = measured_units(
-        [(0, (600,)) for _ in range(28)]
-        + [(0, (1800,)) for _ in range(7)]
-        + [(0, (9000,))]
+        [(0, (600,)) for _ in range(172)] + [(0, (1800,)) for _ in range(8)]
     )
-    rendered = "\n".join(
-        render_class_evidence("00Z", units, pd.Timestamp("2026-11-25"), virtual=False)
-    )
+    end = pd.Timestamp("2026-10-20") + pd.Timedelta(days=180)
+    active, boundary = class_history(units, end, virtual=False)
+    assert active == units[172:]
+    assert boundary == units[172].unit.anchor
+    rendered = "\n".join(render_class_evidence("00Z", units, end, virtual=False))
     assert "source **listings**" in rendered
-    assert "history 36 sampled days / 36 calendar days; n=36" in rendered
-    assert "current_object_write=36" in rendered
+    assert "wxopticon 0/180 units" in rendered
+    assert "history 8 sampled days / 8 calendar days; n=8" in rendered
+    assert "current_object_write=8" in rendered
     assert "Short history" in rendered
-    assert "max-normal cut (complete unit): 00:30:00" in rendered
-    assert "2026-11-24T00:00:00Z (02:30:00)" in rendered
-    assert "Recent distribution shift" in rendered
+    assert "Small sample" in rendered
+    assert "Regime restart" in rendered
+    assert "p99 + 3 min: 00:33:00; max normal + 3 min: 00:33:00" in rendered
+    result = recommend(
+        units,
+        runtime(),
+        virtual=False,
+        interval=86400,
+        currency_interval=86400,
+        spacing=86400,
+        end=end,
+    )
+    assert result.offset == 1980
+    assert result.classes[0].threshold == 1980
+
+
+def test_tail_dominated_report_tags_outliers_and_withholds_constants() -> None:
+    units = measured_units(
+        [(0, (600,)) for _ in range(97)] + [(0, (3000,)), (0, (600,)), (0, (9000,))]
+    )
+    end = units[-1].unit.anchor + pd.Timedelta(hours=12)
+    rendered = "\n".join(render_class_evidence("00Z", units, end, virtual=False))
+    assert "tail-dominated, hand value needed" in rendered
+    assert "02:30:00; listings; current_object_write" in rendered
+    assert "First gap above the median" in rendered
+    result = recommend(
+        units,
+        runtime(),
+        virtual=False,
+        interval=86400,
+        currency_interval=86400,
+        spacing=86400,
+        end=end,
+    )
+    assert result.offset is None
+    assert result.delay is None
+
+
+def test_rates_use_latest_class_single_cron() -> None:
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-forecast"
+    )
+    cron = next(
+        resource
+        for resource in dataset.operational_kubernetes_resources("test")
+        if isinstance(resource, ReformatCronJob)
+    )
+    units = measured_units([(0, (600,)), (0, (900,)), (6, (1800,)), (6, (1800,))])
+    rendered = render_dataset(
+        dataset, cron, units, runtime(), pd.Timestamp("2026-10-26"), None, {"S3"}
+    )
+    assert "| 00Z | 00:18:00 | 00:33:00 | 0.00% | 0.00% |" in rendered
+    assert "| 06Z | 00:33:00 | 00:33:00 | 0.00% | 0.00% |" in rendered
+
+
+def test_rate_estimates_use_runtime_medians_rather_than_budget_p95s() -> None:
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-forecast"
+    )
+    cron = next(
+        resource
+        for resource in dataset.operational_kubernetes_resources("test")
+        if isinstance(resource, ReformatCronJob)
+    )
+    units = measured_units([(0, (600,)) for _ in range(100)] + [(0, (900,))])
+    budgets = RuntimeStats(200, 1000, 1000, 1200, 10, 10, 0, 0, None, None, 10, 30, 20)
+    end = units[-1].unit.anchor + pd.Timedelta(hours=12)
+    rendered = render_dataset(dataset, cron, units, budgets, end, None, {"S3"})
+    assert "| 00Z | 00:13:00 | 00:13:00 | 0.99% | 0.00% |" in rendered

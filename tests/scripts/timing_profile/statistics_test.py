@@ -2,13 +2,14 @@ import pytest
 
 from scripts.timing_profile.statistics import (
     arrival_stats,
-    candidate_outcomes,
     ceil_minute,
     currency_delay,
-    late_threshold,
     max_normal_cut,
-    recent_shift,
-    schedule_candidates,
+    max_normal_gap,
+    read_rates,
+    regime_start,
+    schedule_offset,
+    tail_dominated,
     virtual_deadline,
     virtual_fire,
 )
@@ -24,32 +25,21 @@ def test_linear_percentiles_and_earliest_include_recurring_fast_arrivals() -> No
 
 
 @pytest.mark.parametrize(
-    ("values", "expected"), [([600, 600, 600], 1500), ([0, 3600], 5040)]
+    ("values", "expected"), [([600, 600, 600], 780), ([0, 3600], 3780)]
 )
-def test_late_threshold_floor_and_tail(values: list[float], expected: float) -> None:
-    assert late_threshold(arrival_stats(values)) == expected
+def test_schedule_and_backstop_use_rounded_p99_plus_three_minutes(
+    values: list[float], expected: float
+) -> None:
+    assert schedule_offset(arrival_stats(values)) == expected
 
 
-def test_all_schedule_candidates_have_independent_minimum_allowances() -> None:
-    assert schedule_candidates(arrival_stats([600, 600, 600])) == {
-        "draft": 900,
-        "p99+1m": 660,
-        "spread, min 3m": 780,
-        "chosen": 660,
-    }
-    candidates = schedule_candidates(arrival_stats([0, 3600]))
-    assert candidates["draft"] == 5040
-    assert candidates["spread, min 3m"] == 5040
-    assert candidates["p99+1m"] == 3624
-    assert candidates["chosen"] == 3624
-
-
-def test_candidate_outcomes_exclude_late_units_from_latency_estimate() -> None:
-    fraction, latency = candidate_outcomes([60, 120, 240, 600], 300, 10, 20)
-    assert fraction == 0.25
-    assert latency == 210
-    assert candidate_outcomes([60], 300, 10, None) == (0, None)
-    assert candidate_outcomes([600], 300, 10, 20) == (1, None)
+def test_read_model_counts_incomplete_at_start_and_first_repass_read() -> None:
+    # Reads are at 310 and 670 seconds; availability at a read is sufficient.
+    assert read_rates([60, 310, 311, 670, 671, None], 300, 10, 30, 20) == (4 / 6, 2 / 6)
+    assert read_rates([600], 300, None, 30, 20) == (None, None)
+    assert read_rates([600], 300, 10, None, 20) == (1, None)
+    assert read_rates([600], 300, 10, 30, None) == (1, None)
+    assert read_rates([], 300, 10, 30, 20) == (None, None)
 
 
 def test_virtual_fire_and_deadline_use_startup_and_maximum_validation() -> None:
@@ -69,21 +59,46 @@ def test_currency_delay_accounts_for_labels_and_multiple_anchors() -> None:
     [
         ([600], 600),
         ([600, 600, 600], 600),
-        ([0, 1000, 1001, 1002, 1100, 5000], 1100),
-        ([0, 1000, 1001, 1002, 1003], 1001),
+        ([0, 1000, 1001, 1002, 1003], 1003),
+        ([1000] * 30 + [1001, 1400, 9000, 30000], 1001),
     ],
 )
-def test_max_normal_cut_uses_largest_gap_above_median(
+def test_max_normal_cut_uses_first_gap_above_median(
     values: list[float], expected: float
 ) -> None:
     assert max_normal_cut(values) == expected
 
 
-def test_recent_shift_requires_samples_in_both_windows_and_fifteen_minutes() -> None:
-    end = 40 * 86400
-    prior = [(day * 86400, 600) for day in range(5, 33)]
-    recent = [(day * 86400, 1800) for day in range(33, 40)]
-    assert recent_shift(prior + recent, end) == (600, 1800)
-    assert recent_shift(prior + recent[:4], end) is None
-    assert recent_shift(recent, end) is None
-    assert recent_shift(prior + [(anchor, 1200) for anchor, _ in recent], end) is None
+def test_max_normal_gap_scales_with_the_upper_body() -> None:
+    assert max_normal_gap([600] * 10) == 180
+    assert max_normal_gap(list(range(0, 6000, 60))) > 180
+
+
+@pytest.mark.parametrize(("before", "after"), [(600, 1800), (1800, 600)])
+def test_median_shift_restarts_at_the_break_in_both_directions(
+    before: float, after: float
+) -> None:
+    samples = [(day * 86400, before if day < 172 else after) for day in range(180)]
+    assert regime_start(samples, 180 * 86400) == 172 * 86400
+
+
+def test_trailing_outlier_cluster_restarts_before_recent_median_changes() -> None:
+    samples = [(day * 86400, 1800 if day >= 178 else 600) for day in range(180)]
+    assert regime_start(samples, 180 * 86400) == 178 * 86400
+    assert regime_start([*samples[:-1], (179 * 86400, 600)], 180 * 86400) is None
+    assert regime_start(samples[-4:], 180 * 86400) is None
+
+
+def test_scattered_outliers_do_not_restart_history() -> None:
+    samples = [(day * 86400, 1800 if day in {174, 177} else 600) for day in range(180)]
+    assert regime_start(samples, 180 * 86400) is None
+
+
+@pytest.mark.parametrize("outliers", [1, 2])
+def test_tail_dominated_checks_spread_and_outlier_mass(outliers: int) -> None:
+    assert tail_dominated([600] * (100 - outliers) + [9000] * outliers) == (
+        outliers > 1
+    )
+    assert tail_dominated([600] * 98 + [3000, 9000])
+    assert tail_dominated([600] * 99 + [900000])
+    assert not tail_dominated([600] * 100)
