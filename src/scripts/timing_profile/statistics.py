@@ -51,6 +51,18 @@ def max_normal_cut(values: Sequence[float]) -> float:
 def regime_start(
     samples: Sequence[tuple[float, float]], end: float
 ) -> tuple[float | None, bool]:
+    boundary = None
+    while True:
+        restart, suspected = _next_regime_start(samples, end)
+        if restart is None or restart == boundary:
+            return boundary, suspected
+        boundary = restart
+        samples = [sample for sample in samples if sample[0] >= boundary]
+
+
+def _next_regime_start(
+    samples: Sequence[tuple[float, float]], end: float
+) -> tuple[float | None, bool]:
     ordered = sorted(samples)
     if len(ordered) < 10:
         return None, False
