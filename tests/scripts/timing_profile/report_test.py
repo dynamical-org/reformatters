@@ -1,4 +1,6 @@
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -582,3 +584,29 @@ def test_subhourly_window_guard_checks_actual_window_override() -> None:
     assert not virtual_window_contains_anchor(dataset, anchor, 60)
     assert not virtual_window_contains_anchor(dataset, anchor, 3600)
     assert virtual_window_contains_anchor(dataset, anchor, 3660)
+
+
+def test_year_of_real_aifs_history_requires_a_hand_value_for_latest_regime() -> None:
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures/aifs_ens_arrivals.json").read_text()
+    )
+    anchors = pd.date_range(
+        fixture["start"], periods=len(fixture["arrivals_s"]), freq="6h"
+    ).tz_convert(None)
+    units = [
+        MeasuredUnit(Unit(anchor, "run", (), 0), value, value, 0, value, {})
+        for anchor, value in zip(anchors, fixture["arrivals_s"], strict=True)
+    ]
+    result = recommend(
+        units,
+        runtime(),
+        virtual=False,
+        interval=21600,
+        currency_interval=21600,
+        spacing=21600,
+        end=pd.Timestamp("2026-10-28T20"),
+    )
+    assert result.classes[0].threshold == 7 * 3600 + 44 * 60
+    assert result.classes[0].hand_value
+    assert result.offset is None
+    assert result.delay is None

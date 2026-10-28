@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -154,7 +155,25 @@ def test_real_aifs_step_keeps_the_same_break_as_history_ages(
     ]
     end = (anchors[-1] + pd.Timedelta(days=days_after_last)).timestamp()
     boundary, suspected = regime_start(samples, end)
-    assert not suspected
+    # The final four units fall back toward the earlier arrival level.
+    assert suspected
     assert boundary is not None
     assert boundary == pd.Timestamp("2026-10-20T06:00Z").timestamp()
-    assert sum(anchor >= boundary for anchor, _ in samples) == 31
+    assert sum(anchor >= boundary for anchor, _ in samples) == 34
+
+
+def test_repeated_fits_retain_the_latest_of_two_persistent_steps() -> None:
+    rng = np.random.default_rng(1)
+    values = 5.65 * 3600 + rng.normal(0, 300, 365 * 4)
+    values[195 * 4 :] += 18 * 60
+    values[357 * 4 :] = 7 * 3600 + 40 * 60 + rng.normal(0, 20, 8 * 4)
+    samples = [(index * 21600, float(value)) for index, value in enumerate(values)]
+    assert regime_start(samples, 365 * 86400) == (357 * 86400, False)
+
+
+def test_short_step_after_a_confirmed_restart_remains_suspected() -> None:
+    samples = [
+        (index * 21600, 600 if index < 195 * 4 else 1800) for index in range(365 * 4)
+    ]
+    samples[-4:] = [(anchor, 7200) for anchor, _ in samples[-4:]]
+    assert regime_start(samples, 365 * 86400) == (195 * 86400, True)
