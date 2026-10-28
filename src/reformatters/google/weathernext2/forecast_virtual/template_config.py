@@ -19,6 +19,7 @@ from reformatters.common.config_models import (
     Group,
     StatisticsApproximate,
 )
+from reformatters.common.projection import regular_latitude_longitude_grids
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
 from reformatters.common.types import (
     AppendDim,
@@ -27,7 +28,10 @@ from reformatters.common.types import (
     Timedelta,
     Timestamp,
 )
-from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
+from reformatters.common.zarr import (
+    BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
+    BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
+)
 
 _GRID_NLAT = 721
 _GRID_NLON = 1440
@@ -161,6 +165,9 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
     def derive_coordinates(
         self, ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
+        latitudes, longitudes = regular_latitude_longitude_grids(
+            ds["y"].values, ds["x"].values
+        )
         return {
             "valid_time": ds["init_time"] + ds["lead_time"],
             "expected_forecast_length": (
@@ -171,6 +178,8 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     dtype="timedelta64[us]",
                 ),
             ),
+            "latitude": (("y", "x"), latitudes),
+            "longitude": (("y", "x"), longitudes),
             "spatial_ref": SPATIAL_REF_COORDS,
         }
 
@@ -298,6 +307,44 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     statistics_approximate=StatisticsApproximate(
                         min=int(dim_coords["pressure_level"].min()),
                         max=int(dim_coords["pressure_level"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="latitude",
+                encoding=Encoding(
+                    dtype="float32",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Latitude",
+                    standard_name="latitude",
+                    units="degree_north",
+                    statistics_approximate=StatisticsApproximate(
+                        min=float(dim_coords["y"].min()),
+                        max=float(dim_coords["y"].max()),
+                    ),
+                ),
+            ),
+            Coordinate(
+                name="longitude",
+                encoding=Encoding(
+                    dtype="float32",
+                    fill_value=np.nan,
+                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+                    chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
+                    shards=None,
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Longitude",
+                    standard_name="longitude",
+                    units="degree_east",
+                    statistics_approximate=StatisticsApproximate(
+                        min=-180.0,
+                        max=float(180 - (dim_coords["x"][1] - dim_coords["x"][0])),
                     ),
                 ),
             ),

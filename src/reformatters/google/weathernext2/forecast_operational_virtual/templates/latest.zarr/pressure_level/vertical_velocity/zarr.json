@@ -52,7 +52,7 @@
     "standard_name": "lagrangian_tendency_of_air_pressure",
     "units": "Pa s-1",
     "step_type": "instant",
-    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

@@ -1,4 +1,5 @@
 import numpy as np
+import xarray as xr
 
 from reformatters.common.config_models import ROOT
 from reformatters.google.weathernext2.forecast_historical_virtual.template_config import (
@@ -181,3 +182,32 @@ def test_spatial_dimension_coordinates_carry_geographic_metadata() -> None:
             "X",
         )
         assert coords["spatial_ref"].attrs.grid_mapping_name == "latitude_longitude"
+
+
+def test_latitude_longitude_broadcast_native_axes_in_every_group() -> None:
+    y = np.arange(-90, 90.25, 0.25)
+    x = np.arange(0, 360, 0.25)
+    # Longitude wraps in place to [-180, 180): columns are never reordered.
+    expected_longitude = np.concatenate([x[x < 180], x[x >= 180] - 360])
+    for config in (HISTORICAL, OPERATIONAL):
+        for group in (None, "pressure_level"):
+            ds = xr.open_zarr(
+                config.template_path(), group=group, decode_timedelta=True
+            )
+            latitude, longitude = ds["latitude"], ds["longitude"]
+            for coord in (latitude, longitude):
+                assert coord.dims == ("y", "x")
+                assert coord.dtype == np.float32
+                assert coord.encoding["chunks"] == (len(y), len(x))
+            assert {"latitude", "longitude"} <= set(ds.coords)
+            np.testing.assert_array_equal(
+                latitude.values,
+                np.broadcast_to(y.astype(np.float32)[:, None], (len(y), len(x))),
+            )
+            np.testing.assert_array_equal(
+                longitude.values,
+                np.broadcast_to(
+                    expected_longitude.astype(np.float32), (len(y), len(x))
+                ),
+            )
+            np.testing.assert_array_equal(ds["x"].values, x)

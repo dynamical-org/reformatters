@@ -6,6 +6,7 @@ import xarray as xr
 
 from scripts.validation.compare_spatial import (
     _compute_spatial_stats,
+    _roll_longitude_seam_to_edge,
     _spatial_color_range,
     align_reference_spatially,
     run_compare_spatial,
@@ -35,12 +36,34 @@ def test_align_reference_spatially_keeps_full_longitude_for_geographic_xy(
 
     aligned = align_reference_spatially(ds, reference_ds)
 
-    # The dataset's own 0 to 360 longitude bounds would have cropped this to one
-    # hemisphere; latitude bounds still apply.
     np.testing.assert_array_equal(
         aligned.longitude.values, reference_ds.longitude.values
     )
     np.testing.assert_array_equal(aligned.latitude.values, reference_ds.latitude.values)
+
+
+def test_roll_longitude_seam_to_edge_makes_longitude_increase(
+    geographic_xy_store: str,
+) -> None:
+    data = load_zarr_dataset(geographic_xy_store)["temperature_2m"].load()
+
+    rolled = _roll_longitude_seam_to_edge(data)
+
+    np.testing.assert_array_equal(
+        rolled["longitude"].values[0], [-180, -135, -90, -45, 0, 45, 90, 135]
+    )
+    np.testing.assert_array_equal(rolled.sel(x=225.0).values, data.sel(x=225.0).values)
+
+
+def test_roll_longitude_seam_to_edge_leaves_increasing_longitude_unchanged() -> None:
+    longitude = np.array([[-100.0, -99.0, -98.0], [-100.5, -99.5, -98.5]])
+    data = xr.DataArray(
+        np.arange(6.0).reshape(2, 3),
+        dims=("y", "x"),
+        coords={"longitude": (("y", "x"), longitude)},
+    )
+
+    assert _roll_longitude_seam_to_edge(data) is data
 
 
 @pytest.mark.parametrize(

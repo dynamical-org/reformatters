@@ -57,7 +57,7 @@
     "units": "kg m-2",
     "comment": "Accumulated over a six-hour forecast interval. Small negative values are raw model artifacts; set values < 0 to zero.",
     "step_type": "accum",
-    "coordinates": "expected_forecast_length spatial_ref valid_time",
+    "coordinates": "expected_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

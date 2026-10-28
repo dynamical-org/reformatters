@@ -14,7 +14,6 @@ from scripts.validation.utils import (
     end_date_option,
     format_lead_time,
     get_two_random_points,
-    has_geographic_xy,
     init_time_option,
     is_forecast_dataset,
     is_virtual_store,
@@ -44,10 +43,6 @@ log = get_logger(__name__)
 
 
 def align_reference_spatially(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Dataset:
-    if has_geographic_xy(ds):
-        # This dataset is global and labels longitude 0 to 360, so its bounds would
-        # crop the reference to one hemisphere. Its latitude bounds still apply.
-        return reference_ds.sel(latitude=slice(ds.latitude.max(), ds.latitude.min()))
     return reference_ds.sel(
         latitude=slice(ds.latitude.max(), ds.latitude.min()),
         longitude=slice(ds.longitude.min(), ds.longitude.max()),
@@ -104,6 +99,18 @@ def align_to_valid_time_analysis(
     ds = ds.sel(time=selected_time)
     reference_ds = reference_ds.sel(time=selected_time, method="nearest")
     return ds, reference_ds
+
+
+def _roll_longitude_seam_to_edge(data: xr.DataArray) -> xr.DataArray:
+    """A copy of a global y/x field whose 2D longitude wraps from 180 to -180 within a
+    row, rolled along x so longitude increases across the map and pcolormesh draws no
+    cell spanning the globe. Fields without such a wrap are returned unchanged."""
+    if "x" not in data.dims or data["longitude"].dims != ("y", "x"):
+        return data
+    wraps = np.flatnonzero(np.diff(data["longitude"].values[0]) < 0)
+    if wraps.size == 0:
+        return data
+    return data.roll(x=-(int(wraps[0]) + 1), roll_coords=True)
 
 
 def _downsample_for_plot(ds: xr.Dataset, max_plot_dim: int = 1000) -> xr.Dataset:
@@ -186,14 +193,8 @@ def _draw_spatial_triplet(
     units: str | None,
     ds_title: str,
     ref_title: str,
-    share_axis_limits: bool,
 ) -> None:
-    """Draw reference map, validation map, and histogram onto provided axes.
-
-    `share_axis_limits` widens the validation map to the reference's extent as well, so
-    the two maps cover one window. Pass False when the two label the same globe
-    differently, which would otherwise squeeze each map into part of its axis.
-    """
+    """Draw reference map, validation map, and histogram onto provided axes."""
     vmin, vmax = _spatial_color_range(var, data_clean, ref_clean)
 
     lon_min = float(data.longitude.min())
@@ -207,11 +208,10 @@ def _draw_spatial_triplet(
             ref_data.longitude, ref_data.latitude, ref_data.values, vmin=vmin, vmax=vmax
         )
         plt.colorbar(im1, ax=ax_ref, label=units or "")
-        if share_axis_limits:
-            lon_min = min(lon_min, float(ref_data.longitude.min()))
-            lon_max = max(lon_max, float(ref_data.longitude.max()))
-            lat_min = min(lat_min, float(ref_data.latitude.min()))
-            lat_max = max(lat_max, float(ref_data.latitude.max()))
+        lon_min = min(lon_min, float(ref_data.longitude.min()))
+        lon_max = max(lon_max, float(ref_data.longitude.max()))
+        lat_min = min(lat_min, float(ref_data.latitude.min()))
+        lat_max = max(lat_max, float(ref_data.latitude.max()))
     else:
         ax_ref.text(
             0.5,
@@ -358,7 +358,7 @@ def run_compare_spatial(ctx: RunContext) -> None:
         data = ds[var]
         if slice_sel:
             data = data.sel(slice_sel)
-        data = load_retried(data)
+        data = _roll_longitude_seam_to_edge(load_retried(data))
         ref_data = _reference_data(ref_ds, var, slice_sel, stats)
         data_clean, ref_clean = _compute_spatial_stats(data, ref_data, stats)
 
@@ -389,7 +389,6 @@ def run_compare_spatial(ctx: RunContext) -> None:
             stats.units,
             ds_title,
             ref_title,
-            share_axis_limits=not has_geographic_xy(validation_ds),
         )
         fig_v.tight_layout()
         fig_v.savefig(ctx.output_dir / stats.spatial_plot, dpi=80, bbox_inches="tight")

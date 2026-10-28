@@ -1206,3 +1206,126 @@ def test_representative_probe_loc_supplements_the_group_level() -> None:
     # A root variable has no vertical dim, so its probe is just the file's slab.
     root_var = next(var for var in job.data_vars if var.group is ROOT)
     assert dict(job.representative_probe_loc(coord, root_var)) == dict(coord.out_loc())
+
+
+def _with_2d_cell_id_coord(template: xr.DataTree) -> xr.DataTree:
+    cell_id = np.arange(N_LAT * N_LON, dtype="float32").reshape(N_LAT, N_LON)
+    nodes = {}
+    for node in template.subtree:
+        ds = node.to_dataset(inherit=False).assign_coords(
+            cell_id=(("latitude", "longitude"), cell_id)
+        )
+        ds["cell_id"].encoding.update(
+            {"dtype": "float32", "fill_value": np.nan, "chunks": (N_LAT, N_LON)}
+        )
+        nodes[node.path] = ds
+    return xr.DataTree.from_dict(nodes)
+
+
+def _open_main(repo: icechunk.Repository) -> xr.DataTree:
+    return xr.open_datatree(
+        repo.readonly_session("main").store,  # ty: ignore[invalid-argument-type]
+        engine="zarr",
+        chunks=None,
+        consolidated=False,
+        decode_timedelta=True,
+    )
+
+
+def _assert_cell_id_coord(repo: icechunk.Repository) -> None:
+    tree = _open_main(repo)
+    for group in ("/", "/pressure_level"):
+        group_ds = tree[group].to_dataset()
+        assert "cell_id" in group_ds.coords
+        np.testing.assert_array_equal(
+            group_ds["cell_id"].values,
+            np.arange(N_LAT * N_LON, dtype="float32").reshape(N_LAT, N_LON),
+        )
+
+
+def test_refresh_metadata_adds_new_2d_coordinate_in_place(tmp_path: Path) -> None:
+    dataset = _make_dataset(tmp_path, n_inits=4)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
+
+    job = _make_region_job(
+        _with_2d_cell_id_coord(_create_template_ds(4)),
+        region=slice(0, 4),
+        processing_mode="update",
+    )
+    n_commits = len(list(repo.ancestry(branch="main")))
+    job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp.zarr")
+    assert len(list(repo.ancestry(branch="main"))) == n_commits + 1
+    _assert_cell_id_coord(repo)
+    _assert_all_values(dataset, n_inits=2)
+
+    job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp2.zarr")
+    assert len(list(repo.ancestry(branch="main"))) == n_commits + 1
+
+    _process_virtual(job, repo)
+    _assert_cell_id_coord(repo)
+    _assert_all_values(dataset, n_inits=4)
+    job.refresh_metadata(dataset.store_factory, tmp_path / "refresh_tmp3.zarr")
+    _assert_cell_id_coord(repo)
+    _assert_all_values(dataset, n_inits=4)
+
+
+def test_refresh_metadata_reassociates_coordinate_after_stale_template_refresh(
+    tmp_path: Path,
+) -> None:
+    # A refresh from a template that predates a coordinate leaves the store's array
+    # unassociated, so it reopens as a data variable; the next refresh from the current
+    # template must re-associate it rather than reject it as drift.
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
+
+    current = _make_region_job(
+        _with_2d_cell_id_coord(_create_template_ds(2)),
+        region=slice(0, 2),
+        processing_mode="update",
+    )
+    stale = _make_region_job(
+        _create_template_ds(2), region=slice(0, 2), processing_mode="update"
+    )
+    current.refresh_metadata(dataset.store_factory, tmp_path / "current.zarr")
+    stale.refresh_metadata(dataset.store_factory, tmp_path / "stale.zarr")
+    assert "cell_id" in _open_main(repo).to_dataset().data_vars
+
+    current.refresh_metadata(dataset.store_factory, tmp_path / "current_again.zarr")
+    _assert_cell_id_coord(repo)
+    _assert_all_values(dataset, n_inits=2)
+
+
+def test_refresh_metadata_rejects_unassociated_array_with_other_coordinate_values(
+    tmp_path: Path,
+) -> None:
+    dataset = _make_dataset(tmp_path, n_inits=2)
+    template_ds = _create_template_ds(2)
+    template_utils.write_metadata(template_ds, dataset.store_factory)
+    repo = _primary_repo(dataset.store_factory)
+    _process_virtual(_make_region_job(template_ds, region=slice(0, 2)), repo)
+
+    current = _make_region_job(
+        _with_2d_cell_id_coord(_create_template_ds(2)),
+        region=slice(0, 2),
+        processing_mode="update",
+    )
+    stale = _make_region_job(
+        _create_template_ds(2), region=slice(0, 2), processing_mode="update"
+    )
+    current.refresh_metadata(dataset.store_factory, tmp_path / "current.zarr")
+    stale.refresh_metadata(dataset.store_factory, tmp_path / "stale.zarr")
+
+    other_values = _with_2d_cell_id_coord(_create_template_ds(2))
+    for node in other_values.subtree:
+        node["cell_id"] = node["cell_id"] + 1
+    differing = _make_region_job(
+        other_values, region=slice(0, 2), processing_mode="update"
+    )
+    with pytest.raises(ValueError, match="cell_id: in existing store but missing"):
+        differing.refresh_metadata(dataset.store_factory, tmp_path / "differing.zarr")
