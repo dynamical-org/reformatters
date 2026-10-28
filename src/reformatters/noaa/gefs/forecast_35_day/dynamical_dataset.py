@@ -24,7 +24,7 @@ class GefsForecast35DayDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # The prior init's extension is reprocessed once its age gate permits it.
-            schedule="9 7 * * *",
+            schedule="15 7 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=24),
             active_deadline=timedelta(hours=24),
@@ -43,7 +43,7 @@ class GefsForecast35DayDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=9)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=7, minutes=15)),
             # The newest init_time stops at GEFS_PRE_EXTENSION_MAX, leaving 76 of
             # 181 lead times NaN at any spatial point: 0.42, or 0.422 for a variable
             # with no hour-0 value, whose lead_time=0 slice is dropped before the

@@ -20,7 +20,7 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="39 5,11,17,23 * * *",
+            schedule="44 5,11,17,23 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),
             active_deadline=timedelta(hours=6),
@@ -39,6 +39,6 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=5, minutes=39)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=5, minutes=44)),
             validation.CheckRecentNans(),
         )

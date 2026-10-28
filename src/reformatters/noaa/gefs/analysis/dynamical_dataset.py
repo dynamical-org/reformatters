@@ -25,7 +25,7 @@ class GefsAnalysisDataset(
         workers = 2
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="5 4,10,16,22 * * *",
+            schedule="8 4,10,16,22 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),
             active_deadline=timedelta(hours=6),
@@ -44,6 +44,6 @@ class GefsAnalysisDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=5)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=8)),
             validation.CheckRecentNans(),
         )

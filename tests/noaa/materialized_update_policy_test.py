@@ -37,11 +37,11 @@ type NoaaMaterializedDataset = (
 )
 
 VALUES = (
-    (NoaaGfsForecastDataset, "39 5,11,17,23 * * *", "5h39m", 6),
-    (NoaaGfsAnalysisDataset, "26 4,10,16,22 * * *", "4h26m", 6),
-    (GefsAnalysisDataset, "5 4,10,16,22 * * *", "4h05m", 6),
-    (GefsForecast35DayDataset, "9 7 * * *", "7h09m", 24),
-    (NoaaHrrrAnalysisDataset, "8 1,4,7,10,13,16,19,22 * * *", "3h08m", 3),
+    (NoaaGfsForecastDataset, "44 5,11,17,23 * * *", "5h44m", 6),
+    (NoaaGfsAnalysisDataset, "58 3,9,15,21 * * *", "3h58m", 6),
+    (GefsAnalysisDataset, "8 4,10,16,22 * * *", "4h08m", 6),
+    (GefsForecast35DayDataset, "15 7 * * *", "7h15m", 24),
+    (NoaaHrrrAnalysisDataset, "10 1,4,7,10,13,16,19,22 * * *", "3h10m", 3),
     (NoaaMrmsConusAnalysisHourlyDataset, "3 * * * *", "5m", 1),
 )
 
@@ -128,9 +128,9 @@ def test_hrrr_currency_requires_the_first_covered_anchor_at_each_fire(
 ) -> None:
     dataset = _dataset(NoaaHrrrAnalysisDataset, tmp_path)
     (cron,) = dataset.operational_kubernetes_resources("test")
-    fire = pd.Timestamp("2026-10-26") + timedelta(hours=hour, minutes=8)
+    fire = pd.Timestamp("2026-10-26") + timedelta(hours=hour, minutes=10)
     assert cron.previous_fire_time(fire) == fire
-    earliest = fire - pd.Timedelta("3h08m")
+    earliest = fire - pd.Timedelta("3h10m")
     previous = earliest - timedelta(hours=1)
     dataset_id = dataset.dataset_id
     assert _check_at_time(
@@ -142,7 +142,7 @@ def test_hrrr_currency_requires_the_first_covered_anchor_at_each_fire(
 
 @pytest.mark.parametrize(
     ("dataset_class", "fire_offset", "last_complete"),
-    [(NoaaGfsAnalysisDataset, "4h26m", "5h"), (GefsAnalysisDataset, "4h05m", "3h")],
+    [(NoaaGfsAnalysisDataset, "3h58m", "5h"), (GefsAnalysisDataset, "4h08m", "3h")],
 )
 def test_analysis_boundary_input_publishes_complete_cycle_and_trims_boundary(
     dataset_class: type[NoaaMaterializedDataset],
