@@ -33,7 +33,7 @@ class NoaaHrrrForecast48HourDataset(
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="12 2,8,14,20 * * *",
+            schedule="4 2,8,14,20 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),
             active_deadline=timedelta(hours=6),
@@ -58,7 +58,7 @@ class NoaaHrrrForecast48HourDataset(
             self.template_config.data_vars
         )
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=12)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=2, minutes=4)),
             # append_dim_window=4 covers a day of 6-hourly cycles, so a truncated or missing
             # forecast is caught even after newer cycles land.
             validation.CheckRecentNans(
