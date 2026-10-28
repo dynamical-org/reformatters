@@ -273,9 +273,9 @@ def test_hrrr48_backstop_requires_missing_init_at_fire_plus_startup(
 @pytest.mark.parametrize(
     ("dataset_id", "offset", "startup", "hours"),
     [
-        ("noaa-gfs-forecast", "5h47m", "21s", (0, 6, 12, 18)),
-        ("noaa-gefs-forecast-35-day", "7h09m", "58s", (0,)),
-        ("ecmwf-aifs-single-forecast", "7h50m", "84s", (0, 6, 12, 18)),
+        ("noaa-gfs-forecast", "5h44m", "21s", (0, 6, 12, 18)),
+        ("noaa-gefs-forecast-35-day", "7h15m", "58s", (0,)),
+        ("ecmwf-aifs-single-forecast", "7h38m", "84s", (0, 6, 12, 18)),
         ("ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree", "58h05m", "51s", (0,)),
         ("ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree", "58h05m", "46s", (0,)),
     ],
