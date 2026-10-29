@@ -29,7 +29,6 @@ from tests.google.weathernext2.forecast_virtual.native_region_job_test import (
 
 INIT = pd.Timestamp("2025-03-01T06:00")
 SURFACE = _var(OPERATIONAL, "temperature_2m")
-OTHER_SURFACE = _var(OPERATIONAL, "wind_u_10m")
 PRESSURE = _var(OPERATIONAL, "pressure_level/temperature")
 MEMBER_GLOB = region_job_module._OPERATIONAL_MEMBER_GLOB
 
@@ -166,186 +165,187 @@ def _available(
     return sorted((coord.lead_index, coord.data_vars[0].path) for coord, _ in available)
 
 
-def test_complete_init_is_listed_once_per_variable(
-    source: FakeSource, clock: Clock
-) -> None:
+def test_complete_init_batches_each_variable(source: FakeSource, clock: Clock) -> None:
     job = _update_job([SURFACE, PRESSURE])
     pending = _coords([SURFACE, PRESSURE], range(60))
     source.publish(job, pending)
 
     assert len(_available(job, pending)) == 120
-    assert {query.match_glob for query in source.take()} == {
-        _all_leads(SURFACE),
-        _all_leads(PRESSURE),
+    assert set(source.take()) == {
+        _probe(),
+        _probe(var=PRESSURE),
+        ObjectListingQuery(_prefix(SURFACE), _all_leads(SURFACE), "/"),
+        ObjectListingQuery(_prefix(PRESSURE), _all_leads(PRESSURE), "/"),
     }
-    assert pending == []
+    assert not pending
 
 
-def test_waiting_sends_one_probe_per_tick(source: FakeSource, clock: Clock) -> None:
-    job = _update_job([SURFACE, PRESSURE])
-    pending = _coords([SURFACE, PRESSURE], range(60))
-
-    assert _available(job, pending) == []
-    assert len(source.take()) == 2  # the first tick's full listing
-    for _ in range(100):
-        clock.now += 3
-        assert _available(job, pending) == []
-        assert source.take() == [_probe()]
-
-
-def test_newly_published_lead_is_listed_once(source: FakeSource, clock: Clock) -> None:
-    job = _update_job([SURFACE, PRESSURE])
-    pending = _coords([SURFACE, PRESSURE], range(60))
-    _available(job, pending)
-    source.take()
-
-    source.publish(job, _coords([SURFACE, PRESSURE], [0]))
-    clock.now += 3
-    assert _available(job, pending) == [(0, PRESSURE.path), (0, SURFACE.path)]
-    assert sorted(source.take()) == sorted(
-        [_probe(), _per_lead(SURFACE, 0), _per_lead(PRESSURE, 0)]
-    )
-
-    clock.now += 3
-    assert _available(job, pending) == []
-    assert source.take() == [_probe()]
-
-
-def test_incomplete_lead_is_relisted_with_backoff(
+def test_waiting_probes_every_pending_variable(
     source: FakeSource, clock: Clock
 ) -> None:
     job = _update_job([SURFACE, PRESSURE])
     pending = _coords([SURFACE, PRESSURE], range(60))
-    _available(job, pending)
-    source.take()
 
-    # The probe variable is complete for lead 0, the pressure variable not yet.
+    for _ in range(130):
+        assert _available(job, pending) == []
+        assert set(source.take()) == {_probe(), _probe(var=PRESSURE)}
+        clock.now += 15
+
+
+def test_variables_and_leads_are_discovered_independently(
+    source: FakeSource, clock: Clock
+) -> None:
+    job = _update_job([SURFACE, PRESSURE])
+    pending = _coords([SURFACE, PRESSURE], [0, 1, 59])
+    source.publish(job, _coords([PRESSURE], [59]))
+
+    assert _available(job, pending) == [(59, PRESSURE.path)]
+    assert set(source.take()) == {
+        _probe(),
+        _probe(var=PRESSURE),
+        _per_lead(PRESSURE, 59),
+    }
+    clock.now += 15
+    assert _available(job, pending) == []
+    assert set(source.take()) == {_probe(), _probe(var=PRESSURE)}
+
+
+@pytest.mark.parametrize("var", [SURFACE, PRESSURE])
+def test_probe_requires_every_level_of_its_member(
+    source: FakeSource, clock: Clock, var: GoogleWeathernext2DataVar
+) -> None:
+    job = _update_job([var])
+    pending = _coords([var], [0])
+    source.publish(job, pending, skip_last=True)
+    source.keys.add(f"{_prefix(var)}63.0.99.0.0")
+
+    assert _available(job, pending) == []
+    assert source.take() == [_probe(var=var)]
+    source.publish(job, pending)
+    clock.now += 15
+    assert _available(job, pending) == [(0, var.path)]
+    assert set(source.take()) == {_probe(var=var), _per_lead(var, 0)}
+
+
+def test_failed_confirmation_retries_on_next_tick(
+    source: FakeSource, clock: Clock
+) -> None:
+    job = _update_job([SURFACE, PRESSURE])
+    pending = _coords([SURFACE, PRESSURE], [0, 1])
+    first = _coords([PRESSURE], [0])[0]
+    source.publish(job, [first])
+    source.keys.remove(
+        job._source_chunks(first)[0].location.removeprefix(PROXY_LOCATION_PREFIX)
+    )
+    assert _available(job, pending) == []
+    assert _per_lead(PRESSURE, 0) in source.take()
+
+    source.publish(job, pending)
+    clock.now += 15
+    assert _available(job, pending) == sorted(
+        [
+            (0, SURFACE.path),
+            (0, PRESSURE.path),
+            (1, SURFACE.path),
+            (1, PRESSURE.path),
+        ]
+    )
+    assert set(source.take()) == {
+        _probe(),
+        _probe(var=PRESSURE),
+        _per_lead(SURFACE, 0),
+        _per_lead(SURFACE, 1),
+        _per_lead(PRESSURE, 0),
+        _per_lead(PRESSURE, 1),
+    }
+
+
+def test_successful_confirmation_does_not_delay_next_lead(
+    source: FakeSource, clock: Clock
+) -> None:
+    job = _update_job([SURFACE])
+    pending = _coords([SURFACE], [0, 1])
     source.publish(job, _coords([SURFACE], [0]))
-    source.publish(job, _coords([PRESSURE], [0]), skip_last=True)
-    clock.now += 3
     assert _available(job, pending) == [(0, SURFACE.path)]
     source.take()
-
-    relisted_at = []
-    for tick in range(1, 60):
-        clock.now += 3
-        _available(job, pending)
-        queries = source.take()
-        # The lagging variable gets its own probe each tick.
-        assert _probe(var=PRESSURE) in queries
-        if _per_lead(PRESSURE, 0) in queries:
-            relisted_at.append(tick * 3)
-    # Its own probe first shows lead 0 at once; then a 3 s backoff doubling to 15 s,
-    # checked on 3 s ticks.
-    assert relisted_at == [3, 9, 21, *range(36, 178, 15)]
-
-    source.publish(job, _coords([PRESSURE], [0]))
-    while pending[0].lead_index == 0:
-        clock.now += 3
-        _available(job, pending)
-    assert all(coord.lead_index > 0 for coord in pending)
+    source.publish(job, pending)
+    clock.now += 15
+    assert _available(job, pending) == [(1, SURFACE.path)]
+    assert set(source.take()) == {_probe(), _per_lead(SURFACE, 1)}
 
 
-def test_everything_is_relisted_periodically_without_the_probe(
+def test_old_holes_poll_slowly_without_delaying_current_init(
     source: FakeSource, clock: Clock
 ) -> None:
-    job = _update_job([SURFACE, OTHER_SURFACE])
-    pending = _coords([SURFACE, OTHER_SURFACE], range(60))
-    _available(job, pending)
-    source.take()
-
-    # The probe variable never appears, but another variable is complete.
-    source.publish(job, _coords([OTHER_SURFACE], range(60)))
-    clock.now += 599
+    job = _update_job([SURFACE])
+    old_init = INIT - pd.Timedelta("6h")
+    pending = _coords([SURFACE], [0], old_init) + _coords([SURFACE], [0])
     assert _available(job, pending) == []
-    assert source.take() == [_probe()]
+    assert set(source.take()) == {_probe(old_init), _probe()}
+    source.publish(job, pending)
+
+    clock.now += 15
+    assert _available(job, pending) == [(0, SURFACE.path)]
+    assert pending[0].init_time == old_init
+    assert set(source.take()) == {_probe(), _per_lead(SURFACE, 0)}
+    clock.now += 584
+    assert _available(job, pending) == []
+    assert source.take() == []
     clock.now += 1
-    assert len(_available(job, pending)) == 60
-    assert {query.match_glob for query in source.take()} == {
-        _all_leads(SURFACE),
-        _all_leads(OTHER_SURFACE),
-    }
+    assert _available(job, pending) == [(0, SURFACE.path)]
+    assert set(source.take()) == {_probe(old_init), _per_lead(SURFACE, 0, old_init)}
 
 
-def test_each_pending_init_has_its_own_probe(source: FakeSource, clock: Clock) -> None:
-    later = INIT + pd.Timedelta("6h")
-    job = GoogleWeathernext2ForecastOperationalVirtualRegionJob(
-        tmp_store=Path("unused.zarr"),
-        template_ds=OPERATIONAL.get_template(later + pd.Timedelta("6h")),
-        data_vars=[SURFACE],
-        append_dim="init_time",
-        region=slice(0, 2),
-        reformat_job_name="test",
-        processing_mode="update",
-    )
-    pending = _coords([SURFACE], range(60)) + _coords([SURFACE], range(60), later)
-    _available(job, pending)
-    source.take()
-
-    clock.now += 3
-    _available(job, pending)
-    assert sorted(source.take()) == sorted([_probe(), _probe(later)])
-
-
-def test_few_due_leads_use_per_lead_queries(source: FakeSource, clock: Clock) -> None:
+@pytest.mark.parametrize("lead_count", [4, 5])
+def test_batching_depends_only_on_current_due_leads(
+    source: FakeSource, clock: Clock, lead_count: int
+) -> None:
     job = _update_job([PRESSURE])
-    pending = _coords([PRESSURE], range(4))
-
-    _available(job, pending)
-    assert sorted(source.take()) == sorted(
-        _per_lead(PRESSURE, lead) for lead in range(4)
+    pending = _coords([PRESSURE], range(lead_count))
+    source.publish(job, pending)
+    assert len(_available(job, pending)) == lead_count
+    expected = (
+        {_per_lead(PRESSURE, lead) for lead in range(lead_count)}
+        if lead_count < 5
+        else {ObjectListingQuery(_prefix(PRESSURE), _all_leads(PRESSURE), "/")}
     )
+    assert set(source.take()) == {_probe(var=PRESSURE), *expected}
 
 
-def test_lagging_variable_is_listed_when_its_own_probe_shows_new_leads(
+def test_batched_result_also_ingests_lead_that_arrived_after_probe(
+    source: FakeSource, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = _update_job([SURFACE])
+    pending = _coords([SURFACE], range(6))
+    source.publish(job, pending[:5])
+    listing = source.list_objects
+
+    def publish_after_probe(
+        client: httpx.Client, query: ObjectListingQuery
+    ) -> dict[str, NativeObjectMetadata] | None:
+        result = listing(client, query)
+        if query == _probe():
+            source.publish(job, pending[5:])
+        return result
+
+    monkeypatch.setattr(region_job, "list_objects", publish_after_probe)
+    assert len(_available(job, pending)) == 6
+    assert len(source.take()) == 2
+
+
+def test_backfill_batches_without_probing_or_throttling(
     source: FakeSource, clock: Clock
 ) -> None:
-    job = _update_job([SURFACE, PRESSURE])
+    job = _update_job([SURFACE, PRESSURE]).model_copy(
+        update={"processing_mode": "backfill"}
+    )
     pending = _coords([SURFACE, PRESSURE], range(60))
-    _available(job, pending)
-    source.take()
-
-    # The pressure variable lags: its listing for lead 0 comes back empty, and its
-    # retries back off to the cap.
-    source.publish(job, _coords([SURFACE], [0]))
-    retried_at = []
-    for _ in range(40):
-        clock.now += 1.5
-        _available(job, pending)
-        if _per_lead(PRESSURE, 0) in source.take():
-            retried_at.append(clock.now)
-    assert retried_at[-1] - retried_at[-2] >= 15
-
-    # Right after a retry, its data lands: its own probe finds it on the next tick,
-    # well before the next retry is due.
-    while _per_lead(PRESSURE, 0) not in source.take():
-        clock.now += 1.5
-        _available(job, pending)
-    source.publish(job, _coords([PRESSURE], [0]))
-    clock.now += 1.5
-    assert _available(job, pending) == [(0, PRESSURE.path)]
-
-
-def test_member_landing_after_a_retry_is_found_within_the_backoff_cap(
-    source: FakeSource, clock: Clock
-) -> None:
-    job = _update_job([SURFACE, PRESSURE])
-    pending = _coords([SURFACE, PRESSURE], range(60))
-    _available(job, pending)
-    source.publish(job, _coords([SURFACE], [0]))
-    source.publish(job, _coords([PRESSURE], [0]), skip_last=True)
-    for _ in range(40):  # reach the backoff cap
-        clock.now += 3
-        _available(job, pending)
-
-    published_at = clock.now
-    source.publish(job, _coords([PRESSURE], [0]))
-    while any(
-        coord.data_vars[0] == PRESSURE and coord.lead_index == 0 for coord in pending
-    ):
-        clock.now += 3
-        _available(job, pending)
-    assert clock.now - published_at <= 15 + 3
+    source.publish(job, pending)
+    assert len(_available(job, pending)) == 120
+    assert set(source.take()) == {
+        ObjectListingQuery(_prefix(var), _all_leads(var), "/")
+        for var in (SURFACE, PRESSURE)
+    }
 
 
 def test_refused_listing_fails_loudly(

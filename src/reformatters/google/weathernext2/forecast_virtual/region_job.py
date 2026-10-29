@@ -1,7 +1,5 @@
-import re
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
 from math import prod
 from pathlib import Path
 from typing import ClassVar
@@ -55,19 +53,8 @@ HISTORICAL_MANIFEST_INIT_SPLIT = 128
 OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT = 32
 OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT = 4
 
-# An operational update usually fires before Google has published the whole init, then
-# polls. Each tick lists one probe per pending init (one member of one surface variable,
-# all leads: a single page) and lists only leads the probe newly shows, rather than
-# re-listing every pending (lead, variable) directory each tick.
 _PROBE_MEMBER = 63
-_OPERATIONAL_CHUNK_KEY = re.compile(r"\d+\.(?P<lead>\d+)(\.\d+)+")
-# A variable with probed leads still incomplete ("lagging") gets its own probe each
-# tick, and its probed leads are re-listed with this backoff in case members land out
-# of order.
-_INCOMPLETE_RETRY_INITIAL_SECONDS = 3.0
-_INCOMPLETE_RETRY_MAX_SECONDS = 15.0
-# Every pending coord is re-listed this often, whatever the probe shows.
-_FULL_LISTING_INTERVAL_SECONDS = 600.0
+_OLD_INIT_POLL_INTERVAL_SECONDS = 600.0
 # A per-lead query pages through its variable's whole directory (keys are member-first),
 # so for this many leads of one variable a single all-leads listing costs less.
 _ALL_LEADS_LISTING_MIN_LEADS = 5
@@ -121,39 +108,6 @@ class GoogleWeathernext2ForecastVirtualSourceFileCoord(WeatherNextSourceFileCoor
         return {"init_time": self.init_time, "lead_time": self.lead_time}
 
 
-@dataclass
-class _InitPoll:
-    """One init's polling state across an operational update's ticks."""
-
-    next_full_listing: float = float("-inf")
-    # Variable path -> lead indices its probe member has been listed with.
-    probed_leads: dict[str, set[int]] = field(default_factory=dict)
-    # Lagging variable path -> (next re-listing time, current backoff seconds).
-    retry_at: dict[str, tuple[float, float]] = field(default_factory=dict)
-
-    def known_leads(self, var_path: str, probe_var_path: str) -> set[int]:
-        return self.probed_leads.get(probe_var_path, set()) | self.probed_leads.get(
-            var_path, set()
-        )
-
-    def update_retry(
-        self, var_path: str, now: float, *, lagging: bool, progressed: bool
-    ) -> None:
-        previous = self.retry_at.get(var_path)
-        if not lagging:
-            self.retry_at.pop(var_path, None)
-            return
-        if previous is None:
-            delay = _INCOMPLETE_RETRY_INITIAL_SECONDS
-        elif now < previous[0]:
-            return
-        elif progressed:
-            delay = previous[1]
-        else:
-            delay = min(previous[1] * 2, _INCOMPLETE_RETRY_MAX_SECONDS)
-        self.retry_at[var_path] = (now + delay, delay)
-
-
 def _variable_prefix(
     coord: GoogleWeathernext2ForecastVirtualSourceFileCoord,
     var: GoogleWeathernext2DataVar,
@@ -173,16 +127,6 @@ def _required(
             f"matchGlob={query.match_glob}; deploy proxy support for it first"
         )
     return objects
-
-
-def _listed_leads(objects: Mapping[str, NativeObjectMetadata]) -> set[int]:
-    """Lead indices of listed operational chunks, whose keys are `member.lead[...]`."""
-    leads = set()
-    for location in objects:
-        match = _OPERATIONAL_CHUNK_KEY.fullmatch(location.rsplit("/", 1)[-1])
-        if match is not None:
-            leads.add(int(match["lead"]))
-    return leads
 
 
 def _monotonic() -> float:
@@ -343,57 +287,47 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
     GoogleWeathernext2ForecastVirtualRegionJob
 ):
     source_layout: ClassVar[SourceLayout] = "operational"
-    tick_interval: ClassVar[Timedelta] = pd.Timedelta("3s")
+    tick_interval: ClassVar[Timedelta] = pd.Timedelta("15s")
     # A 32-init batch would construct about 11.2 million virtual refs in memory.
     manifest_init_split: ClassVar[int] = OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT
     operational_update_window: ClassVar[Timedelta] = LEAD_TIMES[-1] + pd.Timedelta("2D")
-    _polls: dict[Timestamp, _InitPoll] = PrivateAttr(default_factory=dict)
+    _next_old_init_poll: float = PrivateAttr(default=float("-inf"))
 
     def discover_available(
         self, pending: list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
     ) -> list[tuple[GoogleWeathernext2ForecastVirtualSourceFileCoord, int]]:
         now = _monotonic()
-        probe_var = self._probe_var().path
-        by_init: dict[
-            Timestamp, list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
-        ] = {}
-        for coord in pending:
-            by_init.setdefault(coord.init_time, []).append(coord)
-        polls = {init: self._polls.setdefault(init, _InitPoll()) for init in by_init}
-        full = {init for init, poll in polls.items() if now >= poll.next_full_listing}
-        probes = {
-            (init, var_path): self._probe_query(by_init[init][0], var_path)
-            for init, poll in polls.items()
-            if init not in full
-            for var_path in {probe_var, *poll.retry_at}
-        }
-        probed = self._list(set(probes.values())) if probes else {}
-        new_leads: dict[tuple[Timestamp, str], set[int]] = {}
-        for (init, var_path), query in probes.items():
-            leads = _listed_leads(_required(probed[query], query))
-            seen = polls[init].probed_leads.setdefault(var_path, set())
-            new_leads[init, var_path] = leads - seen
-            seen |= leads
-
-        due = [
-            coord
-            for init, coords in by_init.items()
-            for coord in self._due_coords(
-                coords, polls[init], now, full=init in full, new_leads=new_leads
-            )
-        ]
+        if self.processing_mode == "backfill":
+            selected = due = pending
+        else:
+            newest_init = self.template_ds.to_dataset().get_index(self.append_dim)[-1]
+            poll_old = now >= self._next_old_init_poll
+            if poll_old:
+                self._next_old_init_poll = now + _OLD_INIT_POLL_INTERVAL_SECONDS
+            selected = [
+                coord for coord in pending if coord.init_time == newest_init or poll_old
+            ]
+            if not selected:
+                return []
+            probes = self._list({self._probe_query(coord) for coord in selected})
+            objects = {
+                location: metadata
+                for query, listed in probes.items()
+                for location, metadata in _required(listed, query).items()
+            }
+            due = [
+                coord
+                for coord in selected
+                if self._probe_locations(coord) <= objects.keys()
+            ]
         if not due:
             return []
 
-        queries = self._due_queries(due)
-        objects: dict[str, NativeObjectMetadata] = {}
-        for query, query_objects in self._list(queries).items():
-            objects.update(_required(query_objects, query))
-        for init in full:
-            self._record_probe_leads(by_init[init][0], polls[init], objects)
+        objects = {}
+        for query, listed in self._list(self._due_queries(due)).items():
+            objects.update(_required(listed, query))
         available = []
-        ready_ids = set()
-        for coord in due:
+        for coord in selected:
             locations = {chunk.location for chunk in self._source_chunks(coord)}
             if locations <= objects.keys():
                 coord.chunk_metadata.clear()
@@ -401,91 +335,25 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
                     {location: objects[location] for location in locations}
                 )
                 available.append((coord, 0))
-                ready_ids.add(id(coord))
-        for init, coords in by_init.items():
-            self._update_lagging(coords, polls[init], now, ready_ids)
+
         return available
 
-    def _due_coords(
-        self,
-        coords: Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord],
-        poll: _InitPoll,
-        now: float,
-        *,
-        full: bool,
-        new_leads: Mapping[tuple[Timestamp, str], set[int]],
-    ) -> list[GoogleWeathernext2ForecastVirtualSourceFileCoord]:
-        if full:
-            poll.next_full_listing = now + _FULL_LISTING_INTERVAL_SECONDS
-            return list(coords)
-        probe_var = self._probe_var().path
-        due = []
-        for coord in coords:
-            var_path = coord.data_vars[0].path
-            lead = coord.lead_index
-            retry = poll.retry_at.get(var_path)
-            if retry is None:
-                is_due = lead in new_leads.get((coord.init_time, probe_var), set())
-            else:
-                # A lagging variable waits for its own probe or its batched retry.
-                is_due = lead in new_leads.get((coord.init_time, var_path), set()) or (
-                    now >= retry[0] and lead in poll.known_leads(var_path, probe_var)
-                )
-            if is_due:
-                due.append(coord)
-        return due
-
-    def _record_probe_leads(
-        self,
-        coord: GoogleWeathernext2ForecastVirtualSourceFileCoord,
-        poll: _InitPoll,
-        objects: Mapping[str, NativeObjectMetadata],
-    ) -> None:
-        """A full listing also covers each probe, so its leads aren't "new" next tick."""
-        for var in self.data_vars:
-            prefix = self._probe_query(coord, var.path).prefix
-            poll.probed_leads.setdefault(var.path, set()).update(
-                _listed_leads(
-                    {
-                        location: metadata
-                        for location, metadata in objects.items()
-                        if location.startswith(f"{PROXY_LOCATION_PREFIX}{prefix}")
-                    }
-                )
-            )
-
-    def _update_lagging(
-        self,
-        coords: Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord],
-        poll: _InitPoll,
-        now: float,
-        ready_ids: set[int],
-    ) -> None:
-        """A variable lags while any pending coord of it has a probed lead."""
-        probe_var = self._probe_var().path
-        outcomes: dict[str, tuple[bool, bool]] = {}  # var -> (lagging, progressed)
-        for coord in coords:
-            var_path = coord.data_vars[0].path
-            lagging, progressed = outcomes.get(var_path, (False, False))
-            if id(coord) in ready_ids:
-                progressed = True
-            elif coord.lead_index in poll.known_leads(var_path, probe_var):
-                lagging = True
-            outcomes[var_path] = (lagging, progressed)
-        for var_path, (lagging, progressed) in outcomes.items():
-            poll.update_retry(var_path, now, lagging=lagging, progressed=progressed)
-
-    def _probe_var(self) -> GoogleWeathernext2DataVar:
-        return next(
-            (var for var in self.data_vars if var.group is ROOT), self.data_vars[0]
-        )
-
     def _probe_query(
-        self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord, var_path: str
+        self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
     ) -> ObjectListingQuery:
-        var = next(var for var in self.data_vars if var.path == var_path)
+        (var,) = coord.data_vars
         prefix = f"{_variable_prefix(coord, var)}{_PROBE_MEMBER}."
         return ObjectListingQuery(prefix=prefix, match_glob=f"{prefix}*", delimiter="/")
+
+    def _probe_locations(
+        self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
+    ) -> set[str]:
+        (var,) = coord.data_vars
+        _, levels = self._source_chunk_axes(var)
+        prefix = f"{PROXY_LOCATION_PREFIX}{_store_key(coord.get_url())}/"
+        return {
+            f"{prefix}{coord.chunk_key(var, _PROBE_MEMBER, level)}" for level in levels
+        }
 
     def _due_queries(
         self, due: Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord]
