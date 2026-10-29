@@ -68,3 +68,46 @@ def test_zero_byte_non_placeholder_is_rejected() -> None:
     )
     with pytest.raises(AssertionError, match="invalid object size"):
         list_objects(client, ObjectListingQuery("store/temperature/"))
+
+
+@pytest.mark.parametrize("payload", [{}, {"items": []}])
+def test_unpublished_prefix_returns_empty_listing(payload: dict[str, object]) -> None:
+    client = Mock()
+    client.get.return_value = httpx.Response(
+        200, request=httpx.Request("GET", OBJECTS_LOCATION), json=payload
+    )
+    assert list_objects(client, ObjectListingQuery("store/temperature/")) == {}
+    assert client.get.call_count == 1
+
+
+@pytest.mark.parametrize("status", [403, 404])
+@pytest.mark.parametrize("after_first_page", [False, True])
+def test_rejected_listing_raises_without_retry_or_partial_results(
+    status: int, after_first_page: bool
+) -> None:
+    client = Mock()
+    request = httpx.Request("GET", OBJECTS_LOCATION)
+    pages = []
+    if after_first_page:
+        pages.append(
+            httpx.Response(
+                200,
+                request=request,
+                json={
+                    "items": [
+                        {
+                            "name": "store/temperature/0",
+                            "size": "1",
+                            "md5Hash": b64encode(bytes(16)).decode(),
+                        }
+                    ],
+                    "nextPageToken": "second",
+                },
+            )
+        )
+    pages.append(httpx.Response(status, request=request))
+    client.get.side_effect = pages
+    with pytest.raises(httpx.HTTPStatusError) as error:
+        list_objects(client, ObjectListingQuery("store/temperature/"))
+    assert error.value.response.status_code == status
+    assert client.get.call_count == len(pages)

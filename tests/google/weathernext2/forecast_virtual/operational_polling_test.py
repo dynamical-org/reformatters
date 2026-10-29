@@ -54,7 +54,7 @@ class FakeSource:
 
     def list_objects(
         self, client: httpx.Client, query: ObjectListingQuery
-    ) -> dict[str, NativeObjectMetadata] | None:
+    ) -> dict[str, NativeObjectMetadata]:
         assert client is not None
         self.queries.append(query)
         assert query.match_glob is not None
@@ -77,25 +77,10 @@ class FakeSource:
         return queries
 
 
-class Clock:
-    def __init__(self) -> None:
-        self.now = 1000.0
-
-    def __call__(self) -> float:
-        return self.now
-
-
 @pytest.fixture
 def source(monkeypatch: pytest.MonkeyPatch) -> FakeSource:
     fake = FakeSource()
     monkeypatch.setattr(region_job, "list_objects", fake.list_objects)
-    return fake
-
-
-@pytest.fixture
-def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
-    fake = Clock()
-    monkeypatch.setattr(region_job_module, "_monotonic", fake)
     return fake
 
 
@@ -165,7 +150,7 @@ def _available(
     return sorted((coord.lead_index, coord.data_vars[0].path) for coord, _ in available)
 
 
-def test_complete_init_batches_each_variable(source: FakeSource, clock: Clock) -> None:
+def test_complete_init_batches_each_variable(source: FakeSource) -> None:
     job = _update_job([SURFACE, PRESSURE])
     pending = _coords([SURFACE, PRESSURE], range(60))
     source.publish(job, pending)
@@ -180,21 +165,16 @@ def test_complete_init_batches_each_variable(source: FakeSource, clock: Clock) -
     assert not pending
 
 
-def test_waiting_probes_every_pending_variable(
-    source: FakeSource, clock: Clock
-) -> None:
+def test_waiting_probes_every_pending_variable(source: FakeSource) -> None:
     job = _update_job([SURFACE, PRESSURE])
     pending = _coords([SURFACE, PRESSURE], range(60))
 
-    for _ in range(130):
+    for _ in range(2):
         assert _available(job, pending) == []
         assert set(source.take()) == {_probe(), _probe(var=PRESSURE)}
-        clock.now += 15
 
 
-def test_variables_and_leads_are_discovered_independently(
-    source: FakeSource, clock: Clock
-) -> None:
+def test_variables_and_leads_are_discovered_independently(source: FakeSource) -> None:
     job = _update_job([SURFACE, PRESSURE])
     pending = _coords([SURFACE, PRESSURE], [0, 1, 59])
     source.publish(job, _coords([PRESSURE], [59]))
@@ -205,14 +185,17 @@ def test_variables_and_leads_are_discovered_independently(
         _probe(var=PRESSURE),
         _per_lead(PRESSURE, 59),
     }
-    clock.now += 15
     assert _available(job, pending) == []
     assert set(source.take()) == {_probe(), _probe(var=PRESSURE)}
+
+    source.publish(job, _coords([SURFACE], [0]))
+    assert _available(job, pending) == [(0, SURFACE.path)]
+    assert set(source.take()) == {_probe(), _probe(var=PRESSURE), _per_lead(SURFACE, 0)}
 
 
 @pytest.mark.parametrize("var", [SURFACE, PRESSURE])
 def test_probe_requires_every_level_of_its_member(
-    source: FakeSource, clock: Clock, var: GoogleWeathernext2DataVar
+    source: FakeSource, var: GoogleWeathernext2DataVar
 ) -> None:
     job = _update_job([var])
     pending = _coords([var], [0])
@@ -222,14 +205,11 @@ def test_probe_requires_every_level_of_its_member(
     assert _available(job, pending) == []
     assert source.take() == [_probe(var=var)]
     source.publish(job, pending)
-    clock.now += 15
     assert _available(job, pending) == [(0, var.path)]
     assert set(source.take()) == {_probe(var=var), _per_lead(var, 0)}
 
 
-def test_failed_confirmation_retries_on_next_tick(
-    source: FakeSource, clock: Clock
-) -> None:
+def test_failed_confirmation_retries_on_next_tick(source: FakeSource) -> None:
     job = _update_job([SURFACE, PRESSURE])
     pending = _coords([SURFACE, PRESSURE], [0, 1])
     first = _coords([PRESSURE], [0])[0]
@@ -241,7 +221,6 @@ def test_failed_confirmation_retries_on_next_tick(
     assert _per_lead(PRESSURE, 0) in source.take()
 
     source.publish(job, pending)
-    clock.now += 15
     assert _available(job, pending) == sorted(
         [
             (0, SURFACE.path),
@@ -260,23 +239,11 @@ def test_failed_confirmation_retries_on_next_tick(
     }
 
 
-def test_successful_confirmation_does_not_delay_next_lead(
-    source: FakeSource, clock: Clock
-) -> None:
-    job = _update_job([SURFACE])
-    pending = _coords([SURFACE], [0, 1])
-    source.publish(job, _coords([SURFACE], [0]))
-    assert _available(job, pending) == [(0, SURFACE.path)]
-    source.take()
-    source.publish(job, pending)
-    clock.now += 15
-    assert _available(job, pending) == [(1, SURFACE.path)]
-    assert set(source.take()) == {_probe(), _per_lead(SURFACE, 1)}
-
-
 def test_old_holes_poll_slowly_without_delaying_current_init(
-    source: FakeSource, clock: Clock
+    source: FakeSource, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    now = 1000.0
+    monkeypatch.setattr(region_job_module.time, "monotonic", lambda: now)
     job = _update_job([SURFACE])
     old_init = INIT - pd.Timedelta("6h")
     pending = _coords([SURFACE], [0], old_init) + _coords([SURFACE], [0])
@@ -284,21 +251,21 @@ def test_old_holes_poll_slowly_without_delaying_current_init(
     assert set(source.take()) == {_probe(old_init), _probe()}
     source.publish(job, pending)
 
-    clock.now += 15
+    now += 15
     assert _available(job, pending) == [(0, SURFACE.path)]
     assert pending[0].init_time == old_init
     assert set(source.take()) == {_probe(), _per_lead(SURFACE, 0)}
-    clock.now += 584
+    now += 584
     assert _available(job, pending) == []
     assert source.take() == []
-    clock.now += 1
+    now += 1
     assert _available(job, pending) == [(0, SURFACE.path)]
     assert set(source.take()) == {_probe(old_init), _per_lead(SURFACE, 0, old_init)}
 
 
 @pytest.mark.parametrize("lead_count", [4, 5])
 def test_batching_depends_only_on_current_due_leads(
-    source: FakeSource, clock: Clock, lead_count: int
+    source: FakeSource, lead_count: int
 ) -> None:
     job = _update_job([PRESSURE])
     pending = _coords([PRESSURE], range(lead_count))
@@ -313,7 +280,7 @@ def test_batching_depends_only_on_current_due_leads(
 
 
 def test_batched_result_also_ingests_lead_that_arrived_after_probe(
-    source: FakeSource, clock: Clock, monkeypatch: pytest.MonkeyPatch
+    source: FakeSource, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     job = _update_job([SURFACE])
     pending = _coords([SURFACE], range(6))
@@ -322,7 +289,7 @@ def test_batched_result_also_ingests_lead_that_arrived_after_probe(
 
     def publish_after_probe(
         client: httpx.Client, query: ObjectListingQuery
-    ) -> dict[str, NativeObjectMetadata] | None:
+    ) -> dict[str, NativeObjectMetadata]:
         result = listing(client, query)
         if query == _probe():
             source.publish(job, pending[5:])
@@ -333,9 +300,7 @@ def test_batched_result_also_ingests_lead_that_arrived_after_probe(
     assert len(source.take()) == 2
 
 
-def test_backfill_batches_without_probing_or_throttling(
-    source: FakeSource, clock: Clock
-) -> None:
+def test_backfill_batches_without_probing_or_throttling(source: FakeSource) -> None:
     job = _update_job([SURFACE, PRESSURE]).model_copy(
         update={"processing_mode": "backfill"}
     )
@@ -346,12 +311,3 @@ def test_backfill_batches_without_probing_or_throttling(
         ObjectListingQuery(_prefix(var), _all_leads(var), "/")
         for var in (SURFACE, PRESSURE)
     }
-
-
-def test_refused_listing_fails_loudly(
-    monkeypatch: pytest.MonkeyPatch, clock: Clock
-) -> None:
-    monkeypatch.setattr(region_job, "list_objects", lambda client, query: None)
-    job = _update_job([SURFACE])
-    with pytest.raises(RuntimeError, match="refused listing"):
-        job.discover_available(_coords([SURFACE], range(60)))

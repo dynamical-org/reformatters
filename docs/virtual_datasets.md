@@ -74,6 +74,8 @@ Each batch commits to replicas before the primary. A conflicting transaction ope
 
 `operational_update_jobs()` returns **one** region job spanning the active window (the recent, still-incomplete span of the append dim). Each Kubernetes Job runs one worker, which commits whole files straight to `main` as they arrive — no temp branch, no coordination files (`DynamicalDataset.update` routes to `_run_virtual_operational_update`).
 
+`operational_update_window` bounds automatic repair of recent append-dim positions; it need not span the forecast lead-time horizon. Already-ingested files are filtered before source discovery, so shortening the window reduces source requests only for unfinished older positions. Positions outside the window require backfill to repair.
+
 `main` grows to the data ingested, without NaN-padding toward "now". Overlapping Jobs are safe: each commit attempt opens a fresh writable session, filters out files already ingested by another writer, and grows the append dim from that session's committed extent. Growing commits do not auto-rebase: any branch advance retries the batch against a fresh session, rechecking the resize invariant. Ordinary ticks within the existing extent keep automatic rebase for disjoint writes. Both paths retain same-session retries for ordinary I/O errors. If an update falls far behind, run a backfill to catch up rather than scaling a Job to multiple workers.
 
 Before committing a resize, the writer checks every append-dim array in the session, including arrays outside its template. This check aborts growth that would leave stored arrays short, including when the writer's template omits a newly added variable. A writer with the complete template can grow all arrays together.

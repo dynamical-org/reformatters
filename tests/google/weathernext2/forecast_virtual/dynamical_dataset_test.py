@@ -110,7 +110,7 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     ]
     assert decode.positions == "all"
     assert decode.max_positions == 2
-    assert dataset.region_job_class.operational_update_window == timedelta(days=17)
+    assert dataset.region_job_class.operational_update_window == timedelta(hours=24)
     description = dataset.template_config.dataset_attributes.description
     assert description == (
         "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model."

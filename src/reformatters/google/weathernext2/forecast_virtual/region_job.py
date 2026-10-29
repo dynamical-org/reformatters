@@ -23,7 +23,6 @@ from reformatters.common.types import (
 )
 from reformatters.google.weathernext_virtual.listing import (
     PROXY_LOCATION_PREFIX,
-    NativeObjectMetadata,
     ObjectListingQuery,
 )
 from reformatters.google.weathernext_virtual.region_job import (
@@ -35,7 +34,6 @@ from reformatters.google.weathernext_virtual.region_job import utc_now as _utc_n
 
 from .template_config import (
     INIT_TIME_FREQUENCY,
-    LEAD_TIMES,
     PER_INIT_STORE_DATE,
     PRESSURE_LEVELS,
     GoogleWeathernext2DataVar,
@@ -106,31 +104,6 @@ class GoogleWeathernext2ForecastVirtualSourceFileCoord(WeatherNextSourceFileCoor
 
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {"init_time": self.init_time, "lead_time": self.lead_time}
-
-
-def _variable_prefix(
-    coord: GoogleWeathernext2ForecastVirtualSourceFileCoord,
-    var: GoogleWeathernext2DataVar,
-) -> str:
-    return f"{_store_key(coord.get_url())}/{var.internal_attrs.source_name}/"
-
-
-def _required(
-    objects: dict[str, NativeObjectMetadata] | None, query: ObjectListingQuery
-) -> dict[str, NativeObjectMetadata]:
-    """The proxy answers a listing of a valid init with a (possibly empty) page, even
-    before the store exists, so a 403/404 means it refused the query, e.g. a proxy
-    deployed without support for these listing forms. Fail rather than wait silently."""
-    if objects is None:
-        raise RuntimeError(
-            f"wn.dynamical.org refused listing prefix={query.prefix} "
-            f"matchGlob={query.match_glob}; deploy proxy support for it first"
-        )
-    return objects
-
-
-def _monotonic() -> float:
-    return time.monotonic()
 
 
 class GoogleWeathernext2ForecastVirtualRegionJob(
@@ -290,13 +263,13 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
     tick_interval: ClassVar[Timedelta] = pd.Timedelta("15s")
     # A 32-init batch would construct about 11.2 million virtual refs in memory.
     manifest_init_split: ClassVar[int] = OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT
-    operational_update_window: ClassVar[Timedelta] = LEAD_TIMES[-1] + pd.Timedelta("2D")
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
     _next_old_init_poll: float = PrivateAttr(default=float("-inf"))
 
     def discover_available(
         self, pending: list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
     ) -> list[tuple[GoogleWeathernext2ForecastVirtualSourceFileCoord, int]]:
-        now = _monotonic()
+        now = time.monotonic()
         if self.processing_mode == "backfill":
             selected = due = pending
         else:
@@ -312,8 +285,8 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
             probes = self._list({self._probe_query(coord) for coord in selected})
             objects = {
                 location: metadata
-                for query, listed in probes.items()
-                for location, metadata in _required(listed, query).items()
+                for listed in probes.values()
+                for location, metadata in listed.items()
             }
             due = [
                 coord
@@ -324,8 +297,8 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
             return []
 
         objects = {}
-        for query, listed in self._list(self._due_queries(due)).items():
-            objects.update(_required(listed, query))
+        for listed in self._list(self._due_queries(due)).values():
+            objects.update(listed)
         available = []
         for coord in selected:
             locations = {chunk.location for chunk in self._source_chunks(coord)}
@@ -382,6 +355,13 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
                     query for coord in coords for query in self._listing_queries(coord)
                 )
         return queries
+
+
+def _variable_prefix(
+    coord: GoogleWeathernext2ForecastVirtualSourceFileCoord,
+    var: GoogleWeathernext2DataVar,
+) -> str:
+    return f"{_store_key(coord.get_url())}/{var.internal_attrs.source_name}/"
 
 
 def _store_key(url: str) -> str:

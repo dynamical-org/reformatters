@@ -571,7 +571,7 @@ def test_unrestricted_update_includes_newest_init_and_revisits_missing_steps(
 ) -> None:
     fire_time = pd.Timestamp("2025-03-20") + pd.Timedelta(hours=hour, minutes=5)
     newest_init = (fire_time - pd.Timedelta("7h")).floor("6h")
-    older_init = newest_init - pd.Timedelta("2D")
+    older_init = newest_init - pd.Timedelta("18h")
     var = _var(OPERATIONAL, "temperature_2m")
     jobs, template = (
         GoogleWeathernext2ForecastOperationalVirtualRegionJob.operational_update_jobs(
@@ -588,14 +588,7 @@ def test_unrestricted_update_includes_newest_init_and_revisits_missing_steps(
     assert isinstance(job, GoogleWeathernext2ForecastOperationalVirtualRegionJob)
     init_times = template.to_dataset().get_index("init_time")
     assert init_times[-1] == newest_init
-    assert job.region == slice(
-        int(
-            init_times.searchsorted(
-                newest_init + pd.Timedelta("6h") - pd.Timedelta("17D")
-            )
-        ),
-        len(init_times),
-    )
+    assert job.region == slice(len(init_times) - 4, len(init_times))
     coords = job.source_file_coords()
     expected_steps = {
         (init_time, lead_time)

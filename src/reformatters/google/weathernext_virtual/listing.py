@@ -31,7 +31,7 @@ class ObjectListingQuery(NamedTuple):
 
 def list_objects(
     client: httpx.Client, query: ObjectListingQuery
-) -> dict[str, NativeObjectMetadata] | None:
+) -> dict[str, NativeObjectMetadata]:
     objects: dict[str, NativeObjectMetadata] = {}
     page_token: str | None = None
     while True:
@@ -53,8 +53,6 @@ def list_objects(
             get_page,
             retryable_exceptions=(httpx.RequestError, httpx.HTTPStatusError),
         )
-        if response.status_code in {403, 404}:
-            return None
         response.raise_for_status()
         payload = response.json()
         for item in payload.get("items", []):

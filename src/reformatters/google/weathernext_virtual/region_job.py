@@ -106,31 +106,26 @@ class WeatherNextVirtualRegionJob(
         for coord in pending:
             coord_objects: dict[str, NativeObjectMetadata] = {}
             for query in self._listing_queries(coord):
-                objects = listed[query]
-                if objects is None:
-                    break
-                coord_objects.update(objects)
+                coord_objects.update(listed[query])
+            locations = {chunk.location for chunk in self._source_chunks(coord)}
+            if locations <= coord_objects.keys():
+                coord.chunk_metadata.clear()
+                coord.chunk_metadata.update(
+                    {location: coord_objects[location] for location in locations}
+                )
+                available.append((coord, 0))
             else:
-                locations = {chunk.location for chunk in self._source_chunks(coord)}
-                if locations <= coord_objects.keys():
-                    coord.chunk_metadata.clear()
-                    coord.chunk_metadata.update(
-                        {location: coord_objects[location] for location in locations}
-                    )
-                    available.append((coord, 0))
-                else:
-                    missing = locations - coord_objects.keys()
-                    log.debug(
-                        f"{len(missing)} source chunks unavailable for "
-                        f"{coord.get_url()} {coord.data_vars[0].path}; "
-                        f"first: {min(missing)}"
-                    )
+                missing = locations - coord_objects.keys()
+                log.debug(
+                    f"{len(missing)} source chunks unavailable for "
+                    f"{coord.get_url()} {coord.data_vars[0].path}; "
+                    f"first: {min(missing)}"
+                )
         return available
 
     def _list(
         self, queries: set[ObjectListingQuery]
-    ) -> dict[ObjectListingQuery, dict[str, NativeObjectMetadata] | None]:
-        """List every query concurrently; None for a query whose prefix is absent."""
+    ) -> dict[ObjectListingQuery, dict[str, NativeObjectMetadata]]:
         ordered = sorted(
             queries,
             key=lambda query: (
