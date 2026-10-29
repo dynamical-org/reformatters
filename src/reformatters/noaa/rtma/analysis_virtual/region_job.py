@@ -78,18 +78,23 @@ class NoaaRtmaAnalysisVirtualRegionJob(
                 coord.get_url(), region=SOURCE_REGION, start=start, end=end
             )
 
-        messages = scan_analysis_messages(
-            read_range,
-            file_size,
-            coord.time,
-            set(variables),
-            bitmapped=frozenset(
-                identity
-                for identity, var in variables.items()
-                if var.internal_attrs.requires_bitmap
-            ),
-        )
-        refs = [
+        try:
+            messages = list(
+                scan_analysis_messages(
+                    read_range,
+                    file_size,
+                    coord.time,
+                    set(variables),
+                    bitmapped=frozenset(
+                        identity
+                        for identity, var in variables.items()
+                        if var.internal_attrs.requires_bitmap
+                    ),
+                )
+            )
+        except AssertionError as error:
+            raise ValueError(f"Invalid analysis GRIB source: {error}") from error
+        return [
             VirtualRef(
                 data_var=variables[message.identity],
                 out_loc=coord.out_loc(),
@@ -99,12 +104,3 @@ class NoaaRtmaAnalysisVirtualRegionJob(
             )
             for message in messages
         ]
-        # Partial coverage would let the representative chunk suppress retries
-        # for missing fields in the same source file.
-        missing = {var.path for var in coord.data_vars} - {
-            ref.data_var.path for ref in refs
-        }
-        assert not missing, (
-            f"Missing selected fields in {coord.get_url()}: {sorted(missing)}"
-        )
-        return refs

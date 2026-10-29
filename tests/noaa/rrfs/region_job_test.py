@@ -282,27 +282,7 @@ def test_member_selector_stripping_preserves_process_and_aerosol_selectors() -> 
     assert coord.get_url().endswith(
         "rrfsens.20260915/12/m005/rrfs.t12z.m005.2dfldnomads.3km.f006.conus.grib2"
     )
-    with pytest.raises(AssertionError):
-        coord.index_selectors(("ENS=+1",))
-
-
-def test_missing_required_messages_warn(caplog: pytest.LogCaptureFixture) -> None:
-    config = CONFIGS[0]
-    var = next(v for v in config.data_vars if v.name == "temperature_2m")
-    coord = NoaaRrfsSourceFileCoord(
-        init_time=pd.Timestamp("2026-10-15T12"),
-        lead_time=pd.Timedelta("2h"),
-        source_family="2dfld",
-        data_vars=[var],
-    )
-    with caplog.at_level("WARNING"):
-        make_job(config)._check_refs_complete(coord, [])
-    (warning,) = caplog.records
-    assert warning.levelname == "WARNING"
-    assert coord.get_url() in warning.message
-    assert "GRIB messages absent from index" in warning.message
-    assert "temperature_2m" in warning.message
-    assert "ingesting available messages" in warning.message
+    assert coord.index_selectors(("ENS=+1",)) is None
 
 
 @pytest.mark.parametrize("config", CONFIGS, ids=lambda c: c.dataset_id)

@@ -145,7 +145,7 @@ def test_refs_cover_available_selected_fields_with_exact_source_ranges(
 
 
 @pytest.mark.parametrize("cloud_only", [False, True])
-def test_missing_selected_cloud_cover_after_onset_raises(
+def test_missing_selected_cloud_cover_after_onset_keeps_usable_refs(
     job: NoaaRtmaRuAnalysisVirtualRegionJob,
     monkeypatch: pytest.MonkeyPatch,
     cloud_only: bool,
@@ -166,10 +166,17 @@ def test_missing_selected_cloud_cover_after_onset_raises(
             if not cloud_only or var.name == "total_cloud_cover_atmosphere"
         ],
     )
-    with pytest.raises(
-        AssertionError, match=r"Missing selected fields.*total_cloud_cover_atmosphere"
-    ):
-        job._file_refs_or_skip(coord, fixture["size"])
+    refs = job.file_refs(coord, fixture["size"])
+    assert {ref.data_var.name for ref in refs} == (
+        set()
+        if cloud_only
+        else {
+            var.name
+            for var in CONFIG.data_vars
+            if var.name != "total_cloud_cover_atmosphere"
+        }
+    )
+    assert len(refs) == (0 if cloud_only else len(CONFIG.data_vars) - 1)
 
 
 @pytest.mark.parametrize(
@@ -200,7 +207,7 @@ def test_invalid_selected_ru_headers_raise(
         xr.Dataset(coords={"time": [pd.Timestamp(source_fixture["time"])]}),
         CONFIG.data_vars,
     )
-    with pytest.raises(AssertionError, match=error):
+    with pytest.raises(ValueError, match=error):
         job.file_refs(coord, source_fixture["size"])
 
 
@@ -208,6 +215,7 @@ def test_duplicate_checks_and_unsupported_products_apply_only_to_selected_fields
     job: NoaaRtmaRuAnalysisVirtualRegionJob,
     source_fixture: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     for _ in range(2):
         extra = append_message(source_fixture, 0)
@@ -223,5 +231,5 @@ def test_duplicate_checks_and_unsupported_products_apply_only_to_selected_fields
     )
     assert len(job.file_refs(coord, source_fixture["size"])) == len(coord.data_vars)
     append_message(source_fixture, 0)
-    with pytest.raises(AssertionError, match="Duplicate GRIB field"):
-        job.file_refs(coord, source_fixture["size"])
+    assert job._file_refs_or_skip(coord, source_fixture["size"]) == []
+    assert "Duplicate GRIB field" in caplog.text

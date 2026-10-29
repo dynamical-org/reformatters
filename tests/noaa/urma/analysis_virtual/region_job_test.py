@@ -120,7 +120,7 @@ def test_source_refs_cover_only_available_selected_fields(
 
 
 @pytest.mark.parametrize("wave_only", [False, True])
-def test_missing_wave_after_onset_fails(
+def test_missing_wave_after_onset_keeps_usable_refs(
     job: NoaaUrmaAnalysisVirtualRegionJob,
     source_fixture: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
@@ -145,17 +145,18 @@ def test_missing_wave_after_onset_fails(
     coord = NoaaUrmaAnalysisVirtualSourceFileCoord(
         time=source_fixture["time"], data_vars=[WAVE] if wave_only else VARS
     )
-    with pytest.raises(
-        AssertionError,
-        match=r"Missing selected fields.*significant_wave_height_surface",
-    ):
-        job._file_refs_or_skip(coord, source_fixture["size"])
+    refs = job.file_refs(coord, source_fixture["size"])
+    assert {ref.data_var.name for ref in refs} == (
+        set() if wave_only else {var.name for var in VARS if var != WAVE}
+    )
+    assert len(refs) == (0 if wave_only else len(VARS) - 1)
 
 
-def test_duplicate_selected_field_fails(
+def test_duplicate_source_field_skips_whole_file(
     job: NoaaUrmaAnalysisVirtualRegionJob,
     source_fixture: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     append_message(source_fixture, 0)
     read = sparse_source(source_fixture)
@@ -165,5 +166,5 @@ def test_duplicate_selected_field_fails(
     (coord,) = job.generate_source_file_coords(
         xr.Dataset(coords={"time": [pd.Timestamp(source_fixture["time"])]}), VARS
     )
-    with pytest.raises(AssertionError, match="Duplicate GRIB field"):
-        job.file_refs(coord, source_fixture["size"])
+    assert job._file_refs_or_skip(coord, source_fixture["size"]) == []
+    assert "Duplicate GRIB field" in caplog.text

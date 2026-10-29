@@ -277,11 +277,10 @@ def test_file_refs_span_each_message_and_end_at_the_file_end(
     assert all(r.location == coord.get_url() for r in refs)
 
 
-def test_file_refs_refuses_an_index_missing_a_requested_variable(
+def test_file_refs_does_not_match_a_different_accumulation_window(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """At lead 6 the accumulation window is 0-6, so a 0-3 line is a different message.
-    Committing the file anyway would leave a NaN column nothing ever retries."""
+    """At lead 6 the accumulation window is 0-6, so a 0-3 line is a different message."""
 
     stub_grib_source_file_reads(
         monkeypatch,
@@ -301,8 +300,7 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
     )
     job = make_job(template_ds, data_vars=data_vars)
 
-    with pytest.raises(AssertionError, match="has no message for"):
-        job.file_refs(coord, file_size=1200)
+    assert job.file_refs(coord, file_size=1200) == []
 
 
 def test_file_refs_takes_the_first_of_two_element_spellings_for_one_chunk(
@@ -553,8 +551,6 @@ def test_every_requested_variable_maps_to_a_real_message(
     job = make_job(template_ds, data_vars=data_vars)
     refs = job.file_refs(coord, file_size=last_start + 1_000_000)
 
-    # _check_refs_complete asserts nothing was requested but absent; this pins the
-    # other direction, that no variable the file does not carry was matched anyway.
     assert sorted(r.data_var.name for r in refs) == sorted(
         v.name for v in coord.data_vars
     )

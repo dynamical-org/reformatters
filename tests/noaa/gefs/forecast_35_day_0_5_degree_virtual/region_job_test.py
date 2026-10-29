@@ -200,11 +200,11 @@ def test_operational_update_jobs_reach_back_past_the_extension(
     assert now - swept.min() > pd.Timedelta("28h")
 
 
-def test_file_refs_refuses_an_index_missing_a_requested_variable(
+def test_file_refs_does_not_match_a_different_accumulation_window(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """At lead 846 the accumulation window is 840-846, so an 834-846 line is a different
-    message. Committing the file anyway would leave a NaN column nothing ever retries."""
+    message."""
 
     stub_grib_source_file_reads(
         monkeypatch,
@@ -226,8 +226,7 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
     )
     job = make_job(template_ds, data_vars=data_vars)
 
-    with pytest.raises(AssertionError, match="has no message for"):
-        job.file_refs(coord, file_size=1200)
+    assert job.file_refs(coord, file_size=1200) == []
 
 
 _IDX_FIXTURE_NAME = re.compile(r"^(\d{8}T\d{2})_([cp]\d{2})_([ab])_f(\d{3})\.idx$")

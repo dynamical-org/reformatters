@@ -125,7 +125,6 @@ def test_every_source_message_is_referenced_except_explicit_exclusions(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    job = make_job()
     monkeypatch.setattr(NoaaRefsRegionJob, "grib_message_length_at", lambda *a: 217)
     covered = set()
     for path in INDEX_PATHS:
@@ -213,20 +212,6 @@ def test_every_source_message_is_referenced_except_explicit_exclusions(
         for ref in refs:
             assert isinstance(ref.data_var, NoaaRefsDataVar)
             assert ("statistic" in ref.out_loc) == (family in ("mean", "sprd"))
-        if family == "mean" and lead == pd.Timedelta("1h"):
-            caplog.clear()
-            with caplog.at_level("WARNING"):
-                job._check_refs_complete(
-                    coord,
-                    [ref for ref in refs if ref.data_var.name != "temperature_2m"],
-                )
-            (warning,) = caplog.records
-            assert warning.levelname == "WARNING"
-            assert coord.get_url() in warning.message
-            assert "GRIB messages absent from index" in warning.message
-            assert "temperature_2m" in warning.message
-            with pytest.raises(AssertionError, match="duplicate output references"):
-                job._check_refs_complete(coord, [*refs, refs[0]])
         covered.update(ref.data_var.path for ref in refs)
     assert covered == {var.path for var in VARIABLES}
 
@@ -353,8 +338,7 @@ def test_member_count_token_is_removed_without_losing_exact_selectors(
     coord = file_coord(pd.Timestamp("2026-10-02"), family, pd.Timedelta("60h"))
     selectors = ("prob >12.7", f"prob fcst 0/{count}", "process=197")
     assert coord.index_selectors(selectors) == ("prob >12.7", "process=197")
-    with pytest.raises(AssertionError):
-        coord.index_selectors(("prob >12.7", "process=197"))
+    assert coord.index_selectors(("prob >12.7", "process=197")) is None
 
 
 @pytest.mark.parametrize(
@@ -381,18 +365,6 @@ def test_rolling_windows_match_real_labels(
     assert label in windows, (duration, hours)
     assert variable.available_at(pd.Timedelta(hours=hours))
     assert not variable.available_at(pd.Timedelta(hours=hours + 1))
-
-
-def test_missing_required_messages_warn(caplog: pytest.LogCaptureFixture) -> None:
-    coord = file_coord(pd.Timestamp("2026-10-15T12"), "mean", pd.Timedelta("1h"))
-    with caplog.at_level("WARNING"):
-        make_job()._check_refs_complete(coord, [])
-    (warning,) = caplog.records
-    assert warning.levelname == "WARNING"
-    assert coord.get_url() in warning.message
-    assert "GRIB messages absent from index" in warning.message
-    assert "temperature_2m" in warning.message
-    assert "ingesting available messages" in warning.message
 
 
 def test_exact_selectors_have_distinct_lookup_keys() -> None:
@@ -508,10 +480,7 @@ def test_surface_height_spread_accepts_either_copy(
             refs = make_job().file_refs(coord, file_size)
         assert "geopotential_height_surface" not in {r.data_var.name for r in refs}
         assert len(refs) == len(coord.data_vars) - 1
-        (warning,) = caplog.records
-        assert warning.levelname == "WARNING"
-        assert "geopotential_height_surface" in warning.message
-        assert "GRIB messages absent from index" in warning.message
+        assert not caplog.records
         return
     refs = make_job().file_refs(coord, file_size)
     height = item(r for r in refs if r.data_var.name == "geopotential_height_surface")
@@ -522,7 +491,40 @@ def test_surface_height_spread_accepts_either_copy(
 
 def test_pmm_process_cannot_supply_arithmetic_mean() -> None:
     coord = file_coord(pd.Timestamp("2026-08-13T00"), "mean", pd.Timedelta("1h"))
-    with pytest.raises(
-        AssertionError, match="PMM process cannot supply an arithmetic mean"
-    ):
-        coord.index_selectors(("wt ens mean", "process=193"))
+    assert coord.index_selectors(("wt ens mean", "process=193")) is None
+
+
+def test_malformed_selector_keeps_healthy_messages(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    lines = index_path("mean", 1).read_text().splitlines()
+    local = tmp_path / "index.idx"
+    local.write_text(
+        "\n".join(
+            line.replace(":wt ens mean", "")
+            if any(
+                f":{element}:2 m above ground:" in line for element in ("TMP", "DPT")
+            )
+            else line
+            for line in lines
+        )
+        + "\n"
+    )
+    monkeypatch.setattr(
+        "reformatters.noaa.noaa_virtual_region_job.s3_download_to_disk",
+        lambda *a, **k: local,
+    )
+    monkeypatch.setattr(NoaaRefsRegionJob, "grib_message_length_at", lambda *a: 217)
+    coord = file_coord(pd.Timestamp("2026-08-13T00"), "mean", pd.Timedelta("1h"))
+    refs = make_job().file_refs(coord, int(lines[-1].split(":")[1]) + 1000)
+    assert {ref.data_var.name for ref in refs} == {
+        var.name
+        for var in coord.data_vars
+        if var.name not in {"temperature_2m", "dew_point_temperature_2m"}
+    }
+    (record,) = caplog.records
+    assert record.levelname == "ERROR"
+    assert "Skipping 2 messages" in record.message
+    assert "invalid selectors" in record.message

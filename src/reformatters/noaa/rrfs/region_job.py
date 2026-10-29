@@ -5,12 +5,9 @@ import icechunk
 import pandas as pd
 import xarray as xr
 
-from reformatters.common.config_models import ROOT
-from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim, Timedelta
-from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.noaa.noaa_virtual_region_job import (
     NoaaVirtualRegionJob,
     NoaaVirtualSourceFileCoord,
@@ -19,7 +16,6 @@ from reformatters.noaa.rrfs.models import NoaaRrfsDataVar, RrfsSourceFamily
 
 SOURCE_PREFIX = "s3://noaa-rrfs-ops-pds/"
 SOURCE_REGION = "us-east-1"
-log = get_logger(__name__)
 
 
 def rrfs_virtual_chunk_containers() -> tuple[icechunk.VirtualChunkContainer, ...]:
@@ -52,36 +48,6 @@ class NoaaRrfsRegionJob(NoaaVirtualRegionJob[NoaaRrfsDataVar, NoaaRrfsSourceFile
     source_location_prefix: ClassVar[str] = SOURCE_PREFIX
     source_bucket_region: ClassVar[str] = SOURCE_REGION
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("18h")
-
-    def _check_refs_complete(
-        self, coord: NoaaRrfsSourceFileCoord, refs: list[VirtualRef]
-    ) -> None:
-        expected = set()
-        for lead in coord.message_lead_times():
-            for var in coord.data_vars:
-                if not var.available_at(lead):
-                    continue
-                levels = (
-                    [None]
-                    if var.group is ROOT
-                    else self.template_ds[var.path].get_index(var.group)
-                )
-                for level in levels:
-                    expected.add((var.path, lead, level))
-        actual = {
-            (
-                r.data_var.path,
-                r.out_loc["lead_time"],
-                None if r.data_var.group is ROOT else r.out_loc[r.data_var.group],
-            )
-            for r in refs
-        }
-        missing = expected - actual
-        if missing:
-            log.warning(
-                f"{coord.get_url()}: GRIB messages absent from index: "
-                f"{sorted(missing, key=str)}; ingesting available messages"
-            )
 
 
 class NoaaRrfsHourlyRegionJob(NoaaRrfsRegionJob):
