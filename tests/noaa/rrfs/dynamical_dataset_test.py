@@ -95,11 +95,11 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
         ),
         (
             NoaaRrfsForecastSubHourlyVirtualDataset,
-            61,
+            73,
             timedelta(hours=1, minutes=2, seconds=37),
             timedelta(minutes=1, seconds=21),
-            "1 * * * *",
-            timedelta(hours=2, minutes=2, seconds=16),
+            "13 * * * *",
+            timedelta(hours=2, minutes=14, seconds=16),
             timedelta(minutes=138),
         ),
         (
@@ -168,7 +168,7 @@ def test_poll_deadline_update_schedule_and_decode_health(
     assert current.max_delay == max_delay
     assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
     assert completeness.min_present_fraction == (
-        (3 / 18, 1.0) if cls is NoaaRrfsForecastSubHourlyVirtualDataset else (1.0,)
+        (6 / 18, 1.0) if cls is NoaaRrfsForecastSubHourlyVirtualDataset else (1.0,)
     )
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
     assert decode.max_workers == 2
@@ -350,7 +350,7 @@ def test_legacy_virtual_retry_admission_and_fire_anchored_cutoff(
         )
 
 
-def test_sub_hourly_slow_cycle_passes_completeness_at_poll_cutoff(
+def test_sub_hourly_partial_cycle_passes_completeness_at_poll_cutoff(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -359,32 +359,32 @@ def test_sub_hourly_slow_cycle_passes_completeness_at_poll_cutoff(
             base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
         )
     )
-    init = pd.Timestamp("2026-10-16T12")
+    init = pd.Timestamp("2026-09-23T18")
     fire = init + pd.Timedelta(minutes=dataset.update_offset_minutes)
     cutoff = dataset._virtual_poll_deadline(fire)
-    assert cutoff == pd.Timestamp("2026-10-16T14:02:16")
+    assert cutoff == pd.Timestamp("2026-09-23T20:14:16")
     arrivals = dict(
         zip(
             pd.timedelta_range("1h", "18h", freq="1h"),
             [
-                7098,
-                7177,
-                7179,
-                7369,
-                7441,
-                7521,
-                7602,
-                7699,
-                7779,
-                7989,
-                7991,
-                8083,
-                8081,
-                8198,
-                8266,
-                8319,
-                8312,
-                8530,
+                5006,
+                5108,
+                5102,
+                5207,
+                5304,
+                5419,
+                18704,
+                18705,
+                18693,
+                18709,
+                18715,
+                18724,
+                18705,
+                18734,
+                18737,
+                18739,
+                18741,
+                18742,
             ],
             strict=True,
         )
@@ -442,7 +442,7 @@ def test_sub_hourly_slow_cycle_passes_completeness_at_poll_cutoff(
     )
     assert check.check(context).passed
     assert (
-        not check.model_copy(update={"min_present_fraction": (4 / 18, 1.0)})
+        not check.model_copy(update={"min_present_fraction": (7 / 18, 1.0)})
         .check(context)
         .passed
     )
