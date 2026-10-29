@@ -67,6 +67,9 @@ def test_runtime_uses_historical_fire_and_maximum_inline_validation_including_er
     (tmp_path / "test-validate.json").write_text(json.dumps(validations))
     args = (tmp_path, cron, pd.Timestamp("2026-10-26"), pd.Timestamp("2026-10-27"))
     stats = measure_runtime(*args, virtual=False)
+    assert stats.startup_p50 == 30
+    assert stats.processing_p50 == 90
+    assert stats.validation_p50 == 20
     assert stats.startup_estimate == 39
     assert stats.processing == 117
     assert stats.validation_p95 == 164
@@ -147,6 +150,9 @@ def test_empty_exports_leave_all_components_unmeasured(
         pd.Timestamp("2026-10-27"),
         virtual=False,
     )
+    assert stats.startup_p50 is None
+    assert stats.processing_p50 is None
+    assert stats.validation_p50 is None
     assert stats.startup_estimate is None
     assert stats.processing is None
     assert stats.validation_max is None

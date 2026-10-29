@@ -1,28 +1,41 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
+from itertools import pairwise
 from math import ceil
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import xarray as xr
+from zarr.storage import MemoryStore
 
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import ReformatCronJob
+from reformatters.common.types import DatetimeLike
 from reformatters.common.validation import CheckCurrentData
+from reformatters.common.virtual_region_job import VirtualRegionJob
 
 from .datasets import Unit, anchor_spacing, is_virtual
 from .runtime import RuntimeStats
 from .sources import Listing, listing_prefix
 from .statistics import (
+    MATERIALIZED_DEADLINE_CAP,
     arrival_stats,
-    candidate_outcomes,
     ceil_minute,
     currency_delay,
-    late_threshold,
-    schedule_candidates,
+    max_normal_cut,
+    max_normal_gap,
+    read_rates,
+    regime_start,
+    schedule_offset,
+    tail_dominated,
     virtual_deadline,
     virtual_fire,
+    virtual_poll_cutoff,
+    virtual_poll_lead,
 )
+from .wxopticon import Evidence
 
 NAMED_EXCEPTIONS = frozenset(
     {
@@ -38,17 +51,30 @@ class MeasuredUnit:
     first: float | None
     complete: float | None
     missing_files: int
-    raw_first: float | None
     file_arrivals: dict[frozenset[str], float]
+    source: str = "listings"
+    provenance: dict[str, int] = field(default_factory=dict)
+    first_unmapped: str | None = None
 
 
 def aggregate_unit(
-    unit: Unit, listings: dict[str, Listing], *, as_of: pd.Timestamp | None = None
+    unit: Unit,
+    listings: dict[str, Listing],
+    *,
+    as_of: pd.Timestamp | None = None,
+    evidence: dict[str, Evidence] | None = None,
+    first_unmapped: str | None = None,
 ) -> MeasuredUnit:
     available: dict[frozenset[str], float] = {}
+    provenance: Counter[str] = Counter()
     missing = 0
     for file in unit.files:
-        timestamps = [listings[listing_prefix(url)].objects.get(url) for url in file]
+        timestamps = [
+            evidence[url].arrival
+            if evidence is not None
+            else listings[listing_prefix(url)].objects.get(url)
+            for url in file
+        ]
         timestamps = [
             value if as_of is None or value is None or value <= as_of else None
             for value in timestamps
@@ -59,19 +85,28 @@ def aggregate_unit(
         usable = max(value for value in timestamps if value is not None)
         offset = (usable - unit.anchor).total_seconds()
         available[file] = offset
-    raw_first = min(available.values()) if available else None
-    visible = [
-        max(available[file] for file in group)
-        for group in unit.visibility_groups
-        if all(file in available for file in group)
-    ]
+        provenance.update(
+            evidence[url].provenance if evidence is not None else "current_object_write"
+            for url in file
+        )
+    visible = (
+        [
+            max(available[file] for file in group)
+            for group in unit.visibility_groups
+            if all(file in available for file in group)
+        ]
+        if unit.visibility_groups
+        else available.values()
+    )
     return MeasuredUnit(
         unit,
-        (min(visible) if visible else None) if unit.visibility_groups else raw_first,
+        min(visible, default=None),
         max(available.values()) if available and missing == 0 else None,
         missing,
-        raw_first,
         available,
+        "wxopticon" if evidence is not None else "listings",
+        dict(provenance),
+        first_unmapped,
     )
 
 
@@ -83,6 +118,141 @@ def duration(value: float | None) -> str:
     hours, seconds = divmod(seconds, 3600)
     minutes, seconds = divmod(seconds, 60)
     return f"{sign}{hours:02}:{minutes:02}:{seconds:02}"
+
+
+def class_history(
+    units: Sequence[MeasuredUnit],
+    end: pd.Timestamp,
+    *,
+    virtual: bool,
+) -> tuple[list[MeasuredUnit], pd.Timestamp | None, bool]:
+    samples = [
+        (unit.unit.anchor.timestamp(), value)
+        for unit in units
+        if (value := unit.first if virtual else unit.complete) is not None
+    ]
+    start, suspected = regime_start(samples, end.timestamp())
+    boundary = pd.Timestamp(start, unit="s") if start is not None else None
+    return (
+        [unit for unit in units if boundary is None or unit.unit.anchor >= boundary],
+        boundary,
+        suspected,
+    )
+
+
+def small_sample(anchors: Sequence[pd.Timestamp]) -> bool:
+    ordered = sorted(anchors)
+    daily = (
+        len(ordered) > 1
+        and min((right - left).total_seconds() for left, right in pairwise(ordered))
+        >= 86400
+    )
+    return len(ordered) < (300 if daily else 100)
+
+
+def rate_arrivals(
+    units: Sequence[MeasuredUnit], end: pd.Timestamp, horizon: float
+) -> list[float | None]:
+    return [
+        unit.complete
+        for unit in units
+        if unit.missing_files < len(unit.unit.files)
+        and (
+            unit.complete is not None
+            or (end - unit.unit.anchor).total_seconds() > horizon
+        )
+    ]
+
+
+def render_class_evidence(
+    name: str,
+    units: Sequence[MeasuredUnit],
+    end: pd.Timestamp,
+    *,
+    virtual: bool,
+) -> list[str]:
+    active, boundary, suspected = class_history(units, end, virtual=virtual)
+    samples = [
+        (unit, value)
+        for unit in active
+        if (value := unit.first if virtual else unit.complete) is not None
+    ]
+    sources = ", ".join(sorted({unit.source for unit in units}))
+    mapped = sum(unit.source == "wxopticon" for unit in units)
+    first_unmapped = next(
+        (unit.first_unmapped for unit in units if unit.first_unmapped), "not captured"
+    )
+    provenance: Counter[str] = Counter()
+    for unit in active:
+        provenance.update(unit.provenance)
+    mix = (
+        ", ".join(f"{key}={count}" for key, count in sorted(provenance.items()))
+        or "unmeasured"
+    )
+    anchors = sorted(unit.unit.anchor for unit, _ in samples)
+    days = len({anchor.normalize() for anchor in anchors})
+    span = (anchors[-1] - anchors[0]).days + 1 if anchors else 0
+    lines = [
+        f"Evidence {name}: source **{sources}**; wxopticon {mapped}/{len(units)} units; listings for the rest (first unmapped: {first_unmapped if mapped < len(units) else 'none'}). Active history {days} sampled days / {span} calendar days; n={len(samples)}. Provenance (required artifacts in active history): {mix}.",
+        "",
+    ]
+    if boundary is not None:
+        lines.extend(
+            [
+                f"**Regime restart at {boundary.isoformat()}Z:** retained {len(active)}/{len(units)} requested units. Whole-history segment medians differ by ≥15 min, or a trailing cluster exceeds the earlier max normal; the retained segment spans more than 24 hours.",
+                "",
+            ]
+        )
+    if suspected:
+        lines.extend(
+            [
+                "**suspected change, review:** the terminal episode spans at most 24 hours; history is retained.",
+                "",
+            ]
+        )
+    if days < 180:
+        lines.extend(
+            [
+                "**Short history (<180 sampled days); p99 needs at least ~180 days per regime.**",
+                "",
+            ]
+        )
+    if small_sample(anchors):
+        lines.extend(
+            [
+                f"**Small sample: n={len(samples)}; hand value needed.** Require ~100 units, or ~300 for daily classes, before using p99-derived constants.",
+                "",
+            ]
+        )
+    if not samples:
+        return lines
+    values = [value for _, value in samples]
+    cut = max_normal_cut(values)
+    outliers = (
+        "; ".join(
+            f"{unit.unit.anchor.isoformat()}Z ({duration(value)}; {unit.source}; {', '.join(sorted(unit.provenance))})"
+            for unit, value in sorted(samples, key=lambda pair: pair[0].unit.anchor)
+            if value > cut
+        )
+        or "none"
+    )
+    metric = "first visibility" if virtual else "complete unit"
+    lines.extend(
+        [
+            f"Provisional max-normal cut ({metric}): {duration(cut)}. First gap above the median larger than g = max(3 min, p90 - p50) = {duration(max_normal_gap(values))}. Above-cut anchors (UTC): {outliers}.",
+            "",
+            f"p99 + 3 min: {duration(schedule_offset(arrival_stats(values)))}; max normal + 3 min: {duration(ceil_minute(cut + 3 * 60))}. Both rounded up to the fire minute. Beyond max normal: {sum(value > cut for value in values) / len(values):.2%}.",
+            "",
+        ]
+    )
+    if tail_dominated(values):
+        lines.extend(
+            [
+                "**tail-dominated, hand value needed:** p99 + 3 exceeds max normal + 3 by >15 min, or >1% of units exceed max normal. Materialized S/T and virtual max_delay are withheld for the affected readiness tier; first-visibility polling fires remain available.",
+                "",
+            ]
+        )
+    return lines
 
 
 def cron_interval(
@@ -155,6 +325,7 @@ class ClassRecommendation:
     offset: float | None
     delay: float
     threshold: float
+    hand_value: bool = False
 
 
 @dataclass(frozen=True)
@@ -164,6 +335,8 @@ class Recommendation:
     deadline: float | None
     validation_grace: float | None
     classes: tuple[ClassRecommendation, ...]
+    poll_lead: float | None = None
+    completion_p99: float | None = None
 
 
 def recommend(
@@ -175,15 +348,34 @@ def recommend(
     currency_interval: float,
     spacing: float,
     manual: bool = False,
+    end: pd.Timestamp | None = None,
+    excluded: set[pd.Timestamp] | None = None,
 ) -> Recommendation:
+    first = [unit.first for unit in units if unit.first is not None]
     if manual or not units:
         return Recommendation(None, None, None, None, ())
+    end = (
+        end
+        if end is not None
+        else max(unit.unit.anchor for unit in units) + pd.Timedelta(seconds=1)
+    )
     tiers = list(dict.fromkeys(unit.unit.tier for unit in units))
+    units = [unit for unit in units if unit.unit.anchor not in (excluded or set())]
     classes = []
+    active_units = []
+    completion_p99s = []
     for tier in tiers:
-        for name, grouped in cycle_classes(
+        for name, original in cycle_classes(
             [unit for unit in units if unit.unit.tier == tier], virtual=virtual
         ):
+            grouped, _, _ = class_history(original, end, virtual=virtual)
+            active_units.extend(grouped)
+            if virtual:
+                complete = [
+                    unit.complete for unit in grouped if unit.complete is not None
+                ]
+                if complete:
+                    completion_p99s.append(arrival_stats(complete).p99)
             arrivals = [
                 value
                 for unit in grouped
@@ -192,13 +384,8 @@ def recommend(
             if not arrivals:
                 continue
             stats = arrival_stats(arrivals)
-            threshold = late_threshold(stats)
-            raw = [unit.raw_first for unit in grouped if unit.raw_first is not None]
-            offset = (
-                virtual_fire(min(raw), runtime.startup_estimate)
-                if virtual and raw and runtime.startup_estimate is not None
-                else (None if virtual else schedule_candidates(stats)["chosen"])
-            )
+            threshold = schedule_offset(stats)
+            offset = None if virtual else schedule_offset(stats)
             if not virtual:
                 assert offset is not None
             delay = currency_delay(
@@ -208,15 +395,41 @@ def recommend(
                 spacing,
                 virtual=virtual,
             )
-            classes.append(ClassRecommendation(tier, name, offset, delay, threshold))
+            classes.append(
+                ClassRecommendation(
+                    tier,
+                    name,
+                    offset,
+                    delay,
+                    threshold,
+                    tail_dominated(arrivals)
+                    or small_sample(
+                        [
+                            unit.unit.anchor
+                            for unit in grouped
+                            if (unit.first if virtual else unit.complete) is not None
+                        ]
+                    ),
+                )
+            )
+    completion_p99 = max(completion_p99s, default=None)
+    poll_lead = None
+    virtual_offset = None
+    if virtual and first and runtime.startup_estimate is not None:
+        poll_lead = virtual_poll_lead(
+            min(first), runtime.startup_estimate, interval, completion_p99
+        )
+        virtual_offset = virtual_fire(min(first), runtime.startup_estimate, poll_lead)
+        classes = [replace(value, offset=virtual_offset) for value in classes]
     first_tier = [value for value in classes if value.tier == tiers[0]]
     offsets = [value.offset for value in first_tier if value.offset is not None]
-    raw = [unit.raw_first for unit in units if unit.raw_first is not None]
     chosen = (
-        (virtual_fire(min(raw), runtime.startup_estimate) // 60) * 60
-        if virtual and raw and runtime.startup_estimate is not None
+        (virtual_offset // 60) * 60
+        if virtual_offset is not None
         else (None if virtual or not offsets else ceil_minute(max(offsets)))
     )
+    if not virtual and any(value.hand_value for value in first_tier):
+        chosen = None
     delays = (
         [value.delay for value in first_tier]
         if virtual
@@ -228,7 +441,7 @@ def recommend(
                 spacing,
                 virtual=False,
             )
-            for unit in units
+            for unit in active_units
             if unit.unit.tier == tiers[0] and chosen is not None
         ]
     )
@@ -237,16 +450,20 @@ def recommend(
         if virtual
         and runtime.startup_estimate is not None
         and runtime.validation_max is not None
-        else (None if virtual else interval)
+        else (None if virtual else min(interval, MATERIALIZED_DEADLINE_CAP))
     )
     return Recommendation(
         chosen,
-        ceil_minute(max(delays)) if delays else None,
+        ceil_minute(max(delays))
+        if delays and not any(value.hand_value for value in first_tier)
+        else None,
         deadline,
         ceil(runtime.validation_max + 30)
         if virtual and runtime.validation_max is not None
         else None,
         tuple(classes),
+        poll_lead,
+        completion_p99,
     )
 
 
@@ -258,6 +475,8 @@ def render_dataset(
     end: pd.Timestamp,
     gap: str | None,
     source_notes: set[str],
+    *,
+    excluded: set[pd.Timestamp] | None = None,
 ) -> str:
     interval = cron_interval(cron, end)
     currency_interval = cron_interval(cron, end, maximum=True)
@@ -275,7 +494,7 @@ def render_dataset(
         "",
         f"Current cron: `{cron.schedule}`; suspended: `{cron.suspend}`; max_delay: {duration(current_delay)}; pod deadline: {duration(cron.pod_active_deadline.total_seconds())}; Job deadline: {duration(cron.active_deadline.total_seconds()) if cron.active_deadline else 'unset'}. Fire interval min/max: {duration(interval)} / {duration(currency_interval)} (calendar-varying schedules use the minimum for deadlines, maximum for scalar currency).",
         "",
-        f"Runtime: L estimate p95 {duration(runtime.startup_estimate)}; R p95 {duration(runtime.processing)}; V p95/max {duration(runtime.validation_p95)} / {duration(runtime.validation_max)}. Scheduled-ok n={runtime.scheduled_count}; matched inline validation n={runtime.validation_count}; non-ok update n={runtime.non_ok_count}; off-schedule ok n={runtime.off_schedule_count}. Check-ins: {runtime.first} .. {runtime.last} UTC.",
+        f"Runtime p50 (re-pass/page model): L {duration(runtime.startup_p50)}; R {duration(runtime.processing_p50)}; V {duration(runtime.validation_p50)}. L estimate p95 {duration(runtime.startup_estimate)}; R p95 {duration(runtime.processing)}; V p95/max {duration(runtime.validation_p95)} / {duration(runtime.validation_max)}. Scheduled-ok n={runtime.scheduled_count}; matched inline validation n={runtime.validation_count}; non-ok update n={runtime.non_ok_count}; off-schedule ok n={runtime.off_schedule_count}. Check-ins: {runtime.first} .. {runtime.last} UTC.",
         "",
     ]
     if gap:
@@ -298,9 +517,15 @@ def render_dataset(
             "",
         ]
     )
-    tiers: dict[str, list[MeasuredUnit]] = defaultdict(list)
-    for unit in units:
-        tiers[unit.unit.tier].append(unit)
+    polling_units = units
+    tiers = {
+        tier: [
+            unit
+            for unit in units
+            if unit.unit.tier == tier and unit.unit.anchor not in (excluded or set())
+        ]
+        for tier in dict.fromkeys(unit.unit.tier for unit in units)
+    }
     if not tiers:
         lines.extend(
             [
@@ -311,28 +536,45 @@ def render_dataset(
         return "\n".join(lines)
     manual = dataset.dataset_id in NAMED_EXCEPTIONS
     recommendation = recommend(
-        units,
+        polling_units,
         runtime,
         virtual=virtual,
         interval=interval,
         currency_interval=currency_interval,
         spacing=anchor_spacing(dataset).total_seconds(),
         manual=manual,
+        end=end,
+        excluded=excluded,
     )
+    if virtual:
+        lines.extend(
+            render_polling_evidence(polling_units, runtime, recommendation, interval)
+        )
     for tier, tier_units in tiers.items():
         lines.extend(
             [
                 f"### {tier}",
                 "",
-                "| Cycle class | Complete / expected | Missing old / recent censored | First usable file (virtual: first visibility) n / p50 / p95 / p99; raw E | Unit p50 / p95 / p99 / T | Observed anchors (UTC) |",
+                "| Cycle class | Active complete / expected | Missing old / recent censored | First usable file (virtual: first visibility) n / p50 / p95 / p99 | Unit p50 / p95 / p99 / T | Observed anchors (UTC) |",
                 "|---|---:|---:|---|---|---|",
             ]
         )
-        candidates = []
-        for cycle_class, grouped in cycle_classes(tier_units, virtual=virtual):
+        rates = []
+        evidence_lines = []
+        for cycle_class, original in cycle_classes(tier_units, virtual=virtual):
+            evidence_lines.extend(
+                render_class_evidence(cycle_class, original, end, virtual=virtual)
+            )
+            grouped, _, _ = class_history(original, end, virtual=virtual)
             complete = [unit.complete for unit in grouped if unit.complete is not None]
             first = [unit.first for unit in grouped if unit.first is not None]
-            horizon = max(complete) if complete else 0
+            horizon = max(
+                complete,
+                default=max(
+                    (unit.complete for unit in tier_units if unit.complete is not None),
+                    default=0,
+                ),
+            )
             censored = sum(
                 unit.complete is None
                 and (end - unit.unit.anchor).total_seconds() <= horizon
@@ -351,14 +593,6 @@ def render_dataset(
                         first_stats.p99,
                     )
                 )
-                + "; "
-                + duration(
-                    min(raw)
-                    if (
-                        raw := [u.raw_first for u in grouped if u.raw_first is not None]
-                    )
-                    else None
-                )
                 if first_stats
                 else "not measured"
             )
@@ -369,7 +603,11 @@ def render_dataset(
                         stats.p50,
                         stats.p95,
                         stats.p99,
-                        late_threshold(stats),
+                        schedule_offset(
+                            first_stats
+                            if virtual and first_stats is not None
+                            else stats
+                        ),
                     )
                 )
                 if stats
@@ -380,27 +618,38 @@ def render_dataset(
             lines.append(
                 f"| {cycle_class} | {len(complete)} / {len(grouped)} | {missing} / {censored} | {first_cell} | {unit_cell} | {window} |"
             )
-            if stats and not manual:
-                for name, offset in schedule_candidates(stats).items():
-                    fraction, latency = candidate_outcomes(
-                        complete, offset, runtime.startup_estimate, runtime.processing
+            if not manual and not virtual:
+                fire = recommendation.offset
+                eligible = rate_arrivals(grouped, end, horizon)
+                empty = sum(
+                    unit.complete is None
+                    and unit.missing_files == len(unit.unit.files)
+                    and (end - unit.unit.anchor).total_seconds() > horizon
+                    for unit in grouped
+                )
+                repass, page = (
+                    read_rates(
+                        eligible,
+                        fire,
+                        runtime.startup_p50,
+                        runtime.processing_p50,
+                        runtime.validation_p50,
                     )
-                    after_or_never = (
-                        (sum(value > offset for value in complete) + missing)
-                        / (len(grouped) - censored)
-                        if len(grouped) > censored
-                        else None
-                    )
-                    candidates.append(
-                        f"| {cycle_class} | {name} | {duration(offset)} | {fraction:.2%} | {f'{after_or_never:.2%}' if after_or_never is not None else 'unmeasured'} | {duration(latency)} |"
-                    )
-        if candidates:
+                    if fire is not None
+                    else (None, None)
+                )
+                rates.append(
+                    f"| {cycle_class} | {duration(schedule_offset(stats) if stats else None)} | {duration(fire)} | {f'{repass:.2%}' if repass is not None else 'unmeasured'} | {f'{page:.2%}' if page is not None else 'unmeasured'} | {empty} |"
+                )
+        lines.extend(["", *evidence_lines])
+        if rates:
             lines.extend(
                 [
+                    "| Cycle class | Class S/T = p99 + 3 min | Single-cron S used | Estimated re-pass rate | Estimated page rate | Older units with no observed files (excluded) |",
+                    "|---|---:|---:|---:|---:|---:|",
+                    *rates,
                     "",
-                    "| Cycle class | S candidate | S | Fraction of units arriving after S | After S or never (older missing included) | Median on-time latency estimate (S - arrival + L + R) |",
-                    "|---|---|---:|---:|---:|---:|",
-                    *candidates,
+                    "Estimates use p50 L/R/V: re-pass means incomplete at S + L; page means still incomplete at S + L + R + V + 5 min back-off + L. The first validation failure is quiet when a re-pass is queued. Recent incomplete units are censored. Unresolved units with an observed file count as incomplete; units with no observed files are excluded from the rate denominator and counted separately because retention is indistinguishable from nonarrival. Complete-unit lateness can overstate validation failures for multi-position units; trigger rescue is unmeasured. These are read-model estimates, not observed pages.",
                     "",
                 ]
             )
@@ -413,11 +662,91 @@ def render_dataset(
         ]
     )
     lines.extend(
-        f"| {value.tier} / {value.cycle_class} | {duration(value.offset)} | {duration(ceil_minute(value.delay))} | {duration(value.threshold)} |"
+        f"| {value.tier} / {value.cycle_class}{' (hand value needed)' if value.hand_value else ''} | {duration(value.offset) if virtual or not value.hand_value else 'hand value needed'} | {duration(ceil_minute(value.delay)) if not value.hand_value else 'hand value needed'} | {duration(value.threshold) if not value.hand_value else 'hand value needed'} |"
         for value in recommendation.classes
     )
     lines.extend(render_single_cron(dataset, cron, recommendation, units, interval))
     return "\n".join(lines)
+
+
+def render_polling_evidence(
+    units: Sequence[MeasuredUnit],
+    runtime: RuntimeStats,
+    recommendation: Recommendation,
+    interval: float,
+) -> list[str]:
+    first = [unit.first for unit in units if unit.first is not None]
+    if not first:
+        return []
+    lines = [
+        f"Polling E over the full requested window, all tiers/classes, without exclusions: {duration(min(first))}.",
+        "",
+    ]
+    if recommendation.poll_lead is not None:
+        assert runtime.startup_estimate is not None
+        assert recommendation.offset is not None
+        fire = (virtual_fire(min(first), runtime.startup_estimate) // 60) * 60
+        cutoff = virtual_poll_cutoff(fire, interval, runtime.startup_estimate)
+        chosen_cutoff = virtual_poll_cutoff(
+            recommendation.offset, interval, runtime.startup_estimate
+        )
+        relation = (
+            "precedes"
+            if recommendation.completion_p99 is not None
+            and cutoff < recommendation.completion_p99
+            else "is at or after"
+        )
+        reason = (
+            f"15-minute-lead cutoff {duration(cutoff)} {relation} maximum retained-class completion p99 {duration(recommendation.completion_p99)}"
+            if recommendation.completion_p99 is not None
+            else f"completion p99 is unmeasured; 15-minute-lead cutoff is {duration(cutoff)}"
+        )
+        lines.extend(
+            [
+                f"Polling lead: {duration(recommendation.poll_lead)}; {reason}. Chosen cutoff: {duration(chosen_cutoff)}.",
+                "",
+            ]
+        )
+    if (
+        runtime.startup_estimate is not None
+        and recommendation.poll_lead is not None
+        and min(first) - runtime.startup_estimate - recommendation.poll_lead < 60
+    ):
+        lines.extend(
+            [
+                "**Anchor guard:** polling fire clamped to the first minute after the source anchor: the template end is exclusive.",
+                "",
+            ]
+        )
+    return lines
+
+
+def virtual_window_contains_anchor(
+    dataset: DynamicalDataset[Any, Any], anchor: pd.Timestamp, offset: float
+) -> bool:
+    dim = dataset.template_config.append_dim
+
+    def get_template(end: DatetimeLike) -> xr.DataTree:
+        return xr.DataTree(
+            xr.Dataset(
+                coords={dim: dataset.template_config.append_dim_coordinates(end)}
+            )
+        )
+
+    assert issubclass(dataset.region_job_class, VirtualRegionJob)
+    jobs, _ = dataset.region_job_class.operational_update_jobs(
+        MemoryStore(),
+        Path(),
+        get_template,
+        dim,
+        dataset.template_config.data_vars,
+        "timing-profile",
+        anchor + pd.Timedelta(seconds=offset),
+    )
+    return any(
+        anchor in job.template_ds.to_dataset().get_index(dim)[job.region]
+        for job in jobs
+    )
 
 
 def render_single_cron(
@@ -432,7 +761,7 @@ def render_single_cron(
     chosen = recommendation.offset
     deadline = recommendation.deadline
     scalar_delay = recommendation.delay
-    if chosen is not None and scalar_delay is not None:
+    if chosen is not None:
         current_delay = next(
             (
                 validator.max_delay.total_seconds()
@@ -448,7 +777,7 @@ def render_single_cron(
                 "| Constant | Current | Recommended | Recommended minus current |",
                 "|---|---|---|---:|",
                 f"| Cron | `{cron.schedule}` | `{new_cron}` | anchor attribution not inferred |",
-                f"| max_delay | {duration(current_delay)} | {duration(scalar_delay)} | {duration(scalar_delay - current_delay) if current_delay is not None else 'unmeasured'} |",
+                f"| max_delay | {duration(current_delay)} | {duration(scalar_delay) if scalar_delay is not None else 'hand value needed'} | {duration(scalar_delay - current_delay) if current_delay is not None and scalar_delay is not None else 'unmeasured'} |",
                 f"| Pod deadline | {duration(cron.pod_active_deadline.total_seconds())} | {duration(ceil(deadline)) if deadline is not None else 'unmeasured; keep constants'} | {duration(ceil(deadline) - cron.pod_active_deadline.total_seconds()) if deadline is not None else 'unmeasured'} |",
                 f"| Job deadline | {duration(cron.active_deadline.total_seconds()) if cron.active_deadline else 'unset'} | {duration(ceil(deadline)) if deadline is not None else 'unmeasured; keep constants'} | {duration(ceil(deadline) - cron.active_deadline.total_seconds()) if deadline is not None and cron.active_deadline else 'unset or unmeasured'} |",
             ]
@@ -456,11 +785,20 @@ def render_single_cron(
         lines.extend(
             [
                 "",
-                f"One-cron offset: {duration(chosen)}. {'Uses earliest class and first-file E.' if virtual else 'Uses latest class and chosen S; adoption remains manual.'}",
+                f"One-cron offset: {duration(chosen)}. {f'Uses first-visibility E across the full requested window, minus L and the {duration(recommendation.poll_lead)} polling lead, clamped after the anchor.' if virtual else 'Uses latest class and chosen S; adoption remains manual.'}",
                 "",
             ]
         )
         if virtual:
+            if units and not virtual_window_contains_anchor(
+                dataset, units[-1].unit.anchor, chosen
+            ):
+                lines.extend(
+                    [
+                        "**Window guard:** the proposed fire selects an earlier cycle through this dataset's window override. Keep constants or move the fire until the intended anchor is included.",
+                        "",
+                    ]
+                )
             lines.extend(
                 [
                     f"Validation grace: {duration(recommendation.validation_grace) if recommendation.validation_grace is not None else 'unmeasured; keep constants'} (maximum observed V plus allowance).",

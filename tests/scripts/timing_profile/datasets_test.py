@@ -301,7 +301,7 @@ def test_hrrr_generated_visibility_does_not_require_next_hour_before_its_gate(
             )
     listings = {url.rsplit("/", 1)[0] + "/": Listing(objects, "S3") for url in objects}
     measured = aggregate_unit(unit, listings)
-    assert measured.raw_first == -360
+    assert min(measured.file_arrivals.values()) == -360
     assert measured.first == 3180
     result = recommend(
         [measured],
@@ -311,8 +311,34 @@ def test_hrrr_generated_visibility_does_not_require_next_hour_before_its_gate(
         currency_interval=3600,
         spacing=3600,
     )
-    assert result.delay == 4320
+    assert result.delay is None
+    assert result.classes[0].hand_value
+    assert result.classes[0].delay == 3600
     # Before 13Z's own-cycle gate, the previous pod must not require 13Z.
     assert (
-        pd.Timestamp("2026-10-20T13:48") - pd.Timedelta(seconds=result.delay)
+        pd.Timestamp("2026-10-20T13:48") - pd.Timedelta(seconds=result.classes[0].delay)
     ).floor("h") == anchor
+
+
+def test_hrrr_materialized_analysis_includes_current_cycle_f01_boundary(
+    tmp_path: Path,
+) -> None:
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-hrrr-analysis"
+    )
+    source = TimestampSource(tmp_path, 1)
+    (unit,) = expected_units(
+        dataset, pd.Timestamp("2026-10-20T12"), pd.Timestamp("2026-10-20T13"), source
+    )
+    source.close()
+    urls = {url for file in unit.files for url in file}
+    assert len(urls) == 6
+    assert not any("hrrr.t13z" in url for url in urls)
+    assert {url.rsplit("/", 1)[1] for url in urls} == {
+        "hrrr.t11z.wrfsfcf01.grib2",
+        "hrrr.t11z.wrfsfcf01.grib2.idx",
+        "hrrr.t12z.wrfsfcf00.grib2",
+        "hrrr.t12z.wrfsfcf00.grib2.idx",
+        "hrrr.t12z.wrfsfcf01.grib2",
+        "hrrr.t12z.wrfsfcf01.grib2.idx",
+    }

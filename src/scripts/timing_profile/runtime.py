@@ -28,6 +28,9 @@ class RuntimeStats:
     off_schedule_count: int
     first: pd.Timestamp | None
     last: pd.Timestamp | None
+    startup_p50: float | None = None
+    processing_p50: float | None = None
+    validation_p50: float | None = None
 
 
 def read_checkins(directory: Path | None, monitor: str) -> list[dict[str, Any]]:
@@ -116,6 +119,11 @@ def measure_runtime(
         off_schedule_count=off_schedule,
         first=min(observed) if observed else None,
         last=max(observed) if observed else None,
+        startup_p50=arrival_stats(lags).p50 if lags else None,
+        processing_p50=arrival_stats(processing).p50
+        if processing and not virtual
+        else None,
+        validation_p50=arrival_stats(validation).p50 if validation else None,
     )
 
 
