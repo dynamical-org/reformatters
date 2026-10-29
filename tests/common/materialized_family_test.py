@@ -12,6 +12,7 @@ from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import ReformatCronJob
 from reformatters.common.materialized_region_job import MaterializedRegionJob
+from reformatters.common.storage import DatasetFormat
 from reformatters.common.validation import CheckCurrentData
 from tests.common.current_data_deadline_test import _check_at_time
 
@@ -61,11 +62,13 @@ def test_materialized_family_budgets_and_timing(dataset_id: str) -> None:
         if isinstance(job, ReformatCronJob)
     ]
     assert cron.schedule == schedule
+    (currency,) = [v for v in dataset.validators() if isinstance(v, CheckCurrentData)]
+    assert currency.max_delay == pd.Timedelta(delay)
+    if dataset.primary_storage_config.format != DatasetFormat.ICECHUNK:
+        return
     assert cron.concurrency_policy == "Allow"
     assert cron.pod_active_deadline == timedelta(hours=min(hours, 6))
     assert cron.active_deadline == timedelta(hours=min(hours, 6))
-    (currency,) = [v for v in dataset.validators() if isinstance(v, CheckCurrentData)]
-    assert currency.max_delay == pd.Timedelta(delay)
     rendered = cron.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
     assert rendered["activeDeadlineSeconds"] == min(hours, 6) * 3600
     assert rendered["template"]["spec"]["activeDeadlineSeconds"] == min(hours, 6) * 3600
@@ -192,10 +195,22 @@ def test_chirps_calendar_deadlines_are_capped_below_shortest_interval() -> None:
     assert cron.pod_active_deadline == cron.active_deadline == timedelta(hours=6)
 
 
-def test_deprecated_plain_zarr_updater_keeps_legacy_lifecycle() -> None:
-    dataset = dataset_for("ecmwf-ifs-ens-15-day-deprecated-zarr-v3")
-    (cron,) = dataset.operational_kubernetes_resources("test")
-    assert cron.schedule == "45 8 * * *"
-    assert cron.concurrency_policy == "Replace"
-    assert cron.pod_active_deadline == timedelta(minutes=45)
-    assert cron.active_deadline is None
+def test_only_icechunk_primaries_use_the_queued_lifecycle() -> None:
+    plain_zarr = set()
+    for dataset in _MATERIALIZED_DATASETS:
+        icechunk = dataset.primary_storage_config.format == DatasetFormat.ICECHUNK
+        for cron in dataset.operational_kubernetes_resources("test"):
+            if not isinstance(cron, ReformatCronJob):
+                continue
+            if icechunk:
+                assert cron.concurrency_policy == "Allow", dataset.dataset_id
+            else:
+                plain_zarr.add(dataset.dataset_id)
+                assert cron.concurrency_policy == "Replace", dataset.dataset_id
+                assert cron.active_deadline is None, dataset.dataset_id
+    assert plain_zarr == {
+        "ecmwf-ifs-ens-15-day-deprecated-zarr-v3",
+        "nasa-smap-level3-36km-v9",
+        "noaa-ndvi-cdr-analysis",
+        "u-arizona-swann-analysis",
+    }
