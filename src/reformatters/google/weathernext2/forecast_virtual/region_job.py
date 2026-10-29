@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable, Mapping, Sequence
 from math import prod
 from pathlib import Path
@@ -5,6 +6,7 @@ from typing import ClassVar
 
 import pandas as pd
 import xarray as xr
+from pydantic import PrivateAttr
 from zarr.abc.store import Store
 
 from reformatters.common.config_models import ROOT
@@ -32,7 +34,6 @@ from reformatters.google.weathernext_virtual.region_job import utc_now as _utc_n
 
 from .template_config import (
     INIT_TIME_FREQUENCY,
-    LEAD_TIMES,
     PER_INIT_STORE_DATE,
     PRESSURE_LEVELS,
     GoogleWeathernext2DataVar,
@@ -49,6 +50,12 @@ OPERATIONAL_SOURCE_LANDING_DELAY = pd.Timedelta("7h")
 HISTORICAL_MANIFEST_INIT_SPLIT = 128
 OPERATIONAL_ROOT_MANIFEST_INIT_SPLIT = 32
 OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT = 4
+
+_PROBE_MEMBER = 63
+_OLD_INIT_POLL_INTERVAL_SECONDS = 600.0
+# A per-lead query pages through its variable's whole directory (keys are member-first),
+# so for this many leads of one variable a single all-leads listing costs less.
+_ALL_LEADS_LISTING_MIN_LEADS = 5
 
 
 class GoogleWeathernext2ForecastVirtualSourceFileCoord(WeatherNextSourceFileCoord):
@@ -253,10 +260,108 @@ class GoogleWeathernext2ForecastOperationalVirtualRegionJob(
     GoogleWeathernext2ForecastVirtualRegionJob
 ):
     source_layout: ClassVar[SourceLayout] = "operational"
-    tick_interval: ClassVar[Timedelta] = pd.Timedelta("3s")
+    tick_interval: ClassVar[Timedelta] = pd.Timedelta("15s")
     # A 32-init batch would construct about 11.2 million virtual refs in memory.
     manifest_init_split: ClassVar[int] = OPERATIONAL_PRESSURE_MANIFEST_INIT_SPLIT
-    operational_update_window: ClassVar[Timedelta] = LEAD_TIMES[-1] + pd.Timedelta("2D")
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
+    _next_old_init_poll: float = PrivateAttr(default=float("-inf"))
+
+    def discover_available(
+        self, pending: list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
+    ) -> list[tuple[GoogleWeathernext2ForecastVirtualSourceFileCoord, int]]:
+        now = time.monotonic()
+        if self.processing_mode == "backfill":
+            selected = due = pending
+        else:
+            newest_init = self.template_ds.to_dataset().get_index(self.append_dim)[-1]
+            poll_old = now >= self._next_old_init_poll
+            if poll_old:
+                self._next_old_init_poll = now + _OLD_INIT_POLL_INTERVAL_SECONDS
+            selected = [
+                coord for coord in pending if coord.init_time == newest_init or poll_old
+            ]
+            if not selected:
+                return []
+            probes = self._list({self._probe_query(coord) for coord in selected})
+            objects = {
+                location: metadata
+                for listed in probes.values()
+                for location, metadata in listed.items()
+            }
+            due = [
+                coord
+                for coord in selected
+                if self._probe_locations(coord) <= objects.keys()
+            ]
+        if not due:
+            return []
+
+        objects = {}
+        for listed in self._list(self._due_queries(due)).values():
+            objects.update(listed)
+        available = []
+        for coord in selected:
+            locations = {chunk.location for chunk in self._source_chunks(coord)}
+            if locations <= objects.keys():
+                coord.chunk_metadata.clear()
+                coord.chunk_metadata.update(
+                    {location: objects[location] for location in locations}
+                )
+                available.append((coord, 0))
+
+        return available
+
+    def _probe_query(
+        self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
+    ) -> ObjectListingQuery:
+        (var,) = coord.data_vars
+        prefix = f"{_variable_prefix(coord, var)}{_PROBE_MEMBER}."
+        return ObjectListingQuery(prefix=prefix, match_glob=f"{prefix}*", delimiter="/")
+
+    def _probe_locations(
+        self, coord: GoogleWeathernext2ForecastVirtualSourceFileCoord
+    ) -> set[str]:
+        (var,) = coord.data_vars
+        _, levels = self._source_chunk_axes(var)
+        prefix = f"{PROXY_LOCATION_PREFIX}{_store_key(coord.get_url())}/"
+        return {
+            f"{prefix}{coord.chunk_key(var, _PROBE_MEMBER, level)}" for level in levels
+        }
+
+    def _due_queries(
+        self, due: Sequence[GoogleWeathernext2ForecastVirtualSourceFileCoord]
+    ) -> set[ObjectListingQuery]:
+        by_variable: dict[
+            str, list[GoogleWeathernext2ForecastVirtualSourceFileCoord]
+        ] = {}
+        for coord in due:
+            for var in coord.data_vars:
+                by_variable.setdefault(_variable_prefix(coord, var), []).append(coord)
+        queries: set[ObjectListingQuery] = set()
+        for prefix, coords in by_variable.items():
+            if (
+                len({coord.lead_index for coord in coords})
+                >= _ALL_LEADS_LISTING_MIN_LEADS
+            ):
+                queries.add(
+                    ObjectListingQuery(
+                        prefix=prefix,
+                        match_glob=f"{prefix}{_OPERATIONAL_MEMBER_GLOB}.*",
+                        delimiter="/",
+                    )
+                )
+            else:
+                queries.update(
+                    query for coord in coords for query in self._listing_queries(coord)
+                )
+        return queries
+
+
+def _variable_prefix(
+    coord: GoogleWeathernext2ForecastVirtualSourceFileCoord,
+    var: GoogleWeathernext2DataVar,
+) -> str:
+    return f"{_store_key(coord.get_url())}/{var.internal_attrs.source_name}/"
 
 
 def _store_key(url: str) -> str:

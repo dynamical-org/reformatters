@@ -98,8 +98,36 @@ class WeatherNextVirtualRegionJob(
     def discover_available(
         self, pending: list[SOURCE_COORD]
     ) -> list[tuple[SOURCE_COORD, int]]:
-        queries = sorted(
-            {query for coord in pending for query in self._listing_queries(coord)},
+        listed = self._list(
+            {query for coord in pending for query in self._listing_queries(coord)}
+        )
+
+        available = []
+        for coord in pending:
+            coord_objects: dict[str, NativeObjectMetadata] = {}
+            for query in self._listing_queries(coord):
+                coord_objects.update(listed[query])
+            locations = {chunk.location for chunk in self._source_chunks(coord)}
+            if locations <= coord_objects.keys():
+                coord.chunk_metadata.clear()
+                coord.chunk_metadata.update(
+                    {location: coord_objects[location] for location in locations}
+                )
+                available.append((coord, 0))
+            else:
+                missing = locations - coord_objects.keys()
+                log.debug(
+                    f"{len(missing)} source chunks unavailable for "
+                    f"{coord.get_url()} {coord.data_vars[0].path}; "
+                    f"first: {min(missing)}"
+                )
+        return available
+
+    def _list(
+        self, queries: set[ObjectListingQuery]
+    ) -> dict[ObjectListingQuery, dict[str, NativeObjectMetadata]]:
+        ordered = sorted(
+            queries,
             key=lambda query: (
                 query.prefix,
                 query.match_glob or "",
@@ -110,38 +138,13 @@ class WeatherNextVirtualRegionJob(
             httpx.Client(timeout=30, headers={"User-Agent": USER_AGENT}) as client,
             ThreadPoolExecutor(self.download_concurrency) as pool,
         ):
-            listed = dict(
+            return dict(
                 zip(
-                    queries,
-                    pool.map(partial(list_objects, client), queries),
+                    ordered,
+                    pool.map(partial(list_objects, client), ordered),
                     strict=True,
                 )
             )
-
-        available = []
-        for coord in pending:
-            coord_objects: dict[str, NativeObjectMetadata] = {}
-            for query in self._listing_queries(coord):
-                objects = listed[query]
-                if objects is None:
-                    break
-                coord_objects.update(objects)
-            else:
-                locations = {chunk.location for chunk in self._source_chunks(coord)}
-                if locations <= coord_objects.keys():
-                    coord.chunk_metadata.clear()
-                    coord.chunk_metadata.update(
-                        {location: coord_objects[location] for location in locations}
-                    )
-                    available.append((coord, 0))
-                else:
-                    missing = locations - coord_objects.keys()
-                    log.debug(
-                        f"{len(missing)} source chunks unavailable for "
-                        f"{coord.get_url()} {coord.data_vars[0].path}; "
-                        f"first: {min(missing)}"
-                    )
-        return available
 
     def process_virtual_refs(
         self,

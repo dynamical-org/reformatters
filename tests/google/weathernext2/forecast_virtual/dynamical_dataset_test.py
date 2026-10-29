@@ -68,7 +68,7 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     )
 
     (update,) = dataset.operational_kubernetes_resources("test")
-    assert dataset.region_job_class.tick_interval == pd.Timedelta("3s")
+    assert dataset.region_job_class.tick_interval == pd.Timedelta("15s")
     assert update.name == "google-wn2-forecast-operational-virtual-update"
     assert update.schedule == "5 1,7,13,19 * * *"
     assert update.previous_fire_time(pd.Timestamp("2026-09-04T02:05")) == pd.Timestamp(
@@ -110,7 +110,7 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     ]
     assert decode.positions == "all"
     assert decode.max_positions == 2
-    assert dataset.region_job_class.operational_update_window == timedelta(days=17)
+    assert dataset.region_job_class.operational_update_window == timedelta(hours=24)
     description = dataset.template_config.dataset_attributes.description
     assert description == (
         "Weather forecasts from the 64-member Google DeepMind WeatherNext 2 ensemble model."
