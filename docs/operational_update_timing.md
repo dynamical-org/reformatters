@@ -109,7 +109,7 @@ Before exiting, the last index performs [expired state cleanup](parallel_process
 
 ## Non-`Allow` CronJobs
 
-CronJobs on `Replace` or any other non-`Allow` policy, virtual or materialized, use neither the materialized queue nor overlapping polling. On a validation failure they submit one immediate `-r1`, only when the next scheduled fire is farther away than the pod deadline. A multi-worker materialized replacement pod after cleanup waits for the deleted setup files until its deadline; a single-worker replacement reruns the update. Inspect termination reasons before rerunning the full update as a new Job.
+Materialized datasets with a plain-Zarr primary store use `Replace`, because the queue requires an Icechunk primary. CronJobs on `Replace` or any other non-`Allow` policy, virtual or materialized, use neither the materialized queue nor overlapping polling. On a validation failure they submit one immediate `-r1`, only when the next scheduled fire is farther away than the pod deadline. A multi-worker materialized replacement pod after cleanup waits for the deleted setup files until its deadline; a single-worker replacement reruns the update. Inspect termination reasons before rerunning the full update as a new Job.
 
 ## Completion triggers
 

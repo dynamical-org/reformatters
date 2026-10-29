@@ -29,9 +29,9 @@ class NasaSmapLevel336KmV9Dataset(
             # New data comes 1x per day, usually around 5:45 but sometimes later, more like 14:00
             # Run twice to pick up the later data too (updates only take a couple minutes)
             schedule="0 6,18 * * *",
-            concurrency_policy="Allow",
-            pod_active_deadline=timedelta(hours=6),
-            active_deadline=timedelta(hours=6),
+            concurrency_policy="Replace",
+            pod_active_deadline=timedelta(minutes=10),
+            active_deadline=None,
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",

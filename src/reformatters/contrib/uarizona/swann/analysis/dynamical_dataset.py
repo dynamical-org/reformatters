@@ -54,9 +54,9 @@ class UarizonaSwannAnalysisDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="0 20 * * *",
-            concurrency_policy="Allow",
-            pod_active_deadline=timedelta(hours=6),
-            active_deadline=timedelta(hours=6),
+            concurrency_policy="Replace",
+            pod_active_deadline=timedelta(minutes=10),
+            active_deadline=None,
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="4",
