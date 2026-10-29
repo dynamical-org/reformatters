@@ -37,7 +37,7 @@ ARCHIVE_BASE_URL: Final = f"https://s3-us-west-2.amazonaws.com/us-west-2.opendat
 # 2026-10-01, with some selections visible about 2 minutes before the rest).
 PUBLICATION_DELAY: Final = pd.Timedelta("51h")
 # How long after its 00 UTC reference time a run keeps polling for the newest initialization.
-PUBLICATION_DEADLINE: Final = pd.Timedelta("54h30m")
+PUBLICATION_DEADLINE: Final = pd.Timedelta("56h")
 LICENCE_DELAY: Final = pd.Timedelta("48h")
 # ECMWF IFS ENS 46-day initializes at 00 UTC only.
 INIT_FREQUENCY: Final = pd.Timedelta("1D")
