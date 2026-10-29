@@ -436,9 +436,7 @@ def test_single_slow_day_does_not_erase_partial_history(usable_days: int) -> Non
         for index, unit in enumerate(units)
     ]
     units = [
-        replace(unit, complete=7200, first=7200, raw_first=7200)
-        if index >= len(units) - 4
-        else unit
+        replace(unit, complete=7200, first=7200) if index >= len(units) - 4 else unit
         for index, unit in enumerate(units)
     ]
     end = units[-1].unit.anchor + pd.Timedelta(hours=6)
@@ -594,7 +592,7 @@ def test_year_of_real_aifs_history_requires_a_hand_value_for_latest_regime() -> 
         fixture["start"], periods=len(fixture["arrivals_s"]), freq="6h"
     ).tz_convert(None)
     units = [
-        MeasuredUnit(Unit(anchor, "run", (), 0), value, value, 0, value, {})
+        MeasuredUnit(Unit(anchor, "run", (), 0), value, value, 0, {})
         for anchor, value in zip(anchors, fixture["arrivals_s"], strict=True)
     ]
     result = recommend(
@@ -629,7 +627,7 @@ def test_polling_e_uses_first_visibility_instead_of_earlier_raw_file() -> None:
             )
         },
     )
-    assert measured.raw_first == -701
+    assert measured.file_arrivals[early] == -701
     assert measured.first == 2840
     units = [measured]
     result = recommend(
