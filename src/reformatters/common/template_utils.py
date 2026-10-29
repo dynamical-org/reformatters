@@ -203,8 +203,9 @@ def assert_no_structural_drift_from_existing_store(
     worker 0 before any data is written and raises before damage is done.
 
     Compares every variable across all groups (by var.path) and every non-append
-    dimension coordinate's values (a reordered vertical level or moved lat/lon would
-    relabel existing chunks). Only variables/coords present in `existing_ds` are checked, so the
+    dimension coordinate's values, plus the append coordinate's first value (a changed
+    origin, reordered vertical level or moved lat/lon would relabel existing chunks).
+    Only variables/coords present in `existing_ds` are checked, so the
     template may freely add new ones. Callers run this for operational updates;
     overwrite backfills run assert_safe_overwrite instead.
 
@@ -221,6 +222,16 @@ def assert_no_structural_drift_from_existing_store(
             "run a backfill to change structure. Mismatches:\n"
             + "\n".join(f"- {m}" for m in mismatches)
         )
+    for node in existing_ds.subtree:
+        if append_dim not in node.coords or node.sizes[append_dim] == 0:
+            continue
+        existing_origin = node.coords[append_dim].values[0]
+        template_origin = template_ds[node.path].coords[append_dim].values[0]
+        if existing_origin != template_origin:
+            raise ValueError(
+                f"{node.path}: {append_dim} origin differs: existing store starts at "
+                f"{existing_origin}, update template starts at {template_origin}"
+            )
 
 
 def structural_mismatches(
@@ -345,32 +356,6 @@ def assert_no_append_dim_retraction(
             "Update template would retract already-published data. Operational updates "
             "only ever extend the published store; run a backfill to shrink it. "
             "Retractions:\n" + "\n".join(f"- {r}" for r in retractions)
-        )
-
-
-def assert_append_dim_labels_match(
-    template_ds: xr.DataTree, existing_ds: xr.DataTree, append_dim: str
-) -> None:
-    """Fail when the template's leading `append_dim` labels differ from those stored in
-    any group of `existing_ds`, which would relabel existing chunks."""
-    template_labels = {
-        node.path: node.to_dataset().indexes[append_dim]
-        for node in template_ds.subtree
-        if append_dim in node.dims
-    }
-    mismatched = []
-    for node in existing_ds.subtree:
-        if append_dim not in node.dims:
-            continue
-        stored = node.to_dataset().indexes[append_dim]
-        template = template_labels.get(node.path)
-        if template is None or not template[: len(stored)].equals(stored):
-            mismatched.append(node.path)
-    if mismatched:
-        raise ValueError(
-            f"Template {append_dim} labels do not match the stored labels in groups "
-            f"{mismatched}; the target's {append_dim} origin or spacing differs from "
-            "the template"
         )
 
 

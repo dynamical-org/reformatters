@@ -7,8 +7,6 @@ import xarray as xr
 
 # from reformatters.common import validation
 from reformatters.common import validation
-from reformatters.common.pydantic import replace
-from reformatters.common.storage import DatasetFormat
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
 )
@@ -27,18 +25,9 @@ def dataset() -> EcmwfIfsEnsForecast15Day025DegreeDataset:
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize(
-    "storage_format", [DatasetFormat.ZARR3, DatasetFormat.ICECHUNK]
-)
 def test_backfill_local_and_operational_update(
-    monkeypatch: pytest.MonkeyPatch,
-    dataset: EcmwfIfsEnsForecast15Day025DegreeDataset,
-    storage_format: DatasetFormat,
+    monkeypatch: pytest.MonkeyPatch, dataset: EcmwfIfsEnsForecast15Day025DegreeDataset
 ) -> None:
-    dataset = replace(
-        dataset,
-        primary_storage_config=replace(NOOP_STORAGE_CONFIG, format=storage_format),
-    )
     variables_to_check = ["temperature_2m", "precipitation_surface"]
     monkeypatch.setattr(
         type(dataset.template_config),

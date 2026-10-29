@@ -11,7 +11,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, ClassVar
-from unittest.mock import Mock
 
 import dask
 import dask.array
@@ -37,14 +36,10 @@ from reformatters.common.config_models import (
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.materialized_region_job import MaterializedRegionJob
-from reformatters.common.region_job import RegionJob, SourceFileCoord
+from reformatters.common.region_job import SourceFileCoord
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, ArrayFloat32, Dim, Timedelta, Timestamp
-from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
-    EcmwfIfsEnsForecast15Day025DegreeDataset,
-)
-from tests.chunk_utils import shrink_chunks_and_shards
 
 pytestmark = pytest.mark.slow
 
@@ -1301,174 +1296,3 @@ class TestConcurrentJobs:
         assert set(primary_repo.list_branches()) == {"_job_job-b", "main"}
         assert dataset.store_factory.read_all_coordination_files("job-a", "setup") == []
         assert dataset.store_factory.read_all_coordination_files("job-b", "setup") != []
-
-
-class TestPinnedOperationalSnapshots:
-    @staticmethod
-    def _dataset(
-        tmp_path: Path, kind: str = "parallel"
-    ) -> tuple[DynamicalDataset[Any, Any], xr.DataTree, icechunk.Repository]:
-        config = StorageConfig(base_path=str(tmp_path), format=DatasetFormat.ICECHUNK)
-        dataset: DynamicalDataset[Any, Any]
-        if kind == "ens":
-            dataset = EcmwfIfsEnsForecast15Day025DegreeDataset(
-                primary_storage_config=config
-            )
-            template = shrink_chunks_and_shards(
-                dataset._get_template(
-                    pd.Timestamp("2024-04-03T00:00:00Z").tz_localize(None)
-                ).isel(
-                    latitude=slice(0, 2),
-                    longitude=slice(0, 2),
-                    ensemble_member=slice(0, 1),
-                    lead_time=slice(0, 1),
-                )
-            )
-        else:
-            dataset = ParallelDataset(primary_storage_config=config)
-            template = _create_template_ds()
-        template_utils.write_metadata(template, dataset.store_factory)
-        _, repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0]
-        return dataset, template, repo
-
-    @staticmethod
-    def _shift_origin(template: xr.DataTree, append_dim: str) -> xr.DataTree:
-        shifted = template.to_dataset().copy()
-        encoding = shifted[append_dim].encoding.copy()
-        shifted = shifted.assign_coords(
-            {append_dim: shifted[append_dim] - np.timedelta64(1, "D")}
-        )
-        shifted[append_dim].encoding = encoding
-        return xr.DataTree.from_dict({"/": shifted})
-
-    @staticmethod
-    def _jobs(
-        dataset: DynamicalDataset[Any, Any], template: xr.DataTree
-    ) -> Sequence[RegionJob[Any, Any]]:
-        return dataset.region_job_class.get_jobs(
-            tmp_store=dataset._tmp_store(),
-            template_ds=template,
-            append_dim=dataset.template_config.append_dim,
-            all_data_vars=dataset.template_config.data_vars,
-            reformat_job_name="guarded-update",
-        )
-
-    @staticmethod
-    def _run(
-        dataset: DynamicalDataset[Any, Any],
-        template: xr.DataTree,
-        jobs: Sequence[RegionJob[Any, Any]],
-        *,
-        worker_index: int = 0,
-        workers_total: int = 1,
-    ) -> None:
-        dataset._process_region_jobs(
-            all_jobs=jobs,
-            worker_index=worker_index,
-            workers_total=workers_total,
-            reformat_job_name="guarded-update",
-            template_ds=template,
-            tmp_store=dataset._tmp_store(),
-            update_template_with_results=True,
-        )
-
-    @pytest.mark.parametrize("kind", ["parallel", "ens"])
-    def test_earlier_code_origin_fails_before_writes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
-    ) -> None:
-        dataset, template, repo = self._dataset(tmp_path, kind)
-        main_tip = repo.lookup_branch("main")
-        shifted = self._shift_origin(template, dataset.template_config.append_dim)
-        process = Mock(return_value={})
-        monkeypatch.setattr(dataset.region_job_class, "process_worker_jobs", process)
-
-        with pytest.raises(ValueError, match="labels do not match"):
-            self._run(dataset, shifted, self._jobs(dataset, shifted))
-
-        process.assert_not_called()
-        assert repo.lookup_branch("main") == main_tip
-        assert set(repo.list_branches()) == {"main"}
-
-    @pytest.mark.parametrize("kind", ["parallel", "ens"])
-    def test_origin_publication_before_setup_is_guarded_at_new_snapshot(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
-    ) -> None:
-        dataset, template, repo = self._dataset(tmp_path, kind)
-        shifted = self._shift_origin(template, dataset.template_config.append_dim)
-        prepared = tmp_path / "prepared.zarr"
-        template_utils.write_metadata(shifted, prepared, mode="w")
-        original_setup = pc_module.parallel_setup
-        published_tips: list[str] = []
-        process = Mock(return_value={})
-        monkeypatch.setattr(dataset.region_job_class, "process_worker_jobs", process)
-
-        def publish_then_setup(*args: Any, **kwargs: Any) -> pc_module.SetupInfo:  # noqa: ANN401
-            session = repo.writable_session("main")
-            pc_module.copy_zarr_metadata(shifted, prepared, session.store)
-            published_tips.append(session.commit("Publish earlier origin"))
-            return original_setup(*args, **kwargs)
-
-        monkeypatch.setattr(pc_module, "parallel_setup", publish_then_setup)
-        with pytest.raises(ValueError, match="labels do not match"):
-            self._run(dataset, template, self._jobs(dataset, template))
-
-        process.assert_not_called()
-        assert repo.lookup_branch("main") == published_tips[0]
-        assert set(repo.list_branches()) == {"main"}
-
-    @pytest.mark.parametrize("mismatch", ["origin", "work_list", "retry"])
-    def test_disagreeing_worker_cannot_write_or_publish(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mismatch: str
-    ) -> None:
-        dataset, template, repo = self._dataset(tmp_path)
-        main_tip = repo.lookup_branch("main")
-        process = Mock(return_value={})
-        monkeypatch.setattr(dataset.region_job_class, "process_worker_jobs", process)
-        jobs = self._jobs(dataset, template)
-        self._run(dataset, template, jobs, workers_total=2)
-        assert process.call_count == 1
-        divergent = (
-            self._shift_origin(template, dataset.template_config.append_dim)
-            if mismatch == "origin"
-            else template
-        )
-        divergent_jobs = self._jobs(dataset, divergent)
-        if mismatch != "origin":
-            divergent_jobs = divergent_jobs[1:]
-
-        with pytest.raises((ValueError, AssertionError)):
-            self._run(
-                dataset,
-                divergent,
-                divergent_jobs,
-                worker_index=0 if mismatch == "retry" else 1,
-                workers_total=2,
-            )
-
-        assert process.call_count == 1
-        assert repo.lookup_branch("main") == main_tip
-
-    @pytest.mark.parametrize("workers_total", [1, 2])
-    def test_matching_update_publishes_and_clears_setup(
-        self, tmp_path: Path, workers_total: int
-    ) -> None:
-        dataset, template, repo = self._dataset(tmp_path)
-        original = repo.lookup_branch("main")
-        jobs = self._jobs(dataset, template)
-        for worker_index in range(workers_total):
-            self._run(
-                dataset,
-                template,
-                jobs,
-                worker_index=worker_index,
-                workers_total=workers_total,
-            )
-
-        assert repo.lookup_branch("main") != original
-        assert set(repo.list_branches()) == {"main"}
-        assert not dataset.store_factory.read_all_coordination_files(
-            "guarded-update", "setup"
-        )
-        result = xr.open_zarr(dataset.store_factory.primary_store())
-        for var in dataset.template_config.data_vars:
-            np.testing.assert_array_equal(result[var.name].values, 1.0)

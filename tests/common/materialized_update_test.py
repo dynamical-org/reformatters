@@ -678,7 +678,7 @@ def test_highest_index_with_zero_work_finalizes_and_validates(
     job = _job("job")
     pilot.jobs[:] = [job]
     pilot.write(job, "run")
-    region_job = Mock(append_dim="init_time", region=slice(0, 1), data_vars=[])
+    region_job = Mock()
     tree = xr.DataTree()
     region_job.update_template_with_results.return_value = tree
     pilot.compute.return_value = ([region_job], tree)

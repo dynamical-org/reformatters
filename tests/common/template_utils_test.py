@@ -17,7 +17,6 @@ from reformatters.common.config_models import (
 )
 from reformatters.common.template_utils import (
     _get_mode_from_path_store,
-    assert_append_dim_labels_match,
     assert_no_structural_drift_from_existing_store,
     assert_safe_overwrite,
     assign_var_metadata,
@@ -305,6 +304,48 @@ def test_structural_drift_passes_for_identical_structure() -> None:
     assert_no_structural_drift_from_existing_store(template, existing, "time")
 
 
+@pytest.mark.parametrize("append_dim", ["time", "init_time"])
+@pytest.mark.parametrize("group", ["/", "/pressure_level"])
+@pytest.mark.parametrize("template_start", ["2024-12-31", "2025-01-02"])
+def test_structural_drift_rejects_changed_append_origin(
+    append_dim: str, group: str, template_start: str
+) -> None:
+    existing = xr.DataTree.from_dict(
+        {group: xr.Dataset(coords={append_dim: pd.date_range("2025-01-01", periods=2)})}
+    )
+    template = xr.DataTree.from_dict(
+        {
+            group: xr.Dataset(
+                coords={append_dim: pd.date_range(template_start, periods=3)}
+            )
+        }
+    )
+
+    with pytest.raises(ValueError, match=f"{append_dim} origin differs"):
+        assert_no_structural_drift_from_existing_store(template, existing, append_dim)
+
+
+def test_structural_drift_allows_append_extension() -> None:
+    existing = xr.DataTree(
+        xr.Dataset(coords={"time": pd.date_range("2025-01-01", periods=2)})
+    )
+    template = xr.DataTree(
+        xr.Dataset(coords={"time": pd.date_range("2025-01-01", periods=3)})
+    )
+
+    assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_allows_empty_append_coordinate() -> None:
+    template = xr.DataTree(
+        xr.Dataset(coords={"time": pd.date_range("2025-01-01", periods=2)})
+    )
+
+    assert_no_structural_drift_from_existing_store(
+        template, template.isel(time=slice(0, 0)), "time"
+    )
+
+
 def test_structural_drift_allows_new_variables_in_template() -> None:
     existing = _structured_ds(var0=_structured_var())
     template = _structured_ds(var0=_structured_var(), var_new=_structured_var())
@@ -511,57 +552,3 @@ def test_store_written_coords_finds_all_null_coords() -> None:
     )
     tree = xr.DataTree.from_dict({"/": ds})
     assert store_written_coords(tree) == {"ingested_forecast_length"}
-
-
-# --- assert_append_dim_labels_match tests ---
-
-
-def _labelled_tree(
-    start: str, size: int, *, group_start: str | None = None
-) -> xr.DataTree:
-    def node(first: str) -> xr.Dataset:
-        times = pd.date_range(first, periods=size, freq="D")
-        return xr.Dataset({"v": ("time", np.zeros(size))}, coords={"time": times})
-
-    return xr.DataTree.from_dict(
-        {"/": node(start), "/pressure_level": node(group_start or start)}
-    )
-
-
-def test_append_dim_labels_match_accepts_matching_stored_prefix() -> None:
-    assert_append_dim_labels_match(
-        _labelled_tree("2024-04-01", 5), _labelled_tree("2024-04-01", 3), "time"
-    )
-
-
-def test_append_dim_labels_match_rejects_shifted_origin() -> None:
-    with pytest.raises(ValueError, match=r"groups \['/', '/pressure_level'\]"):
-        assert_append_dim_labels_match(
-            _labelled_tree("2024-04-01", 5), _labelled_tree("2024-03-30", 3), "time"
-        )
-
-
-def test_append_dim_labels_match_checks_every_group() -> None:
-    def groups(second_start: str, size: int) -> xr.DataTree:
-        return xr.DataTree.from_dict(
-            {
-                "/": xr.Dataset(),
-                "/a": _labelled_tree("2024-04-01", size)["/"].to_dataset(),
-                "/b": _labelled_tree(second_start, size)["/"].to_dataset(),
-            }
-        )
-
-    with pytest.raises(ValueError, match=r"groups \['/b'\]"):
-        assert_append_dim_labels_match(
-            groups("2024-04-01", 5), groups("2024-03-30", 3), "time"
-        )
-
-
-def test_append_dim_labels_match_rejects_group_missing_from_template() -> None:
-    template = xr.DataTree.from_dict(
-        {"/": _labelled_tree("2024-04-01", 5)["/"].to_dataset()}
-    )
-    with pytest.raises(ValueError, match="/pressure_level"):
-        assert_append_dim_labels_match(
-            template, _labelled_tree("2024-04-01", 3), "time"
-        )

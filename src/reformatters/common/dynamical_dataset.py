@@ -583,16 +583,13 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         icechunk_repos = self.store_factory.icechunk_repos(sort="primary-first")
         has_icechunk = len(icechunk_repos) > 0
         branch_name = f"_job_{reformat_job_name}" if has_icechunk else "main"
-        pinned_update = update_template_with_results and has_icechunk
 
         # 0. Guards run on worker 0 before any writes; failing here leaves the live
         # archive untouched. An operational update must not change the structure of
         # the already-published store; an overwrite backfill must not corrupt it
         # (structural drift, trimming, or unrequested new arrays / expansion).
-        # An Icechunk update runs these guards in parallel_setup, on the snapshot its
-        # temp branch starts from.
         overwrite = overwrite_chunks or overwrite_metadata
-        if is_first and update_template_with_results and not pinned_update:
+        if is_first and update_template_with_results:
             self._assert_no_structural_drift(template_ds)
         if is_first and overwrite:
             template_utils.assert_safe_overwrite(
@@ -610,15 +607,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             template_utils.store_written_coords(template_ds) if overwrite else set()
         )
 
-        def existing_data_guard(existing_ds: xr.DataTree | None) -> None:
-            assert existing_ds is not None, "Branch main holds no dataset to update"
-            template_utils.assert_no_structural_drift_from_existing_store(
-                template_ds, existing_ds, self.template_config.append_dim
-            )
-            template_utils.assert_append_dim_labels_match(
-                template_ds, existing_ds, self.template_config.append_dim
-            )
-
         # 1. Set up / wait for setup
         setup_info = parallel_coordination.parallel_setup(
             self.store_factory,
@@ -631,18 +619,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             icechunk_repos=icechunk_repos,
             consolidated=self.region_job_class.consolidated_metadata,
             exclude_coord_value_chunks=exclude_coord_value_chunks,
-            existing_data_guard=existing_data_guard if pinned_update else None,
-            work_fingerprint=(
-                parallel_coordination.work_fingerprint(
-                    all_jobs,
-                    template_ds,
-                    append_dim=self.template_config.append_dim,
-                    workers_total=workers_total,
-                    worker_assignment=self.region_job_class.worker_assignment,
-                )
-                if pinned_update
-                else None
-            ),
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session
