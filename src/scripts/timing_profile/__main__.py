@@ -124,6 +124,29 @@ def measure_source(
 ) -> str:
     gap = source_gap(dataset.dataset_id)
     weather_next = "weathernext" in dataset.dataset_id
+    if weather_next and not gap:
+        config = dataset.template_config
+        frequency = config.append_dim_frequency
+        anchors = pd.date_range(
+            start.ceil(frequency), end, freq=frequency, inclusive="left"
+        )
+        pages = (
+            len(anchors)
+            * sum(
+                50 if var.group == "pressure_level" else 4 for var in config.data_vars
+            )
+            if "weathernext2" in dataset.dataset_id
+            else len(config.data_vars)
+            * sum(7 if anchor.hour % 6 == 0 else 1 for anchor in anchors)
+        )
+        log.info(
+            "%s: uncached proxy capture estimate ~%d requests, at least %.1f minutes "
+            "at 2 requests/s using observed page costs; actual paging can vary. "
+            "Size --days to the pacing budget.",
+            dataset.dataset_id,
+            pages,
+            pages / 120,
+        )
     pending = iter(()) if gap else expected_units(dataset, start, end, source)
     batches = (
         groupby(pending, key=lambda unit: unit.anchor)

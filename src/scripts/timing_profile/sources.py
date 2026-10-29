@@ -8,12 +8,12 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from html import unescape
 from pathlib import Path
-from threading import Lock
 from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
 import pandas as pd
 
+from reformatters.common.download import RateLimiter
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 from reformatters.google.weathernext_virtual.listing import (
@@ -48,17 +48,11 @@ def canonical_url(url: str) -> str:
 
 
 def listing_prefix(url: str) -> str:
-    if url.startswith(PROXY_LOCATION_PREFIX):
+    if url.startswith(PROXY_LOCATION_PREFIX + "weathernext_3_"):
         root, _, chunk = url.partition("/predictions.zarr/")
         variable = chunk.split("/", 1)[0]
-        if "weathernext_3_" in root:
-            variable = variable.rsplit("_", 1)[0] + "_"
-        return (
-            root
-            + "/predictions.zarr/"
-            + variable
-            + ("" if "weathernext_3_" in root else "/")
-        )
+        variable = variable.rsplit("_", 1)[0] + "_"
+        return root + "/predictions.zarr/" + variable
     return canonical_url(url).rsplit("/", 1)[0] + "/"
 
 
@@ -82,8 +76,7 @@ class TimestampSource:
         self.workers = workers
         self.client = httpx.Client(timeout=60, follow_redirects=True)
         self.proxy_requests = 0
-        self._proxy_lock = Lock()
-        self._next_proxy_request = 0.0
+        self._proxy_rate_limiter = RateLimiter(max_per_minute=120)
 
     def close(self) -> None:
         self.client.close()
@@ -158,12 +151,9 @@ class TimestampSource:
 
                 def get_page(page: int = page) -> httpx.Response:
                     waiting = time.monotonic()
-                    with self._proxy_lock:
-                        time.sleep(
-                            max(0.0, self._next_proxy_request - time.monotonic())
-                        )
-                        self._next_proxy_request = time.monotonic() + 0.5
-                        self.proxy_requests += 1
+                    self._proxy_rate_limiter.wait()
+                    pacing_wait = time.monotonic() - waiting
+                    self.proxy_requests += 1
                     started = time.monotonic()
                     started_at = pd.Timestamp.now(tz="UTC").isoformat()
                     status = None
@@ -177,7 +167,7 @@ class TimestampSource:
                             "started_at": started_at,
                             "ended_at": pd.Timestamp.now(tz="UTC").isoformat(),
                             "request_seconds": time.monotonic() - started,
-                            "pacing_wait_seconds": started - waiting,
+                            "pacing_wait_seconds": pacing_wait,
                             "status": status,
                         }
                         with (self.cache_dir / "weathernext-requests.jsonl").open(

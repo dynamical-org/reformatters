@@ -9,6 +9,7 @@ import pytest
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common.dynamical_dataset import DynamicalDataset
+from reformatters.common.kubernetes import ReformatCronJob
 from reformatters.common.template_config import TemplateConfig
 from reformatters.google.weathernext3.forecast_virtual.template_config import STATISTICS
 from scripts.timing_profile import __main__ as cli
@@ -46,6 +47,33 @@ def test_default_history_is_365_days() -> None:
     assert parse_args([]).days == 365
 
 
+def test_proxy_capture_estimate_includes_all_four_wn2_cycles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = next(
+        d
+        for d in DYNAMICAL_DATASETS
+        if d.dataset_id == "google-weathernext2-forecast-operational-virtual"
+    )
+    (cron,) = dataset.operational_kubernetes_resources("test")
+    assert isinstance(cron, ReformatCronJob)
+    source = TimestampSource(tmp_path, 1)
+    start = pd.Timestamp("2026-10-27")
+    end = pd.Timestamp("2026-10-29")
+    logger = Mock()
+    monkeypatch.setattr(cli, "log", logger)
+    monkeypatch.setattr(cli, "expected_units", lambda *args: iter(()))
+    monkeypatch.setattr(cli, "render_dataset", Mock(return_value=""))
+    runtime = cli.measure_runtime(None, cron, start, end, virtual=True)
+    cli.measure_source(dataset, cron, runtime, source, start, end, set())
+    estimate = logger.info.call_args_list[0].args
+    assert "uncached proxy capture estimate" in estimate[0]
+    assert estimate[2] == 2656
+    assert estimate[3] == 2656 / 120
+    assert source.proxy_requests == 0
+    source.close()
+
+
 @pytest.mark.parametrize(
     "variant",
     [
@@ -68,6 +96,8 @@ def test_weathernext3_measures_proxy_finalization_with_compact_summaries(
         return coords
 
     generated: list[pd.Timestamp] = []
+    logger = Mock()
+    monkeypatch.setattr(cli, "log", logger)
     original_units = cli.expected_units
 
     def streaming_units(
@@ -83,6 +113,10 @@ def test_weathernext3_measures_proxy_finalization_with_compact_summaries(
     monkeypatch.setattr(cli, "expected_units", streaming_units)
 
     def list_proxy(self: TimestampSource, prefix: str) -> Listing:
+        assert any(
+            "uncached proxy capture estimate" in call.args[0]
+            for call in logger.info.call_args_list
+        )
         assert prefix.startswith("https://wn.dynamical.org/chunks/")
         assert prefix.endswith("_")
         match = re.search(r"/(\d{8})_(\d{2})hr_", prefix)

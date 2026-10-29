@@ -16,6 +16,9 @@ from reformatters.google.weathernext2.forecast_historical_virtual.dynamical_data
 from reformatters.google.weathernext2.forecast_operational_virtual.dynamical_dataset import (
     GoogleWeathernext2ForecastOperationalVirtualDataset,
 )
+from reformatters.google.weathernext2.forecast_virtual.region_job import (
+    OPERATIONAL_SOURCE_LANDING_DELAY,
+)
 
 
 def _storage(tmp_path: Path) -> StorageConfig:
@@ -154,7 +157,7 @@ def test_operational_fire_selects_arriving_init_and_keeps_successor_overlap(
 
     for hour in (0, 6, 12, 18):
         anchor = pd.Timestamp("2026-10-28") + pd.Timedelta(hours=hour)
-        fire = cron.next_fire_time(anchor + pd.Timedelta("6h") - pd.Timedelta("1s"))
+        fire = cron.previous_fire_time(anchor + pd.Timedelta("6h18m21s"))
         successor = cron.next_fire_time(fire)
         for selected_fire, newest in (
             (fire, anchor),
@@ -172,3 +175,5 @@ def test_operational_fire_selects_arriving_init_and_keeps_successor_overlap(
             inits = template.to_dataset().get_index("init_time")[job.region]
             assert inits[-1] == newest
             assert anchor in inits
+            assert newest - config.append_dim_frequency in inits
+        assert fire - anchor >= OPERATIONAL_SOURCE_LANDING_DELAY
