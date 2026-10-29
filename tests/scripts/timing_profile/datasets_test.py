@@ -301,7 +301,7 @@ def test_hrrr_generated_visibility_does_not_require_next_hour_before_its_gate(
             )
     listings = {url.rsplit("/", 1)[0] + "/": Listing(objects, "S3") for url in objects}
     measured = aggregate_unit(unit, listings)
-    assert measured.raw_first == -360
+    assert min(measured.file_arrivals.values()) == -360
     assert measured.first == 3180
     result = recommend(
         [measured],

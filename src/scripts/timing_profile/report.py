@@ -50,7 +50,6 @@ class MeasuredUnit:
     first: float | None
     complete: float | None
     missing_files: int
-    raw_first: float | None
     file_arrivals: dict[frozenset[str], float]
     source: str = "listings"
     provenance: dict[str, int] = field(default_factory=dict)
@@ -89,18 +88,20 @@ def aggregate_unit(
             evidence[url].provenance if evidence is not None else "current_object_write"
             for url in file
         )
-    raw_first = min(available.values()) if available else None
-    visible = [
-        max(available[file] for file in group)
-        for group in unit.visibility_groups
-        if all(file in available for file in group)
-    ]
+    visible = (
+        [
+            max(available[file] for file in group)
+            for group in unit.visibility_groups
+            if all(file in available for file in group)
+        ]
+        if unit.visibility_groups
+        else available.values()
+    )
     return MeasuredUnit(
         unit,
-        (min(visible) if visible else None) if unit.visibility_groups else raw_first,
+        min(visible, default=None),
         max(available.values()) if available and missing == 0 else None,
         missing,
-        raw_first,
         available,
         "wxopticon" if evidence is not None else "listings",
         dict(provenance),
