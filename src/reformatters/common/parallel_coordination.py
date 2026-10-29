@@ -120,8 +120,8 @@ def parallel_setup(
     icechunk_repos: list[tuple[str, icechunk.Repository]],
     consolidated: bool,
     exclude_coord_value_chunks: Collection[str] = (),
+    keep_branch: bool = False,
 ) -> SetupInfo:
-    target_branch = storage.icechunk_branch()
     if is_first:
         template_utils.write_metadata(template_ds, tmp_store, consolidated=consolidated)
 
@@ -134,17 +134,14 @@ def parallel_setup(
         )
         setup_info: SetupInfo = json.loads(existing_setup[0]) if existing_setup else {}
 
-        # Icechunk: expand metadata on the job branch without changing main.
-        # Worker 0 retries use the same branch name.
+        # Icechunk: create temp branch, write full metadata, commit on branch.
+        # This expands the dataset on the temp branch while readers on "main" are unaffected.
+        # Generated branch names are deterministic so worker 0 retries reuse them.
         if icechunk_repos:
             repo_snapshots = setup_info.setdefault("repo_snapshots", {})
             for role, repo in icechunk_repos:
-                snapshot = repo_snapshots.setdefault(
-                    role, repo.lookup_branch(target_branch)
-                )
-                if target_branch != "main":
-                    assert branch_name == target_branch
-                elif branch_name in repo.list_branches():
+                snapshot = repo_snapshots.setdefault(role, repo.lookup_branch("main"))
+                if not keep_branch and branch_name in repo.list_branches():
                     # Branch already exists from a previous worker 0 attempt — reuse it.
                     log.info(f"Branch {branch_name} already exists on {role}, reusing")
                 else:
@@ -252,8 +249,8 @@ def finalize(  # noqa: PLR0912
     publish_zarr3_metadata: bool | None = None,
     exclude_coord_value_chunks: Collection[str] = (),
     job_uid: str | None = None,
+    keep_branch: bool = False,
 ) -> None:
-    target_branch = storage.icechunk_branch()
     assert job_uid is None or branch_name != "main"
     publish_zarr3_metadata = (
         update_template_with_results
@@ -285,7 +282,7 @@ def finalize(  # noqa: PLR0912
     # backfills wrote metadata before workers started and skip this.
     # A zarr v3 store is never the primary of an icechunk replica, so publishing this
     # format before the icechunk stores below keeps the primary the last store to advance.
-    if publish_zarr3_metadata and target_branch == "main":
+    if publish_zarr3_metadata:
         primary_store = store_factory.primary_store(writable=True)
         replica_stores = store_factory.replica_stores(writable=True)
         copy_zarr_metadata(
@@ -298,43 +295,33 @@ def finalize(  # noqa: PLR0912
             exclude_coord_value_chunks=exclude_coord_value_chunks,
         )
 
-    # Icechunk: commit final metadata on the job branch.
+    # Icechunk: write final (possibly trimmed) metadata on temp branch, commit, reset main.
     # Uses copy_zarr_metadata (not write_metadata) because the zarr arrays already exist
-    # on the job branch from parallel_setup — we only need to update the metadata files.
+    # on the temp branch from parallel_setup — we only need to update the metadata files.
     # Process replicas before primary so primary (which drives future work) is last to update.
     if branch_name != "main":
         replicas_first = store_factory.icechunk_repos(sort="primary-last")
-        # First pass: commit metadata; publish to main unless a branch override is set.
+        # First pass: commit final metadata and reset main on each repo.
         diverged_roles: list[str] = []
         for role, repo in replicas_first:
             original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
-            if target_branch != "main":
-                assert branch_name == target_branch
-                assert original_snapshot is not None
-                assert _snapshot_is_on_branch(
-                    repo, branch_name, original_snapshot, None
-                ), "Backfill branch was replaced during the job"
-            else:
-                current_main = repo.lookup_branch("main")
-                if current_main != original_snapshot:
-                    if (
-                        branch_name not in repo.list_branches()
-                        or _snapshot_is_on_branch(
-                            repo, branch_name, current_main, original_snapshot
-                        )
-                    ):
-                        log.info(f"{role}: main already reset by a previous attempt")
-                        continue
-                    # Another job (e.g. an operational update) moved main while this job
-                    # was running. Icechunk can't merge a committed branch onto the moved
-                    # main, so this job's writes cannot be published without discarding
-                    # the other job's; the other job wins and this one fails.
-                    log.error(
-                        f"{role}: main moved past this job's starting snapshot; "
-                        f"branch {branch_name} will not be published"
-                    )
-                    diverged_roles.append(role)
+            current_main = repo.lookup_branch("main")
+            if not keep_branch and current_main != original_snapshot:
+                if branch_name not in repo.list_branches() or _snapshot_is_on_branch(
+                    repo, branch_name, current_main, original_snapshot
+                ):
+                    log.info(f"{role}: main already reset by a previous attempt")
                     continue
+                # Another job (e.g. an operational update) moved main while this job
+                # was running. Icechunk can't merge a committed branch onto the moved
+                # main, so this job's writes cannot be published without discarding
+                # the other job's; the other job wins and this one fails.
+                log.error(
+                    f"{role}: main moved past this job's starting snapshot; "
+                    f"branch {branch_name} will not be published"
+                )
+                diverged_roles.append(role)
+                continue
             session = repo.writable_session(branch_name)
             copy_zarr_metadata(
                 updated_template,
@@ -346,7 +333,7 @@ def finalize(  # noqa: PLR0912
             new_snapshot = session.commit(
                 commit_message, rebase_with=icechunk.ConflictDetector()
             )
-            if target_branch == "main":
+            if not keep_branch:
                 repo.reset_branch(
                     "main", new_snapshot, from_snapshot_id=original_snapshot
                 )
@@ -363,7 +350,7 @@ def finalize(  # noqa: PLR0912
 
         # Second pass: clean up temp branches.
         for _role, repo in replicas_first:
-            if target_branch == "main" and branch_name in repo.list_branches():
+            if not keep_branch and branch_name in repo.list_branches():
                 repo.delete_branch(branch_name)
 
     if workers_total > 1:

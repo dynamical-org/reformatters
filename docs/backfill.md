@@ -27,17 +27,17 @@ Pick the operation by what you're doing (action operation name / equivalent CLI 
 
 ## Prepare a private Icechunk branch
 
-For an occasional materialized backfill on an existing Icechunk primary without replicas, create a branch containing the dataset first, then use an inline override:
+For an occasional materialized backfill on an existing Icechunk primary without replicas, choose a new branch name:
 
 ```sh
-REFORMATTERS_ICECHUNK_BRANCH=candidate DYNAMICAL_ENV=prod uv run main <dataset-id> backfill-kubernetes --overwrite-chunks --docker-image <image-built-from-the-driver-commit> [flags]
+DYNAMICAL_ENV=prod uv run main <dataset-id> backfill-kubernetes --keep-branch candidate --overwrite-chunks [flags]
 ```
 
-Pin `--docker-image` to an image built from the driver's commit so the driver and workers use the same branch-selection behavior. The driver forwards the override to every worker. Driver and worker logs name the resolved branch; the driver also writes it to the GitHub workflow summary when available. Unset means the normal `main` workflow. Unknown `REFORMATTERS_*` names containing `BRANCH` or `ICECHUNK` are rejected. Do not leave the override exported in a shared shell.
+Worker 0 creates the candidate from `main` in place of the generated temporary branch. Workers use the normal backfill processing path, and finalization retains the candidate without resetting `main` or deleting the branch. Operational updates can continue on `main`. Omitting `--keep-branch` preserves normal publication behavior.
 
-The repository, branch and dataset must already exist. `main`, `_job_` names, empty names, Zarr/replica/virtual stores, metadata-only runs, operational updates and `backfill-local` are unsupported. Overwrite guards read the selected branch; add `--overwrite-metadata` for expansion or new arrays. Read-only inspection through StoreFactory follows the override too.
+The dataset must already exist on `main`; the candidate must not exist. `main`, `_job_` names, empty or whitespace-padded names, Zarr/replica/virtual stores and metadata-only runs are unsupported. Overwrite guards read `main`; add `--overwrite-metadata` for expansion or new arrays. The option is available on `backfill-kubernetes` and its worker command, `backfill`. It is passed explicitly in worker arguments, so an older image rejects the unknown option before processing. Use `--docker-image` when the deployed image does not yet support it.
 
-Workers commit directly to the private branch, which may contain partial results until the run succeeds. They never publish to `main` or delete the branch; operational updates can continue on `main`. Use one writer per branch, a fresh job name, and identical code/environment across workers and retries. Do not reset or switch the branch mid-job: finalization detects unrelated replacement history, but a reset back to or onto the starting snapshot is not detected. After an ambiguous failure, inspect/discard the candidate and start a fresh branch/job. Validate the candidate before a separately approved publication. This tool does not shift arrays or validate a changed origin for a prepend.
+An existing candidate always fails worker-0 setup, including any worker-0 retry after branch creation. Other workers can retry against the created branch. On failure, stop the Kubernetes job and all its workers before inspecting or deleting the candidate, then launch a fresh job. Never delete or reset the candidate while workers are active. Use a fresh job name and one job per candidate. Partial results remain on the branch after failure; validate the candidate before separately publishing it. StoreFactory reads still default to `main`; inspect the candidate with an explicit branch argument.
 
 ## Tuning parallelism
 
