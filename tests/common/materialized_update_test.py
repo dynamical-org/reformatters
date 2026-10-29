@@ -18,6 +18,7 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.transport import Transport
 from zarr.storage import MemoryStore
 
+from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import (
     dynamical_dataset,
     kubernetes,
@@ -28,8 +29,14 @@ from reformatters.common import (
 from reformatters.common import parallel_coordination as pc
 from reformatters.common.config import Config, Env
 from reformatters.common.iterating import digest, get_worker_jobs
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import RegionJob
-from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
+from reformatters.common.storage import (
+    JOB_STATE_RETENTION,
+    DatasetFormat,
+    StorageConfig,
+    StoreFactory,
+)
 from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
     NoaaHrrrForecast48HourDataset,
 )
@@ -169,6 +176,142 @@ def telemetry(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[Mock, Mock]]:
             yield checkins, events
     finally:
         sdk_client.close()
+
+
+def test_job_state_retention_has_margin_above_queued_materialized_deadlines() -> None:
+    for dataset in DYNAMICAL_DATASETS:
+        if not issubclass(dataset.region_job_class, MaterializedRegionJob):
+            continue
+        for cron in dataset.operational_kubernetes_resources("test-image"):
+            if (
+                isinstance(cron, kubernetes.ReformatCronJob)
+                and cron.concurrency_policy == "Allow"
+            ):
+                assert cron.active_deadline is not None, cron.name
+                assert cron.pod_active_deadline <= JOB_STATE_RETENTION / 2, cron.name
+                assert cron.active_deadline <= JOB_STATE_RETENTION / 2, cron.name
+
+
+@pytest.mark.parametrize("state", ["run", "skip", "finalized"])
+@pytest.mark.parametrize("cleanup_fails", [False, True])
+def test_state_cleanup_runs_after_update_checkin_closes(
+    pilot: Pilot,
+    monkeypatch: pytest.MonkeyPatch,
+    state: pc.JobState,
+    cleanup_fails: bool,
+) -> None:
+    job = _job("job")
+    pilot.jobs[:] = [job]
+    pilot.write(job, state)
+    events: list[tuple[str, str]] = []
+    operational.register_run_monitor(_recording_monitor(events))
+
+    def cleanup(name: str) -> None:
+        assert ("ok", _CRON) in events
+        assert ("error", _CRON) not in events
+        if cleanup_fails:
+            raise PermissionError("cleanup denied")
+
+    cleanup_mock = Mock(side_effect=cleanup)
+    monkeypatch.setattr(StoreFactory, "clear_expired_job_states", cleanup_mock)
+
+    if cleanup_fails:
+        with pytest.raises(PermissionError, match="cleanup denied"):
+            pilot.dataset.update("job")
+    else:
+        pilot.dataset.update("job")
+
+    cleanup_mock.assert_called_once_with("job")
+    assert ("error", _CRON) not in events
+
+
+def test_only_last_index_cleans_expired_states_after_publication_and_validation(
+    pilot: Pilot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pilot.jobs[:] = [_job("job")]
+    events: list[str] = []
+    pilot.process.side_effect = lambda **kwargs: events.append("publish")
+    pilot.validate.side_effect = lambda *args, **kwargs: events.append("validate")
+    cleanup = Mock(side_effect=lambda name: events.append("cleanup"))
+    monkeypatch.setattr(StoreFactory, "clear_expired_job_states", cleanup)
+
+    for worker_index in range(3):
+        pilot.dataset.update("job", worker_index=worker_index, workers_total=3)
+
+    assert events == ["publish", "publish", "publish", "validate", "cleanup"]
+    cleanup.assert_called_once_with("job")
+
+
+@pytest.mark.parametrize("state", ["skip", "finalized"])
+def test_only_last_exiting_index_cleans_expired_states_for_nonwriting_job(
+    pilot: Pilot, monkeypatch: pytest.MonkeyPatch, state: pc.JobState
+) -> None:
+    job = _job("job")
+    pilot.jobs[:] = [job]
+    pilot.write(job, state)
+    cleanup = Mock()
+    monkeypatch.setattr(StoreFactory, "clear_expired_job_states", cleanup)
+
+    for worker_index in range(3):
+        pilot.dataset.update("job", worker_index=worker_index, workers_total=3)
+
+    cleanup.assert_called_once_with("job")
+    pilot.process.assert_not_called()
+    pilot.validate.assert_not_called()
+
+
+def test_failed_publication_does_not_clean_expired_states(
+    pilot: Pilot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pilot.jobs[:] = [_job("job")]
+    pilot.process.side_effect = RuntimeError("publication failed")
+    cleanup = Mock()
+    monkeypatch.setattr(StoreFactory, "clear_expired_job_states", cleanup)
+
+    with pytest.raises(RuntimeError, match="publication failed"):
+        pilot.dataset.update("job")
+
+    cleanup.assert_not_called()
+
+
+@pytest.mark.parametrize("outcome", ["submit", "yield", "retry-cap"])
+def test_expired_state_cleanup_follows_validation_failure_and_repass_decision(
+    pilot: Pilot, monkeypatch: pytest.MonkeyPatch, outcome: str
+) -> None:
+    name = "job-r16" if outcome == "retry-cap" else "job"
+    job = _job(name)
+    pilot.jobs[:] = [job]
+    events: list[str] = []
+    pilot.process.side_effect = lambda **kwargs: pilot.write(job, "finalized")
+
+    def validate(*args: object, **kwargs: object) -> None:
+        events.append("validation failed")
+        raise validation.OperationalValidationError("late data")
+
+    pilot.validate.side_effect = validate
+
+    def backoff(*args: object) -> bool:
+        assert pilot.state(job) == "finalized"
+        events.append("backoff")
+        return outcome == "submit"
+
+    monkeypatch.setattr(pc, "backoff_before_repass", backoff)
+    submit = Mock(side_effect=lambda *args, **kwargs: events.append("submit"))
+    monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
+    cleanup = Mock(side_effect=lambda name: events.append("cleanup"))
+    monkeypatch.setattr(StoreFactory, "clear_expired_job_states", cleanup)
+
+    with pytest.raises(typer.Exit) as exc:
+        pilot.dataset.update(name)
+
+    assert exc.value.exit_code == 20
+    expected = ["validation failed"]
+    if outcome != "retry-cap":
+        expected.append("backoff")
+    if outcome == "submit":
+        expected.append("submit")
+    assert events == [*expected, "cleanup"]
+    cleanup.assert_called_once_with(name)
 
 
 def test_job_listing_uses_cronjob_label_and_stable_order(pilot: Pilot) -> None:
@@ -1079,6 +1222,8 @@ def test_non_allow_update_keeps_immediate_single_retry(
     pilot.api.read_namespaced_job.side_effect = unexpected
     monkeypatch.setattr(pc, "read_job_state", Mock(side_effect=unexpected))
     monkeypatch.setattr(pc, "write_job_state", Mock(side_effect=unexpected))
+    cleanup = Mock(side_effect=unexpected)
+    monkeypatch.setattr(StoreFactory, "clear_expired_job_states", cleanup)
     pilot.validate.side_effect = validation.OperationalValidationError("missing data")
     submit = Mock()
     monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
@@ -1094,6 +1239,7 @@ def test_non_allow_update_keeps_immediate_single_retry(
     pilot.api.list_namespaced_job.assert_not_called()
     pilot.api.read_namespaced_job.assert_not_called()
     pilot.sleep.assert_not_called()
+    cleanup.assert_not_called()
 
 
 def test_nonzero_index_waits_for_writing_predecessor_before_computing(

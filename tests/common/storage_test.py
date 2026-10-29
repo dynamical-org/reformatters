@@ -1,18 +1,24 @@
 import json
+import os
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 
 import fsspec
 import icechunk
 import pytest
 import zarr
 import zarr.storage
+from aiobotocore.stub import AioStubber
 from icechunk.store import IcechunkStore
 from pydantic import ValidationError
 
 from reformatters.common import retry as retry_module
+from reformatters.common import storage
 from reformatters.common.config import Config, Env
 from reformatters.common.storage import (
+    JOB_STATE_RETENTION,
     DatasetFormat,
     IcechunkVirtualConfig,
     StorageConfig,
@@ -360,6 +366,110 @@ class TestCoordinationFiles:
         ]
         assert factory.read_all_coordination_files("job", "setup") == []
         assert factory.read_all_coordination_files("job", "results") == []
+
+    def test_expired_state_cleanup_respects_age_and_scope(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        now = datetime(2026, 10, 27, tzinfo=UTC)
+        clock = Mock(wraps=datetime)
+        clock.now.return_value = now
+        monkeypatch.setattr(storage, "datetime", clock)
+        factory = _local_factory(str(tmp_path))
+        base = Path(factory._coordination_base_path())
+        ages = {
+            "expired/state.json": JOB_STATE_RETENTION + timedelta(seconds=1),
+            "fresh/state.json": JOB_STATE_RETENTION - timedelta(seconds=1),
+            "boundary/state.json": JOB_STATE_RETENTION,
+            "current/state.json": JOB_STATE_RETENTION * 2,
+            "expired/results/worker-0.json": JOB_STATE_RETENTION * 2,
+            "expired/setup/state.json": JOB_STATE_RETENTION * 2,
+            "expired/state.json.bak": JOB_STATE_RETENTION * 2,
+        }
+        for relative, age in ages.items():
+            job, key = relative.split("/", 1)
+            factory.write_coordination_file(job, key, b"state")
+            modified = (now - age).timestamp()
+            os.utime(base / relative, (modified, modified))
+        directory = base / "directory/state.json"
+        directory.mkdir(parents=True)
+        other_dataset_state = (
+            base.parent.parent / "other-dataset/_internal/job/state.json"
+        )
+        other_dataset_state.parent.mkdir(parents=True)
+        other_dataset_state.write_bytes(b"other dataset")
+        expired = (now - JOB_STATE_RETENTION * 2).timestamp()
+        os.utime(other_dataset_state, (expired, expired))
+
+        factory.clear_expired_job_states("current")
+
+        for relative in ages:
+            assert (base / relative).exists() == (relative != "expired/state.json")
+        assert directory.is_dir()
+        assert other_dataset_state.read_bytes() == b"other dataset"
+
+    def test_expired_state_cleanup_noop_without_states(self, tmp_path: str) -> None:
+        _local_factory(tmp_path).clear_expired_job_states("current")
+
+    @pytest.mark.parametrize("error_code", [None, "NoSuchKey", "AccessDenied"])
+    def test_expired_state_cleanup_uses_object_last_modified_and_only_ignores_gone_race(
+        self,
+        tmp_path: str,
+        monkeypatch: pytest.MonkeyPatch,
+        error_code: str | None,
+    ) -> None:
+        factory = _local_factory(tmp_path)
+        fs = fsspec.filesystem(
+            "s3",
+            anon=True,
+            skip_instance_cache=True,
+            client_kwargs={"region_name": "us-east-1"},
+        )
+        listing = Mock(
+            return_value={
+                "bucket/dataset/_internal/expired/state.json": {
+                    "type": "file",
+                    "LastModified": datetime.now(UTC) - JOB_STATE_RETENTION * 2,
+                },
+                "bucket/dataset/_internal/fresh/state.json": {
+                    "type": "file",
+                    "LastModified": datetime.now(UTC),
+                },
+                "bucket/dataset/_internal/current/state.json": {
+                    "type": "file",
+                    "LastModified": datetime.now(UTC) - JOB_STATE_RETENTION * 2,
+                },
+            }
+        )
+        monkeypatch.setattr(fs, "glob", listing)
+        monkeypatch.setattr(factory, "_coordination_fs", lambda: fs)
+
+        with AioStubber(fs.s3) as service:
+            expected = {
+                "Bucket": "bucket",
+                "Key": "dataset/_internal/expired/state.json",
+            }
+            if error_code is None:
+                service.add_response("delete_object", {}, expected_params=expected)
+            else:
+                service.add_client_error(
+                    "delete_object",
+                    service_error_code=error_code,
+                    service_message=error_code,
+                    http_status_code=403 if error_code == "AccessDenied" else 404,
+                    expected_params=expected,
+                )
+            if error_code == "AccessDenied":
+                with pytest.raises(PermissionError, match="AccessDenied"):
+                    factory.clear_expired_job_states("current")
+            else:
+                factory.clear_expired_job_states("current")
+            service.assert_no_pending_responses()
+
+        listing.assert_called_once_with(
+            f"{factory._coordination_base_path()}/*/state.json",
+            detail=True,
+            refresh=True,
+        )
 
 
 class TestIcechunkRepos:
