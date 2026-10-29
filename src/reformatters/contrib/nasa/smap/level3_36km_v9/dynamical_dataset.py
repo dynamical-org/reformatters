@@ -30,7 +30,7 @@ class NasaSmapLevel336KmV9Dataset(
             # Run twice to pick up the later data too (updates only take a couple minutes)
             schedule="0 6,18 * * *",
             concurrency_policy="Replace",
-            pod_active_deadline=timedelta(minutes=10),
+            pod_active_deadline=timedelta(minutes=10),  # runs take <2 min
             active_deadline=None,
             image=image_tag,
             dataset_id=self.dataset_id,

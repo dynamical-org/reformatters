@@ -208,9 +208,22 @@ def test_only_icechunk_primaries_use_the_queued_lifecycle() -> None:
                 plain_zarr.add(dataset.dataset_id)
                 assert cron.concurrency_policy == "Replace", dataset.dataset_id
                 assert cron.active_deadline is None, dataset.dataset_id
-    assert plain_zarr == {
-        "ecmwf-ifs-ens-15-day-deprecated-zarr-v3",
-        "nasa-smap-level3-36km-v9",
-        "noaa-ndvi-cdr-analysis",
-        "u-arizona-swann-analysis",
-    }
+    assert plain_zarr == set(_PLAIN_ZARR_POD_DEADLINES)
+
+
+_PLAIN_ZARR_POD_DEADLINES = {
+    "ecmwf-ifs-ens-15-day-deprecated-zarr-v3": timedelta(minutes=45),
+    "nasa-smap-level3-36km-v9": timedelta(minutes=10),
+    "noaa-ndvi-cdr-analysis": timedelta(minutes=60),
+    "u-arizona-swann-analysis": timedelta(minutes=10),
+}
+
+
+@pytest.mark.parametrize("dataset_id", _PLAIN_ZARR_POD_DEADLINES)
+def test_plain_zarr_pod_deadlines(dataset_id: str) -> None:
+    (cron,) = [
+        job
+        for job in dataset_for(dataset_id).operational_kubernetes_resources("test")
+        if isinstance(job, ReformatCronJob)
+    ]
+    assert cron.pod_active_deadline == _PLAIN_ZARR_POD_DEADLINES[dataset_id]
