@@ -43,7 +43,7 @@ The runtime report keeps startup (`L`) p95 for polling, materialized processing 
 
 Use one cron per dataset, with one minute offset across all its cycles:
 
-- Virtual schedules fire at `a + E − L − 15 min`, using earliest first visibility across all tiers and cycle classes. Later classes spend the difference polling.
+- Virtual schedules use the lead defined under [virtual polling](#virtual-polling), using earliest first visibility across all tiers and cycle classes. Later classes spend the difference polling.
 - Untriggered materialized schedules use the latest class's `S` for the first readiness tier. Earlier classes accept that wait as latency.
 - Where a materialized dataset has a completion trigger, its cron is a backstop at the first readiness tier's `T`. Change a consumer's cron together with activation of its trigger.
 
@@ -51,7 +51,7 @@ Check every cycle class against the resulting single cron; the profiler flags a 
 
 ## Virtual polling
 
-For CronJobs on `Allow`, fire at `a + E − L − 15 min`, where `a` is the source anchor, `E` the earliest first visibility, and `L` the p95 startup duration. Round the fire down to a whole minute and clamp it to at least `a + 1 min`: the pod uses the fire as its exclusive template end, so a fire at or before the anchor omits the intended cycle. Poll until the next fire plus `L + 1 min`, so a file arriving at the next fire remains observable while its successor starts. Exit early when nothing in the selected window remains pending.
+For CronJobs on `Allow`, fire at `a + E − L − 15 min`, where `a` is the source anchor, `E` the earliest first visibility, and `L` the p95 startup duration. Use a 3-minute lead instead when the 15-minute fire’s poll cutoff (`fire + Δf + L + 1 min`) precedes any retained class’s complete-arrival p99. Round the fire down to a whole minute and clamp it to at least `a + 1 min`: the pod uses the fire as its exclusive template end, so a fire at or before the anchor omits the intended cycle. Poll until the next fire plus `L + 1 min`, so a file arriving at the next fire remains observable while its successor starts. Exit early when nothing in the selected window remains pending.
 
 Set both pod and Job active deadlines to `Δf + L + 1 min + V + 30 s`, with `Δf` the fire interval and `V` the largest observed validation duration. Set `virtual_poll_deadline_grace = V + 30 s`. The cutoff is the selected fire plus the pod deadline minus that grace. Round Sentry's `max_runtime` up to whole minutes so it does not expire before the pod deadline.
 

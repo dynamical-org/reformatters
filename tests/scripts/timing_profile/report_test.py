@@ -153,7 +153,7 @@ def measured_units(
             3600,
             (780, 7980, 10800, None),
         ),
-        ([(0, (60, 600, 3000, 6000))], True, True, 3600, 3600, (60, 1020, 3960, 270)),
+        ([(0, (60, 600, 3000, 6000))], True, True, 3600, 3600, (360, 1020, 3960, 270)),
     ],
     ids=[
         "virtual-forecast-max-validation",
@@ -661,3 +661,48 @@ def test_polling_e_uses_first_visibility_instead_of_earlier_raw_file() -> None:
     assert "without exclusions: 00:47:20." in rendered
     assert "One-cron offset: 00:31:00" in rendered
     assert "Anchor guard" not in rendered
+
+
+@pytest.mark.parametrize(
+    ("completion", "lead", "fire", "relation"),
+    [
+        (6000, 180, 2160, "precedes"),
+        (4800, 900, 1440, "is at or after"),
+        (5130, 900, 1440, "is at or after"),
+    ],
+    ids=["cutoff-before-p99", "cutoff-after-p99", "cutoff-equals-p99"],
+)
+def test_virtual_lead_compares_poll_cutoff_with_retained_completion_p99(
+    completion: float,
+    lead: float,
+    fire: float,
+    relation: str,
+) -> None:
+    units = measured_units([(0, (2400, completion))], copies=300)
+    end = units[-1].unit.anchor + pd.Timedelta("1h")
+    result = recommend(
+        units,
+        runtime(),
+        virtual=True,
+        interval=3600,
+        currency_interval=3600,
+        spacing=3600,
+        end=end,
+    )
+    assert result.poll_lead == lead
+    assert result.offset == fire
+    assert result.completion_p99 == completion
+    dataset = next(
+        ds
+        for ds in DYNAMICAL_DATASETS
+        if ds.dataset_id == "noaa-hrrr-forecast-18-hour-virtual"
+    )
+    cron = next(
+        resource
+        for resource in dataset.operational_kubernetes_resources("test")
+        if isinstance(resource, ReformatCronJob)
+    )
+    rendered = render_dataset(dataset, cron, units, runtime(), end, None, set())
+    assert f"15-minute-lead cutoff 01:25:30 {relation}" in rendered
+    assert "maximum retained-class completion p99" in rendered
+    assert f"Polling lead: 00:{int(lead / 60):02}:00" in rendered
