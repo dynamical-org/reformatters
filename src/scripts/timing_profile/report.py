@@ -31,6 +31,7 @@ from .statistics import (
     tail_dominated,
     virtual_deadline,
     virtual_fire,
+    virtual_poll_cutoff,
     virtual_poll_lead,
 )
 from .wxopticon import Evidence
@@ -682,13 +683,11 @@ def render_polling_evidence(
     if recommendation.poll_lead is not None:
         assert runtime.startup_estimate is not None
         assert recommendation.offset is not None
-        cutoff = (
-            (virtual_fire(min(first), runtime.startup_estimate) // 60) * 60
-            + interval
-            + runtime.startup_estimate
-            + 60
+        fire = (virtual_fire(min(first), runtime.startup_estimate) // 60) * 60
+        cutoff = virtual_poll_cutoff(fire, interval, runtime.startup_estimate)
+        chosen_cutoff = virtual_poll_cutoff(
+            recommendation.offset, interval, runtime.startup_estimate
         )
-        chosen_cutoff = recommendation.offset + interval + runtime.startup_estimate + 60
         relation = (
             "precedes"
             if recommendation.completion_p99 is not None

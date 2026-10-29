@@ -706,3 +706,20 @@ def test_virtual_lead_compares_poll_cutoff_with_retained_completion_p99(
     assert f"15-minute-lead cutoff 01:25:30 {relation}" in rendered
     assert "maximum retained-class completion p99" in rendered
     assert f"Polling lead: 00:{int(lead / 60):02}:00" in rendered
+
+
+def test_virtual_poll_lead_uses_latest_retained_class_completion_p99() -> None:
+    units = measured_units([(0, (2400, 4800)), (6, (3600, 6000))], copies=300)
+    assert len(cycle_classes(units, virtual=True)) == 2
+    result = recommend(
+        units,
+        runtime(),
+        virtual=True,
+        interval=3600,
+        currency_interval=3600,
+        spacing=3600,
+        end=units[-1].unit.anchor + pd.Timedelta("1h"),
+    )
+    assert result.completion_p99 == 6000
+    assert result.poll_lead == 180
+    assert result.offset == 2160
