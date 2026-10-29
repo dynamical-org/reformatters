@@ -15,6 +15,7 @@ from reformatters.google.weathernext3.forecast_virtual.dynamical_dataset import 
     GoogleWeathernext3ForecastVirtualDataset,
 )
 from reformatters.google.weathernext3.forecast_virtual.region_job import (
+    OPERATIONAL_SOURCE_LANDING_DELAY,
     GoogleWeathernext3ForecastVirtualRegionJob,
 )
 from tests.google.weathernext3.forecast_virtual.datasets_test import DATASETS
@@ -141,7 +142,15 @@ def test_scheduled_window_selects_arriving_init_and_keeps_overlap(
     config = dataset.template_config
     anchor = pd.Timestamp("2026-10-28") + pd.Timedelta(hours=hour)
     (cron,) = dataset.operational_kubernetes_resources("test")
-    fire = cron.next_fire_time(anchor + pd.Timedelta("6h") - pd.Timedelta("1s"))
+    first_arrival = pd.Timedelta(
+        {
+            "google-weathernext3-forecast-48-hour-0-1-degree-virtual": "6h19m50.616s",
+            "google-weathernext3-forecast-48-hour-0-05-degree-virtual": "6h20m5.028s",
+            "google-weathernext3-forecast-15-day-0-1-degree-virtual": "6h48m17.086s",
+            "google-weathernext3-forecast-15-day-0-05-degree-virtual": "6h48m48.705s",
+        }[dataset.dataset_id]
+    )
+    fire = cron.previous_fire_time(anchor + first_arrival)
     successor = cron.next_fire_time(fire)
     assert successor - fire == config.append_dim_frequency
     for selected_fire in (fire, successor):
@@ -159,3 +168,4 @@ def test_scheduled_window_selects_arriving_init_and_keeps_overlap(
         assert anchor in inits
         assert anchor - config.append_dim_frequency in inits
         assert inits[-1] == anchor + (selected_fire - fire)
+    assert fire - anchor >= OPERATIONAL_SOURCE_LANDING_DELAY
