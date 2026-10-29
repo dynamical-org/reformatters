@@ -11,6 +11,7 @@ from reformatters.common.region_job import (
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import (
     Dim,
+    Timestamp,
 )
 from reformatters.noaa.gfs.region_job import (
     NoaaGfsCommonRegionJob,
@@ -33,6 +34,10 @@ class NoaaGfsAnalysisRegionJob(NoaaGfsCommonRegionJob):
 
     max_vars_per_download_group = 3
     max_vars_per_job = 12
+
+    @classmethod
+    def _update_append_dim_end(cls, reference: Timestamp) -> Timestamp:
+        return reference.floor("6h") + pd.Timedelta(hours=7)
 
     def get_processing_region(self) -> slice:
         """Buffer start by one step to allow deaccumulation without gaps in resulting output."""

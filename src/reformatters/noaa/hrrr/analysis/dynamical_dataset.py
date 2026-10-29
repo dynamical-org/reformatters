@@ -27,12 +27,10 @@ class NoaaHrrrAnalysisDataset(
         """Define Kubernetes cron jobs for operational updates."""
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # Every 3 hours at 57 minutes past the hour.
-            # HRRR f001 (last lead time used) NOMADS last-modified ~init+53m (max ~55m;
-            # we try S3 first to spare NOMADS, but NOMADS publishes first, by ~10 min at
-            # 06z). We could of course increase this to hourly.
-            schedule="57 */3 * * *",
-            pod_active_deadline=timedelta(minutes=20),  # runs take <15 min
+            schedule="10 1,4,7,10,13,16,19,22 * * *",
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=3),
+            active_deadline=timedelta(hours=3),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="7",
@@ -52,7 +50,7 @@ class NoaaHrrrAnalysisDataset(
             self.template_config.data_vars
         )
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=4)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=10)),
             validation.CheckRecentNans(exclude_vars=source_fill_value_vars),
             # NaN here is the source's no-precipitation / no-cloud-ceiling marker, so
             # coverage is small and clustered: a sampled quadrant is regularly all

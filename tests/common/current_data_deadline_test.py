@@ -12,18 +12,18 @@ from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.noaa.rrfs.dynamical_dataset import NoaaRrfsDataset
 
 _FRESHNESS_DEADLINES = [
-    ("noaa-gfs-forecast", "2026-09-27 00:00", "5h48m"),
-    ("noaa-gfs-analysis", "2026-09-26 20:00", "7h"),
+    ("noaa-gfs-forecast", "2026-09-27 00:00", "5h44m"),
+    ("noaa-gfs-analysis", "2026-09-26 20:00", "3h58m"),
     ("noaa-gfs-analysis-virtual", "2026-09-26 22:00", "3h57m"),
     ("noaa-gfs-forecast-virtual", "2026-09-26 18:00", "3h57m"),
-    ("noaa-gefs-analysis", "2026-09-26 15:00", "12h"),
-    ("noaa-gefs-forecast-35-day", "2026-09-27 00:00", "7h05m"),
+    ("noaa-gefs-analysis", "2026-09-26 15:00", "4h03m"),
+    ("noaa-gefs-forecast-35-day", "2026-09-27 00:00", "7h15m"),
     ("noaa-gefs-analysis-0-25-degree-virtual", "2026-09-27 00:00", "4h09m"),
     ("noaa-gefs-forecast-10-day-0-25-degree-virtual", "2026-09-27 00:00", "4h09m"),
     ("noaa-gefs-forecast-16-day-0-5-degree-virtual", "2026-09-27 00:00", "4h08m"),
     ("noaa-gefs-forecast-35-day-0-5-degree-virtual", "2026-09-27 00:00", "3h50m"),
     ("noaa-hrrr-forecast-48-hour", "2026-09-27 00:00", "2h12m"),
-    ("noaa-hrrr-analysis", "2026-09-26 21:00", "4h"),
+    ("noaa-hrrr-analysis", "2026-09-26 21:00", "3h10m"),
     ("noaa-hrrr-analysis-virtual", "2026-09-26 23:00", "80m"),
     ("noaa-rtma-analysis-virtual", "2026-09-27 00:00", "73m"),
     ("noaa-rtma-ru-analysis-virtual", "2026-09-27 00:15", "45m"),

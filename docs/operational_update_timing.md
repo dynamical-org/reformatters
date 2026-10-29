@@ -70,7 +70,7 @@ Currency does not replace integrity checks. Use `CheckVirtualManifestCompletenes
 
 ## Materialized deadlines and monitoring
 
-Materialized pod and Job active deadlines equal the interval between scheduled fires, `Δf`. Sentry's `max_runtime` matches the pod deadline, so a hung update alerts at that deadline. Virtual budgets follow [virtual polling](#virtual-polling).
+Materialized pod and Job active deadlines equal `min(Δf, 6h)`, where `Δf` is the interval between scheduled fires. Sentry's `max_runtime` matches the pod deadline, so a hung update alerts at that deadline. Virtual budgets follow [virtual polling](#virtual-polling).
 
 The update check-in covers the start decision, queue wait, processing, and finalization. A skipping Job closes it successfully without validation. Validation has its own check-in after publication. End-of-run backoff is outside both check-ins.
 
@@ -116,6 +116,8 @@ The IFS 46-day archiver emits one trigger per init. GEFS 35-day extension tier 2
 ## Repair window
 
 `operational_update_jobs` defines the repair window, usually starting inclusively at the latest stored position. A dataset that needs a wider window defines one. Gaps outside it page and require a [backfill](backfill.md). Forecast-derived analyses publish a non-ragged leading edge through result trimming or discovery gating.
+
+When a materialized analysis has valid times ahead of the present, select its newest source cycle from the Job reference time and include that cycle's accumulated boundary input. Set the template's exclusive end one append step past the next cycle's boundary position. The final trim then removes only the boundary, preserving the target cycle's complete last position.
 
 ## Named exceptions
 

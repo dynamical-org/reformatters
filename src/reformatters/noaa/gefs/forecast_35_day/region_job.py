@@ -13,7 +13,7 @@ from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import RegionJob
-from reformatters.common.types import AppendDim, ArrayND, DatetimeLike
+from reformatters.common.types import AppendDim, ArrayND, DatetimeLike, Timestamp
 from reformatters.noaa.gefs.gefs_config_models import (
     GEFS_EXTENSION_REQUEST_MIN_AGE,
     GEFS_PRE_EXTENSION_MAX,
@@ -41,6 +41,7 @@ class GefsForecast35DayRegionJob(
     """RegionJob for GEFS Forecast 35-Day dataset processing."""
 
     max_vars_per_job = 3
+    job_reference_time: Timestamp | None = None
 
     @classmethod
     def source_file_var_groups(
@@ -79,7 +80,11 @@ class GefsForecast35DayRegionJob(
         if not var_has_hour_0_values:
             processing_region_ds = processing_region_ds.sel(lead_time=slice("1h", None))
 
-        now = pd.Timestamp.now()
+        reference = (
+            self.job_reference_time
+            if self.job_reference_time is not None
+            else pd.Timestamp.now()
+        )
         return [
             GefsForecast35DaySourceFileCoord(
                 init_time=pd.Timestamp(init_time),
@@ -91,7 +96,7 @@ class GefsForecast35DayRegionJob(
             for lead_time in processing_region_ds["lead_time"].values
             for ensemble_member in processing_region_ds["ensemble_member"].values
             if pd.Timedelta(lead_time) <= GEFS_PRE_EXTENSION_MAX
-            or now - pd.Timestamp(init_time) >= GEFS_EXTENSION_REQUEST_MIN_AGE
+            or reference - pd.Timestamp(init_time) >= GEFS_EXTENSION_REQUEST_MIN_AGE
         ]
 
     def download_file(self, coord: GefsForecast35DaySourceFileCoord) -> Path:
@@ -142,6 +147,8 @@ class GefsForecast35DayRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[NoaaGefsDataVar],
         reformat_job_name: str,
+        *,
+        job_reference_time: Timestamp | None = None,
     ) -> tuple[
         Sequence[RegionJob[NoaaGefsDataVar, GefsForecast35DaySourceFileCoord]],
         xr.DataTree,
@@ -161,7 +168,9 @@ class GefsForecast35DayRegionJob(
         existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
         # Start by reprocessing the most recent init_time already in the dataset; it may be incomplete.
         append_dim_start = existing_ds[append_dim].max()
-        append_dim_end = pd.Timestamp.now()
+        append_dim_end = (
+            job_reference_time if job_reference_time is not None else pd.Timestamp.now()
+        )
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
@@ -172,4 +181,9 @@ class GefsForecast35DayRegionJob(
             reformat_job_name=reformat_job_name,
             filter_start=append_dim_start,
         )
+        if job_reference_time is not None:
+            jobs = [
+                job.model_copy(update={"job_reference_time": job_reference_time})
+                for job in jobs
+            ]
         return jobs, template_ds

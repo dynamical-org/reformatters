@@ -25,9 +25,10 @@ class GefsAnalysisDataset(
         workers = 2
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # GEFS f006 (last lead time used) NOMADS last-modified ~init+3h48m. +3 min buffer.
-            schedule="51 3,9,15,21 * * *",
-            pod_active_deadline=timedelta(minutes=30),  # runs take <22 min
+            schedule="3 4,10,16,22 * * *",
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6),
+            active_deadline=timedelta(hours=6),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="14",  # fit on 16 vCPU node
@@ -43,6 +44,6 @@ class GefsAnalysisDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=12)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=3)),
             validation.CheckRecentNans(),
         )

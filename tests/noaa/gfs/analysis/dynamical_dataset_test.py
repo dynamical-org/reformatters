@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -10,6 +12,8 @@ from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.gfs.analysis.dynamical_dataset import (
     NoaaGfsAnalysisDataset,
 )
+from reformatters.noaa.gfs.analysis.region_job import NoaaGfsAnalysisRegionJob
+from reformatters.noaa.gfs.region_job import DownloadSource, NoaaGfsSourceFileCoord
 from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
@@ -83,17 +87,27 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     )
 
     dataset = make_dataset()
-    # Set "now" to T06:00. update_template_with_results trims the last hour so we expect 5 hours.
+    # At the cycle's fire, f006 is available but the next cycle's f000 is not.
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2021-05-01T06:00")),
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2021-05-01T04:26")),
     )
     orig_download_from_source = dataset.region_job_class._download_from_source
+
+    def download_current_cycle(
+        self: NoaaGfsAnalysisRegionJob,
+        coord: NoaaGfsSourceFileCoord,
+        source: DownloadSource,
+    ) -> Path:
+        if coord.init_time > time_start:
+            raise FileNotFoundError("next cycle has not published")
+        return orig_download_from_source(self, coord, "s3")
+
     monkeypatch.setattr(
         dataset.region_job_class,
         "_download_from_source",
-        lambda self, coord, source: orig_download_from_source(self, coord, "s3"),
+        download_current_cycle,
     )
     orig_get_jobs = dataset.region_job_class.get_jobs
     monkeypatch.setattr(
@@ -118,6 +132,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
             "2021-05-01T02:00",
             "2021-05-01T03:00",
             "2021-05-01T04:00",
+            "2021-05-01T05:00",
         ]
     )
     assert_array_equal(updated_ds["time"], expected_times)
@@ -128,7 +143,9 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     # precipitation_surface has NaN at time 0 by design (no previous value to deaccumulate from)
     assert_no_nulls(space_subset_ds["precipitation_surface"].isel(time=slice(1, None)))
 
-    point_ds = updated_ds.sel(latitude=0, longitude=0, method="nearest")
+    point_ds = updated_ds.sel(latitude=0, longitude=0, method="nearest").sel(
+        time=slice(None, "2021-05-01T04:00")
+    )
     assert_allclose(
         point_ds["temperature_2m"].values, [28.25, 28.0, 27.875, 28.0, 28.125]
     )
@@ -138,6 +155,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         [np.nan, 0.0, 1.74045574e-05, 1.74045574e-05, 0.0],
     )
 
+    assert dataset._current_data_is_published()
     assert_configured_validators(dataset)
 
 

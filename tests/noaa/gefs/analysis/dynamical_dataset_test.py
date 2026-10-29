@@ -30,7 +30,7 @@ def test_operational_kubernetes_resources(dataset: GefsAnalysisDataset) -> None:
 
     # Check update job
     assert update_cron_job.name == f"{dataset.dataset_id}-update"
-    assert update_cron_job.schedule == "51 3,9,15,21 * * *"
+    assert update_cron_job.schedule == "3 4,10,16,22 * * *"
     assert update_cron_job.secret_names == dataset.store_factory.k8s_secret_names()
     assert update_cron_job.cpu == "14"
     assert update_cron_job.memory == "30G"
@@ -42,7 +42,7 @@ def test_validators(dataset: GefsAnalysisDataset) -> None:
     """Test that validators are properly configured."""
     current_data, recent_nans = dataset.validators()
     assert isinstance(current_data, validation.CheckCurrentData)
-    assert current_data.max_delay == timedelta(hours=12)
+    assert current_data.max_delay == timedelta(hours=4, minutes=3)
     assert isinstance(recent_nans, validation.CheckRecentNans)
 
 
@@ -193,14 +193,13 @@ def test_backfill_local_and_operational_update(
         dataset.store_factory.primary_store(), chunks=None, decode_timedelta=True
     )
 
-    # We slice off the last hour because most variables (except precip) lack hour 0 values.
-    # (see GefsAnalysisRegionJob.update_template_with_results)
+    # The boundary position is trimmed while the cycle's complete C+3 position stays.
     expected_times = pd.date_range(
         init_time_start,
-        init_time_end,
+        init_time_end + timedelta(hours=6),
         freq=dataset.template_config.append_dim_frequency,
         inclusive="left",
-    )[:-1]
+    )
     np.testing.assert_array_equal(updated_ds.time, expected_times)
 
     space_subset_ds = updated_ds.sel(
