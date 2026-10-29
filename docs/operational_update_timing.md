@@ -70,7 +70,7 @@ Currency does not replace integrity checks. Use `CheckVirtualManifestCompletenes
 
 ## Materialized deadlines and monitoring
 
-Materialized pod and Job active deadlines equal the interval between scheduled fires, `Δf`. Sentry's `max_runtime` matches the pod deadline, so a hung update alerts at that deadline. Virtual budgets follow [virtual polling](#virtual-polling).
+Materialized pod and Job active deadlines equal `min(Δf, 6h)`, where `Δf` is the interval between scheduled fires. Sentry's `max_runtime` matches the pod deadline, so a hung update alerts at that deadline. Virtual budgets follow [virtual polling](#virtual-polling).
 
 The update check-in covers the start decision, queue wait, processing, and finalization. A skipping Job closes it successfully without validation. Validation has its own check-in after publication. End-of-run backoff is outside both check-ins.
 

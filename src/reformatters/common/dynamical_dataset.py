@@ -7,7 +7,7 @@ import time
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar, cast
+from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar
 
 import icechunk
 import numpy as np
@@ -236,11 +236,13 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         cronjob_name = os.environ["CRON_JOB_NAME"]
         state = parallel_coordination.read_job_state(factory, job)
         if is_first and state is None:
+            fire = cron.previous_fire_time(pd.Timestamp(kubernetes.job_order(job)[0]))
+            fire_interval = cron.next_fire_time(fire) - fire
             is_backstop = kubernetes.job_kind(job) == "scheduled" and any(
                 kubernetes.job_kind(other) == "trigger"
                 and timedelta(0)
                 <= kubernetes.job_order(job)[0] - kubernetes.job_order(other)[0]
-                <= cast(timedelta, cron.active_deadline) / 2
+                <= fire_interval / 2
                 for other in kubernetes.list_cronjob_jobs(cronjob_name)
             )
             if is_backstop:

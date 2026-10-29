@@ -26,8 +26,8 @@ class GefsForecast35DayDataset(
             # The prior init's extension is reprocessed once its age gate permits it.
             schedule="15 7 * * *",
             concurrency_policy="Allow",
-            pod_active_deadline=timedelta(hours=24),
-            active_deadline=timedelta(hours=24),
+            pod_active_deadline=timedelta(hours=6),
+            active_deadline=timedelta(hours=6),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="6",  # fit on 8 vCPU node

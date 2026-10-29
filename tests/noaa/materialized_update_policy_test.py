@@ -76,8 +76,8 @@ def test_materialized_noaa_lifecycle_values(
     assert cron.schedule == schedule
     assert cron.concurrency_policy == "Allow"
     spec = cron.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
-    assert spec["activeDeadlineSeconds"] == hours * 3600
-    assert spec["template"]["spec"]["activeDeadlineSeconds"] == hours * 3600
+    assert spec["activeDeadlineSeconds"] == min(hours, 6) * 3600
+    assert spec["template"]["spec"]["activeDeadlineSeconds"] == min(hours, 6) * 3600
     (currency,) = [
         check
         for check in dataset.validators()

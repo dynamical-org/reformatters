@@ -405,16 +405,31 @@ def test_backstop_does_not_record_run_before_currency_check_and_waits_only_for_w
 
 
 @pytest.mark.parametrize(
-    ("trigger_time", "skips"),
+    ("schedule", "trigger_time", "skips"),
     [
-        ("2026-10-26T04:53Z", True),
-        ("2026-10-26T04:52Z", False),
-        ("2026-10-26T07:54Z", False),
+        ("12 2,8,14,20 * * *", "2026-10-26T04:53Z", True),
+        ("12 2,8,14,20 * * *", "2026-10-26T04:52Z", False),
+        ("12 2,8,14,20 * * *", "2026-10-26T07:54Z", False),
+        ("12 8 * * *", "2026-10-26T01:53Z", True),
+        ("12 8 * * *", "2026-10-25T19:53Z", True),
+        ("12 8 * * *", "2026-10-25T19:52Z", False),
     ],
 )
 def test_replacement_pod_zero_backstop_window_uses_job_creation_not_pod_start(
-    pilot: Pilot, monkeypatch: pytest.MonkeyPatch, trigger_time: str, skips: bool
+    pilot: Pilot,
+    monkeypatch: pytest.MonkeyPatch,
+    schedule: str,
+    trigger_time: str,
+    skips: bool,
 ) -> None:
+    cron = pilot.dataset._operational_cron_job(kubernetes.ReformatCronJob).model_copy(
+        update={"schedule": schedule}
+    )
+    monkeypatch.setattr(
+        NoaaHrrrForecast48HourDataset,
+        "operational_kubernetes_resources",
+        lambda self, image_tag: [cron],
+    )
     trigger = _job("trigger", trigger_time, kind="trigger", terminal="Complete")
     backstop = _job("backstop")
     pilot.jobs[:] = [trigger, backstop]
