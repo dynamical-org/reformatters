@@ -5,10 +5,8 @@ from typing import ClassVar
 import pandas as pd
 import xarray as xr
 
-from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.types import Dim, Timedelta
-from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.noaa.noaa_virtual_region_job import (
     NoaaVirtualRegionJob,
     NoaaVirtualSourceFileCoord,
@@ -16,8 +14,6 @@ from reformatters.noaa.noaa_virtual_region_job import (
 from reformatters.noaa.rrfs.region_job import SOURCE_PREFIX, SOURCE_REGION
 
 from .models import NoaaRefsDataVar, ProductFamily
-
-log = get_logger(__name__)
 
 
 class NoaaRefsSourceFileCoord(NoaaVirtualSourceFileCoord[NoaaRefsDataVar]):
@@ -41,17 +37,18 @@ class NoaaRefsSourceFileCoord(NoaaVirtualSourceFileCoord[NoaaRefsDataVar]):
             )
         return loc
 
-    def index_selectors(self, selectors: tuple[str, ...]) -> tuple[str, ...]:
+    def index_selectors(self, selectors: tuple[str, ...]) -> tuple[str, ...] | None:
         if self.source_family in ("mean", "sprd"):
             tag = "wt ens mean" if self.source_family == "mean" else "ens spread"
-            assert selectors.count(tag) == 1, (self.get_url(), selectors)
-            assert self.source_family != "mean" or "process=193" not in selectors, (
-                f"{self.get_url()}: PMM process cannot supply an arithmetic mean"
-            )
+            if selectors.count(tag) != 1 or (
+                self.source_family == "mean" and "process=193" in selectors
+            ):
+                return None
             return tuple(s for s in selectors if s != tag)
         if self.source_family in ("prob", "eas", "ffri"):
             counts = [s for s in selectors if re.fullmatch(r"prob fcst \d+/\d+", s)]
-            assert len(counts) == 1, (self.get_url(), selectors)
+            if len(counts) != 1:
+                return None
             return tuple(s for s in selectors if s not in counts)
         return selectors
 
@@ -100,17 +97,3 @@ class NoaaRefsRegionJob(NoaaVirtualRegionJob[NoaaRefsDataVar, NoaaRefsSourceFile
                 # Surface-height spread accepts either identical process 4/193 copy.
                 lookup[element, level, window, ("process=193",)] = matches
         return lookup
-
-    def _check_refs_complete(
-        self, coord: NoaaRefsSourceFileCoord, refs: list[VirtualRef]
-    ) -> None:
-        expected = {v.path for v in coord.data_vars}
-        actual = {r.data_var.path for r in refs}
-        assert len(refs) == len(actual), (
-            f"{coord.get_url()}: duplicate output references"
-        )
-        if missing := expected - actual:
-            log.warning(
-                f"{coord.get_url()}: GRIB messages absent from index: "
-                f"{sorted(missing)}; ingesting available messages"
-            )

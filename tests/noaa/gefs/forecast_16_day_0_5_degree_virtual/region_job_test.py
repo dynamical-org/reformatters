@@ -2,6 +2,7 @@ import itertools
 import re
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 from unittest.mock import Mock
 
 import pandas as pd
@@ -221,11 +222,10 @@ def test_operational_update_jobs_single_polling_job(
     assert job.region == slice(len(init_times) - 3, len(init_times))
 
 
-def test_file_refs_refuses_an_index_missing_a_requested_variable(
+def test_file_refs_does_not_match_a_different_accumulation_window(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """At lead 9 the accumulation window is 6-9, so a 0-9 line is a different message.
-    Committing the file anyway would leave a NaN column nothing ever retries."""
+    """At lead 9 the accumulation window is 6-9, so a 0-9 line is a different message."""
 
     stub_grib_source_file_reads(
         monkeypatch,
@@ -247,11 +247,10 @@ def test_file_refs_refuses_an_index_missing_a_requested_variable(
     )
     job = make_job(template_ds, data_vars=data_vars)
 
-    with pytest.raises(AssertionError, match="has no message for"):
-        job.file_refs(coord, file_size=1200)
+    assert job.file_refs(coord, file_size=1200) == []
 
 
-def test_file_refs_accepts_a_record_the_source_is_known_to_have_dropped(
+def test_file_refs_preserves_messages_beside_a_source_omission(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """gep11's b file at 2023-04-26T12 f240 was published without its 5WAVH record; the
@@ -282,7 +281,7 @@ def test_file_refs_accepts_a_record_the_source_is_known_to_have_dropped(
     assert {ref.data_var.name for ref in refs} == {"pressure_mean_sea_level"}
 
 
-def test_file_refs_still_refuses_a_listed_file_missing_another_record(
+def test_file_refs_accepts_available_messages_without_omission_exceptions(
     template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     stub_grib_source_file_reads(
@@ -306,10 +305,10 @@ def test_file_refs_still_refuses_a_listed_file_missing_another_record(
     )
     job = make_job(template_ds, data_vars=data_vars)
 
-    with pytest.raises(
-        AssertionError, match=r"no message for \['pressure_mean_sea_level'\]"
-    ):
-        job.file_refs(coord, file_size=1200)
+    refs = job.file_refs(coord, file_size=1200)
+    assert {ref.data_var.name for ref in refs} == {
+        "five_wave_geopotential_height_500mb"
+    }
 
 
 def test_a_vertical_group_variable_fills_one_chunk_per_level(
@@ -439,3 +438,65 @@ def test_every_requested_variable_maps_to_a_real_message(
     )
     cells = [(r.data_var.path, tuple(sorted(dict(r.out_loc).items()))) for r in refs]
     assert len(set(cells)) == len(cells)
+
+
+@pytest.mark.parametrize("processing_mode", ["update", "backfill"])
+@pytest.mark.parametrize("has_representative", [True, False])
+def test_partial_file_and_healthy_sibling_reach_commit(
+    template_ds: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    processing_mode: Literal["update", "backfill"],
+    has_representative: bool,
+) -> None:
+    variables = [get_var("temperature_2m"), get_var("relative_humidity_2m")]
+    coords = [
+        NoaaGefsForecastVirtualSourceFileCoord(
+            init_time=pd.Timestamp("2024-06-01T06"),
+            lead_time=pd.Timedelta(hours=hour),
+            ensemble_member=0,
+            source_file_type="a",
+            data_vars=variables,
+        )
+        for hour in (6, 9)
+    ]
+
+    def index(url: str) -> str:
+        hour = 6 if ".f006." in url else 9
+        element = "RH" if hour == 6 and not has_representative else "TMP"
+        text = f"1:0:d=2024060106:{element}:2 m above ground:{hour} hour fcst:ENS=low-res ctl\n"
+        if hour == 9:
+            text += f"2:500:d=2024060106:RH:2 m above ground:{hour} hour fcst:ENS=low-res ctl\n"
+        return text
+
+    stub_grib_source_file_reads(
+        monkeypatch, noaa_virtual_job_module, tmp_path, index, data_file_size=1200
+    )
+    monkeypatch.setattr(
+        NoaaGefsForecast16Day05DegreeVirtualRegionJob,
+        "discover_available",
+        lambda self, pending: [(coord, 1200) for coord in pending],
+    )
+    commit = Mock()
+    monkeypatch.setattr(
+        NoaaGefsForecast16Day05DegreeVirtualRegionJob, "_commit_virtual_batch", commit
+    )
+    job = make_job(template_ds, variables).model_copy(
+        update={"processing_mode": processing_mode}
+    )
+    complete = job.process_virtual(Mock(), [], "main", coords)
+    assert complete == (processing_mode == "update" and has_representative)
+    commit.assert_called_once()
+    batch = commit.call_args.args[2]
+    assert [coord for coord, _ in batch] == (
+        coords if has_representative else coords[1:]
+    )
+    expected = [["temperature_2m", "relative_humidity_2m"]]
+    if has_representative:
+        expected.insert(0, ["temperature_2m"])
+    assert [[ref.data_var.name for ref in refs] for _, refs in batch] == expected
+    if has_representative:
+        assert not [r for r in caplog.records if r.levelname in {"ERROR", "WARNING"}]
+    else:
+        assert "refs do not cover representative chunk" in caplog.text

@@ -209,9 +209,7 @@ def test_surface_geopotential_height_is_not_served(
 def test_a_and_b_files_partition_the_pressure_levels(
     config: NoaaGefsForecastABVirtualTemplateConfig,
 ) -> None:
-    """Six elements are split across both products level by level; the rest come from
-    the b file alone. A variable must name every file it has a message in or
-    _check_refs_complete rejects the file that carries the other half."""
+    """Six elements span both products; the rest come from the b file alone."""
     by_files = {
         v.name: sorted(v.internal_attrs.source_file_types)
         for v in config.data_vars

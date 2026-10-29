@@ -37,7 +37,7 @@ class NoaaVirtualSourceFileCoord(InitLeadSourceFileCoord, Generic[NOAA_DATA_VAR]
     def message_lead_times(self) -> Sequence[Timedelta]:
         return (self.lead_time,)
 
-    def index_selectors(self, selectors: tuple[str, ...]) -> tuple[str, ...]:
+    def index_selectors(self, selectors: tuple[str, ...]) -> tuple[str, ...] | None:
         return selectors
 
 
@@ -135,6 +135,7 @@ class NoaaVirtualRegionJob(
 
         out_loc_base = dict(coord.out_loc())
         refs = []
+        invalid_selectors = []
         filled: set[tuple[str, tuple[tuple[Dim, CoordinateValue], ...]]] = set()
         for (start, element, level, window, selectors), end in zip(
             index_lines, ends, strict=True
@@ -151,12 +152,13 @@ class NoaaVirtualRegionJob(
             if not self.owns_index_message(coord, element, level):
                 continue
             exact_selectors = coord.index_selectors(selectors)
+            if exact_selectors is None:
+                invalid_selectors.append(selectors)
+                continue
             matches = [
                 *lookup.get((element, level, window, exact_selectors), []),
                 *lookup.get((element, level, window, None), []),
             ]
-            if not matches:
-                continue
             for var, level_label in matches:
                 out_loc = {**out_loc_base, **level_label}
                 # A source may publish byte-distinct copies of a field; the first
@@ -175,16 +177,12 @@ class NoaaVirtualRegionJob(
                         length=end - start,
                     )
                 )
-        self._check_refs_complete(coord, refs)
+        if invalid_selectors:
+            log.error(
+                f"Skipping {len(invalid_selectors)} messages in {location}: "
+                f"invalid selectors; first: {invalid_selectors[0]}"
+            )
         return refs
-
-    def _check_refs_complete(
-        self, coord: NOAA_VIRTUAL_COORD, refs: list[VirtualRef]
-    ) -> None:
-        """Hook for a subclass to report or reject an index matching only some of the
-        coord's variables. Reached only once the index parsed and every byte range
-        checked out, so an empty `refs` here means nothing matched, not a skipped file.
-        """
 
     def grib_message_length_at(
         self, coord: NOAA_VIRTUAL_COORD, offset: int, file_size: int

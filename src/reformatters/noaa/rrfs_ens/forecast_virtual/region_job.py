@@ -32,11 +32,12 @@ class NoaaRrfsEnsSourceFileCoord(NoaaRrfsSourceFileCoord):
     def out_loc(self) -> Mapping[Dim, CoordinateValue]:
         return {**super().out_loc(), "ensemble_member": self.ensemble_member}
 
-    def index_selectors(self, selectors: tuple[str, ...]) -> tuple[str, ...]:
+    def index_selectors(self, selectors: tuple[str, ...]) -> tuple[str, ...] | None:
         if self.ensemble_member == 0:
             return selectors
         ensemble = f"ENS=+{self.ensemble_member}"
-        assert ensemble in selectors, (self.get_url(), selectors)
+        if ensemble not in selectors:
+            return None
         return tuple(s for s in selectors if s != ensemble)
 
 
