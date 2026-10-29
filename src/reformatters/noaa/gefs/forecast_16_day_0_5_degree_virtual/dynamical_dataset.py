@@ -63,7 +63,7 @@ class NoaaGefsForecast16Day05DegreeVirtualDataset(
         # Poll across the next fire while files remain pending.
         operational_update_cron_job = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
-            schedule="43 3,9,15,21 * * *",
+            schedule="29 3,9,15,21 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6, minutes=8, seconds=22),
             active_deadline=timedelta(hours=6, minutes=8, seconds=22),

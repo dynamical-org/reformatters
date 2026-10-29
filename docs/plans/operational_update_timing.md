@@ -27,6 +27,8 @@ Adoption status is tracked here; recommendations do not activate polling, overla
 
 ### Virtual polling
 
+The [polling lead rule](https://github.com/dynamical-org/reformatters/pull/1291) is adopted by active `Allow` virtual crons. Fires use earliest first visibility across the measured history, leading it by 15 minutes unless that fire's cutoff precedes a retained class's complete-arrival p99, in which case they use 3 minutes. HRRR 18-hour and RRFS sub-hourly use 3 minutes. GEFS 16-day excludes verified late-index anchors from October–December 2025 from quantiles; REFS 3-hourly excludes an archive-start bulk load. These exclusions preserve the full-history earliest arrival. Each fire respects its selected window. GEFS 35-day retains its daily window, and WeatherNext 2 retains its seven-hour landing gate and existing fire. RRFS sub-hourly requires 6/18 files at the newest position; older positions remain complete. Deadlines and currency values are unchanged.
+
 Discover about once per second and commit each tick. Exit when nothing remains pending. Poll until the next fire plus startup and an overlap allowance. Use `Allow` concurrency. A conflicted commit opens a fresh session, filters already-present files again, and recommits; a metadata refresh reads the store size from its committing session.
 
 Pod and Job deadlines include the fire interval, startup, overlap, maximum observed validation duration, and shutdown allowance. Validation runs once after polling, and its failure exits with the validation-failure code. Virtual runs create no re-pass Job. Unreadable files are skipped for that pod's lifetime and retried at the next fire. Document these rules in the evergreen timing and virtual-dataset docs with the pilot implementation.

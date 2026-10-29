@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
+import icechunk
 import pandas as pd
 import pytest
 import xarray as xr
@@ -13,6 +14,7 @@ from reformatters.common import validation
 from reformatters.common.kubernetes import create_job_from_cronjob
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.types import DatetimeLike
+from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.noaa.refs.forecast_3_hourly_virtual.dynamical_dataset import (
     NoaaRefsForecast3HourlyVirtualDataset,
 )
@@ -75,38 +77,38 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
     [
         (
             NoaaRrfsForecast84HourVirtualDataset,
-            71,
+            57,
             timedelta(hours=6, minutes=5, seconds=10),
             timedelta(minutes=3, seconds=23),
-            "11 1,7,13,19 * * *",
-            timedelta(hours=7, minutes=12, seconds=47),
+            "57 0,6,12,18 * * *",
+            timedelta(hours=6, minutes=58, seconds=47),
             timedelta(minutes=133),
         ),
         (
             NoaaRrfsForecast18HourVirtualDataset,
-            70,
+            56,
             timedelta(hours=3, minutes=4, seconds=24),
             timedelta(minutes=3, seconds=8),
-            "10 1,4,7,10,13,16,19,22 * * *",
-            timedelta(hours=4, minutes=11, seconds=16),
+            "56 0,3,6,9,12,15,18,21 * * *",
+            timedelta(hours=3, minutes=57, seconds=16),
             timedelta(minutes=133),
         ),
         (
             NoaaRrfsForecastSubHourlyVirtualDataset,
-            75,
+            73,
             timedelta(hours=1, minutes=2, seconds=37),
             timedelta(minutes=1, seconds=21),
-            "15 * * * *",
-            timedelta(hours=2, minutes=16, seconds=16),
+            "13 * * * *",
+            timedelta(hours=2, minutes=14, seconds=16),
             timedelta(minutes=138),
         ),
         (
             NoaaRrfsEnsForecastVirtualDataset,
-            70,
+            56,
             timedelta(hours=6, minutes=5, seconds=16),
             timedelta(minutes=4),
-            "10 1,7,13,19 * * *",
-            timedelta(hours=7, minutes=11, seconds=16),
+            "56 0,6,12,18 * * *",
+            timedelta(hours=6, minutes=57, seconds=16),
             timedelta(minutes=122),
         ),
     ],
@@ -346,3 +348,101 @@ def test_legacy_virtual_retry_admission_and_fire_anchored_cutoff(
             retry.spec.template.spec.active_deadline_seconds
             == retry.spec.active_deadline_seconds
         )
+
+
+def test_sub_hourly_partial_cycle_passes_completeness_at_poll_cutoff(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset = NoaaRrfsForecastSubHourlyVirtualDataset(
+        primary_storage_config=StorageConfig(
+            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+        )
+    )
+    init = pd.Timestamp("2026-09-23T18")
+    fire = init + pd.Timedelta(minutes=dataset.update_offset_minutes)
+    cutoff = dataset._virtual_poll_deadline(fire)
+    assert cutoff == pd.Timestamp("2026-09-23T20:14:16")
+    arrivals = dict(
+        zip(
+            pd.timedelta_range("1h", "18h", freq="1h"),
+            [
+                5006,
+                5108,
+                5102,
+                5207,
+                5304,
+                5419,
+                18704,
+                18705,
+                18693,
+                18709,
+                18715,
+                18724,
+                18705,
+                18734,
+                18737,
+                18739,
+                18741,
+                18742,
+            ],
+            strict=True,
+        )
+    )
+    store = (
+        icechunk.Repository.create(
+            icechunk.local_filesystem_storage(str(tmp_path / "store"))
+        )
+        .writable_session("main")
+        .store
+    )
+
+    def template(end: DatetimeLike) -> xr.DataTree:
+        return xr.DataTree(
+            xr.Dataset(
+                coords={
+                    "init_time": pd.date_range(
+                        init - pd.Timedelta("24h"), end, freq="1h", inclusive="left"
+                    ),
+                    "lead_time": pd.timedelta_range("15min", "18h", freq="15min"),
+                }
+            )
+        )
+
+    (job,), _ = dataset.region_job_class.operational_update_jobs(
+        store,
+        tmp_path,
+        template,
+        "init_time",
+        dataset.template_config.data_vars,
+        "test",
+        fire,
+    )
+    assert isinstance(job, VirtualRegionJob)
+    monkeypatch.setattr(
+        type(job),
+        "filter_already_present",
+        lambda self, coords, store: [
+            coord
+            for coord in coords
+            if coord.init_time == init
+            and arrivals[coord.lead_time] > (cutoff - init).total_seconds()
+        ],
+    )
+    check = next(
+        v
+        for v in dataset.validators()
+        if isinstance(v, validation.CheckVirtualManifestCompleteness)
+    )
+    context = validation.ValidationContext(
+        store=store,
+        ds=xr.Dataset(coords={"init_time": [init]}),
+        append_dim="init_time",
+        region_job=job,
+    )
+    assert check.check(context).passed
+    assert (
+        not check.model_copy(update={"min_present_fraction": (7 / 18, 1.0)})
+        .check(context)
+        .passed
+    )

@@ -52,7 +52,7 @@ class NoaaHrrrForecast18HourVirtualDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="44 * * * *",
+            schedule="42 * * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(minutes=63, seconds=31),
             active_deadline=timedelta(minutes=63, seconds=31),

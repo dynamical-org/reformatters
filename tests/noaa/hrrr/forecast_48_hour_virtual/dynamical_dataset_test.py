@@ -58,8 +58,8 @@ def test_polling_overlaps_next_fire_and_leaves_validation_time(
     dataset: NoaaHrrrForecast48HourVirtualDataset,
 ) -> None:
     cron = dataset.operational_kubernetes_resources("test")[0]
-    fire = pd.Timestamp("2026-10-02T00:44")
-    deadline = pd.Timestamp("2026-10-02T06:45:45")
+    fire = pd.Timestamp("2026-10-02T00:30")
+    deadline = pd.Timestamp("2026-10-02T06:31:45")
 
     assert cron.pod_active_deadline == timedelta(hours=6, minutes=3, seconds=8)
     assert cron.active_deadline == cron.pod_active_deadline
