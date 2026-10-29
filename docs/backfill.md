@@ -30,14 +30,14 @@ Pick the operation by what you're doing (action operation name / equivalent CLI 
 For an occasional materialized backfill on an existing Icechunk primary without replicas, choose a new branch name:
 
 ```sh
-DYNAMICAL_ENV=prod uv run main <dataset-id> backfill-kubernetes --keep-branch candidate --overwrite-chunks [flags]
+DYNAMICAL_ENV=prod uv run main <dataset-id> backfill-kubernetes --keep-branch <new branch name> --overwrite-chunks [flags]
 ```
 
-Worker 0 creates the candidate from `main` in place of the generated temporary branch. Workers use the normal backfill processing path, and finalization retains the candidate without resetting `main` or deleting the branch. Operational updates can continue on `main`. Omitting `--keep-branch` preserves normal publication behavior.
+Worker 0 creates the branch from `main` in place of the generated temporary branch. Workers use the normal backfill processing path, and finalization retains the branch without resetting `main` or deleting the branch. Operational updates can continue on `main`. Omitting `--keep-branch` preserves normal publication behavior.
 
-The dataset must already exist on `main`; the candidate must not exist. `main`, `_job_` names, empty or whitespace-padded names, Zarr/replica/virtual stores and metadata-only runs are unsupported. Overwrite guards read `main`; add `--overwrite-metadata` for expansion or new arrays. The option is available on `backfill-kubernetes` and its worker command, `backfill`. It is passed explicitly in worker arguments, so an older image rejects the unknown option before processing. Use `--docker-image` when the deployed image does not yet support it.
+The dataset must already exist on `main`; the branch must not exist. `main`, `_job_` names, empty or whitespace-padded names, Zarr/replica/virtual stores and metadata-only runs are unsupported. Overwrite guards read `main`; add `--overwrite-metadata` for expansion or new arrays.
 
-An existing candidate always fails worker-0 setup, including any worker-0 retry after branch creation. Other workers can retry against the created branch. On failure, stop the Kubernetes job and all its workers before inspecting or deleting the candidate, then launch a fresh job. Never delete or reset the candidate while workers are active. Use a fresh job name and one job per candidate. Partial results remain on the branch after failure; validate the candidate before separately publishing it. StoreFactory reads still default to `main`; inspect the candidate with an explicit branch argument.
+An existing branch always fails worker-0 setup, including any worker-0 retry after branch creation. On failure, stop the Kubernetes job and all its workers before inspecting or deleting the branch, then launch a fresh job.
 
 ## Tuning parallelism
 

@@ -62,7 +62,7 @@ def _run_worker(
     worker_index: int,
     *,
     workers_total: int = 2,
-    keep_branch: str | None = "candidate",
+    keep_branch: str | None = "backfill-test",
     overwrite_chunks: bool = True,
     overwrite_metadata: bool = False,
     end_hour: int = 4,
@@ -78,17 +78,17 @@ def _run_worker(
     )
 
 
-def _assert_complete_candidate(dataset: ParallelDataset, num_time: int = 4) -> None:
-    candidate = xr.open_zarr(
-        dataset.store_factory.primary_store(branch="candidate"), consolidated=False
+def _assert_complete_branch(dataset: ParallelDataset, num_time: int = 4) -> None:
+    branch = xr.open_zarr(
+        dataset.store_factory.primary_store(branch="backfill-test"), consolidated=False
     )
-    assert candidate.sizes["time"] == num_time
+    assert branch.sizes["time"] == num_time
     np.testing.assert_array_equal(
-        candidate.time.values,
+        branch.time.values,
         pd.date_range("2025-01-01", periods=num_time, freq="h").values,
     )
-    assert set(candidate.data_vars) == {"var0", "var1", "var2", "var3"}
-    for variable in candidate.data_vars.values():
+    assert set(branch.data_vars) == {"var0", "var1", "var2", "var3"}
+    for variable in branch.data_vars.values():
         np.testing.assert_array_equal(variable.values, np.ones(variable.shape))
 
 
@@ -96,7 +96,7 @@ def _start_backfill(
     dataset: ParallelDataset | ExampleVirtualDataset,
     *,
     driver: bool,
-    keep_branch: str = "candidate",
+    keep_branch: str = "backfill-test",
     overwrite_chunks: bool = True,
     overwrite_metadata: bool = False,
 ) -> None:
@@ -128,9 +128,11 @@ def test_retained_branch_is_complete_and_isolated_from_main(
     main_before = xr.open_zarr(branch_dataset.store_factory.primary_store()).load()
 
     _run_worker(branch_dataset, 0, workers_total=3, end_hour=6, overwrite_metadata=True)
-    assert set(repo.list_branches()) == {"main", "candidate"}
+    assert set(repo.list_branches()) == {"main", "backfill-test"}
     assert repo.lookup_branch("main") == original
-    assert original in {snapshot.id for snapshot in repo.ancestry(branch="candidate")}
+    assert original in {
+        snapshot.id for snapshot in repo.ancestry(branch="backfill-test")
+    }
     xr.testing.assert_identical(
         xr.open_zarr(branch_dataset.store_factory.primary_store()), main_before
     )
@@ -153,14 +155,14 @@ def test_retained_branch_is_complete_and_isolated_from_main(
             xr.open_zarr(branch_dataset.store_factory.primary_store()), main_before
         )
 
-    _assert_complete_candidate(branch_dataset, num_time=6)
-    assert set(repo.list_branches()) == {"main", "candidate"}
+    _assert_complete_branch(branch_dataset, num_time=6)
+    assert set(repo.list_branches()) == {"main", "backfill-test"}
     assert branch_dataset.store_factory.list_coordination_files("branch-job", "") == []
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("worker_zero_retry", [False, True])
-def test_existing_candidate_fails_without_reusing_or_mutating_it(
+def test_existing_branch_fails_without_reusing_or_mutating_it(
     branch_dataset: ParallelDataset, worker_zero_retry: bool
 ) -> None:
     IcechunkFixture()._init_store(branch_dataset)
@@ -169,8 +171,8 @@ def test_existing_candidate_fails_without_reusing_or_mutating_it(
     if worker_zero_retry:
         _run_worker(branch_dataset, 0)
     else:
-        repo.create_branch("candidate", main_snapshot)
-    candidate_snapshot = repo.lookup_branch("candidate")
+        repo.create_branch("backfill-test", main_snapshot)
+    branch_snapshot = repo.lookup_branch("backfill-test")
     coordination = branch_dataset.store_factory.list_coordination_files(
         "branch-job", ""
     )
@@ -179,8 +181,8 @@ def test_existing_candidate_fails_without_reusing_or_mutating_it(
         _run_worker(branch_dataset, 0)
 
     assert repo.lookup_branch("main") == main_snapshot
-    assert repo.lookup_branch("candidate") == candidate_snapshot
-    assert set(repo.list_branches()) == {"main", "candidate"}
+    assert repo.lookup_branch("backfill-test") == branch_snapshot
+    assert set(repo.list_branches()) == {"main", "backfill-test"}
     assert (
         branch_dataset.store_factory.list_coordination_files("branch-job", "")
         == coordination
@@ -205,14 +207,14 @@ def test_final_worker_retries_after_metadata_commit_before_cleanup(
         with pytest.raises(RuntimeError, match="cleanup interrupted"):
             _run_worker(branch_dataset, 1)
 
-    _assert_complete_candidate(branch_dataset)
+    _assert_complete_branch(branch_dataset)
     assert repo.lookup_branch("main") == original
     assert branch_dataset.store_factory.list_coordination_files("branch-job", "setup")
     _run_worker(branch_dataset, 1)
 
-    _assert_complete_candidate(branch_dataset)
+    _assert_complete_branch(branch_dataset)
     assert repo.lookup_branch("main") == original
-    assert set(repo.list_branches()) == {"main", "candidate"}
+    assert set(repo.list_branches()) == {"main", "backfill-test"}
     assert branch_dataset.store_factory.list_coordination_files("branch-job", "") == []
 
 
@@ -244,7 +246,7 @@ def test_missing_repository_or_dataset_is_never_created(
 
 @pytest.mark.parametrize("driver", [False, True])
 @pytest.mark.parametrize(
-    "branch", ["", " ", "main", "_job_other", " candidate", "candidate\t"]
+    "branch", ["", " ", "main", "_job_other", " backfill-test", "backfill-test\t"]
 )
 def test_invalid_branch_names_are_rejected_before_writes(
     branch_dataset: ParallelDataset,
@@ -332,7 +334,7 @@ def test_retained_branch_rejects_unsupported_storage_and_virtual_data(
         assert not icechunk.Repository.exists(location)
 
 
-@pytest.mark.parametrize("keep_branch", [None, "candidate"])
+@pytest.mark.parametrize("keep_branch", [None, "backfill-test"])
 def test_driver_propagates_branch_as_argv_without_changing_storage(
     branch_dataset: ParallelDataset, submit_job: Mock, keep_branch: str | None
 ) -> None:
@@ -348,7 +350,7 @@ def test_driver_propagates_branch_as_argv_without_changing_storage(
     manifest = json.loads(submit_job.call_args.kwargs["input"])
     container = manifest["spec"]["template"]["spec"]["containers"][0]
     flags = [arg for arg in container["command"] if arg.startswith("--keep-branch")]
-    assert flags == (["--keep-branch=candidate"] if keep_branch else [])
+    assert flags == (["--keep-branch=backfill-test"] if keep_branch else [])
     assert "--overwrite-chunks" in container["command"]
     assert not any("BRANCH" in item["name"] for item in container["env"])
     assert set(repo.list_branches()) == {"main"}
