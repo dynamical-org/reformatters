@@ -184,7 +184,7 @@ def test_spatial_dimension_coordinates_carry_geographic_metadata() -> None:
         assert coords["spatial_ref"].attrs.grid_mapping_name == "latitude_longitude"
 
 
-def test_latitude_longitude_broadcast_native_axes_in_every_group() -> None:
+def test_latitude_longitude_follow_native_axes_in_every_group() -> None:
     y = np.arange(-90, 90.25, 0.25)
     x = np.arange(0, 360, 0.25)
     # Longitude wraps in place to [-180, 180): columns are never reordered.
@@ -195,19 +195,17 @@ def test_latitude_longitude_broadcast_native_axes_in_every_group() -> None:
                 config.template_path(), group=group, decode_timedelta=True
             )
             latitude, longitude = ds["latitude"], ds["longitude"]
-            for coord in (latitude, longitude):
-                assert coord.dims == ("y", "x")
+            for coord, dim, size in ((latitude, "y", len(y)), (longitude, "x", len(x))):
+                assert coord.dims == (dim,)
                 assert coord.dtype == np.float32
-                assert coord.encoding["chunks"] == (len(y), len(x))
+                assert coord.encoding["chunks"] == (size,)
             assert {"latitude", "longitude"} <= set(ds.coords)
             np.testing.assert_array_equal(
                 latitude.values,
-                np.broadcast_to(y.astype(np.float32)[:, None], (len(y), len(x))),
+                y.astype(np.float32),
             )
             np.testing.assert_array_equal(
                 longitude.values,
-                np.broadcast_to(
-                    expected_longitude.astype(np.float32), (len(y), len(x))
-                ),
+                expected_longitude.astype(np.float32),
             )
             np.testing.assert_array_equal(ds["x"].values, x)

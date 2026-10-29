@@ -18,7 +18,7 @@ from zarr.abc.store import Store
 
 from reformatters.common.config import Config
 from reformatters.common.config_models import BaseInternalAttrs, Coordinate, DataVar
-from reformatters.common.iterating import node_path_prefix, walk_data_arrays
+from reformatters.common.iterating import walk_data_arrays
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 from reformatters.common.storage import StoreFactory, commit_if_icechunk
@@ -231,25 +231,9 @@ def structural_mismatches(
     (the template may freely add new ones). Empty list means no drift."""
     compare_append_axis = not Config.is_test
     template_by_path = dict(walk_data_arrays(template_ds))
-    static_template_coords_by_path = {
-        f"{node_path_prefix(node)}{name}": coord
-        for node in template_ds.subtree
-        for name, coord in node.to_dataset().coords.items()
-        if append_dim not in coord.dims
-    }
     mismatches: list[str] = []
     for path, existing_var in walk_data_arrays(existing_ds):
-        template_var = template_by_path.get(path)
-        # A static coordinate a stale template's write dropped from `coordinates`
-        # reopens as a data variable; it is that coordinate only if its values match.
-        static_coord = static_template_coords_by_path.get(path)
-        if (
-            template_var is None
-            and static_coord is not None
-            and existing_var.variable.equals(static_coord.variable)
-        ):
-            template_var = static_coord
-        if template_var is None:
+        if path not in template_by_path:
             mismatches.append(
                 f"{path}: in existing store but missing from update template"
             )
@@ -259,7 +243,7 @@ def structural_mismatches(
             existing_var, append_dim, compare_append_axis=compare_append_axis
         )
         template_sig = _structural_signature(
-            template_var, append_dim, compare_append_axis=compare_append_axis
+            template_by_path[path], append_dim, compare_append_axis=compare_append_axis
         )
         for field, existing_value in existing_sig.items():
             template_value = template_sig[field]

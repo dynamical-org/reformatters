@@ -1,15 +1,13 @@
 {
   "shape": [
-    721,
-    1440
+    721
   ],
   "data_type": "float32",
   "chunk_grid": {
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        721,
-        1440
+        721
       ]
     }
   },
@@ -49,8 +47,7 @@
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [
-    "y",
-    "x"
+    "y"
   ],
   "zarr_format": 3,
   "node_type": "array",

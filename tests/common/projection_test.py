@@ -2,11 +2,7 @@ import numpy as np
 import pyproj
 import pytest
 
-from reformatters.common.projection import (
-    latitude_longitude_grids,
-    regular_latitude_longitude_grids,
-    y_x_coordinates,
-)
+from reformatters.common.projection import latitude_longitude_grids, y_x_coordinates
 
 # NOAA HRRR: a Lambert conformal grid whose coordinates are metres.
 HRRR_SHAPE = (1059, 1799)
@@ -160,18 +156,3 @@ def test_results_are_cached_and_keyed_on_degree_units() -> None:
         latitude_longitude_grids(HRDPS_CRS, x_coords, y_coords, degree_units=False)[0]
         is not latitudes
     )
-
-
-def test_regular_latitude_longitude_grids_wrap_longitude_in_place() -> None:
-    latitudes = np.array([-90.0, 0.0, 90.0])
-    longitudes = np.array([0.0, 90.0, 180.0, 270.0, 359.75])
-
-    lats, lons = regular_latitude_longitude_grids(latitudes, longitudes)
-
-    assert lats.dtype == np.float32
-    assert lons.dtype == np.float32
-    assert lats.shape == lons.shape == (3, 5)
-    np.testing.assert_array_equal(lats[:, 0], latitudes)
-    np.testing.assert_array_equal(lats[0], np.full(5, -90.0))
-    np.testing.assert_array_equal(lons[0], [0.0, 90.0, -180.0, -90.0, -0.25])
-    np.testing.assert_array_equal(lons[2], lons[0])

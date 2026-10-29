@@ -250,10 +250,10 @@ def test_load_zarr_dataset_uses_stored_geographic_xy_coordinates(
 ) -> None:
     ds = load_zarr_dataset(geographic_xy_store)
 
-    assert ds["latitude"].dims == ("y", "x")
-    assert ds["longitude"].dims == ("y", "x")
+    assert ds["latitude"].dims == ("y",)
+    assert ds["longitude"].dims == ("x",)
     np.testing.assert_array_equal(
-        ds["longitude"].values[0], [0, 45, 90, 135, -180, -135, -90, -45]
+        ds["longitude"].values, [0, 45, 90, 135, -180, -135, -90, -45]
     )
     assert nearest_point_index(ds, 45.0, -135.0) == {"y": 3, "x": 5}
     _, _, (lat1, lon1), _ = get_two_random_points(ds, [(45.0, -135.0)])

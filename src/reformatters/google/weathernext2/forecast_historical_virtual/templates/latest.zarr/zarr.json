@@ -181,16 +181,14 @@
       },
       "latitude": {
         "shape": [
-          721,
-          1440
+          721
         ],
         "data_type": "float32",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              721,
-              1440
+              721
             ]
           }
         },
@@ -230,8 +228,7 @@
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "y",
-          "x"
+          "y"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -295,7 +292,6 @@
       },
       "longitude": {
         "shape": [
-          721,
           1440
         ],
         "data_type": "float32",
@@ -303,7 +299,6 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              721,
               1440
             ]
           }
@@ -344,7 +339,6 @@
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "y",
           "x"
         ],
         "zarr_format": 3,
@@ -625,16 +619,14 @@
       },
       "pressure_level/latitude": {
         "shape": [
-          721,
-          1440
+          721
         ],
         "data_type": "float32",
         "chunk_grid": {
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              721,
-              1440
+              721
             ]
           }
         },
@@ -674,8 +666,7 @@
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "y",
-          "x"
+          "y"
         ],
         "zarr_format": 3,
         "node_type": "array",
@@ -739,7 +730,6 @@
       },
       "pressure_level/longitude": {
         "shape": [
-          721,
           1440
         ],
         "data_type": "float32",
@@ -747,7 +737,6 @@
           "name": "regular",
           "configuration": {
             "chunk_shape": [
-              721,
               1440
             ]
           }
@@ -788,7 +777,6 @@
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
-          "y",
           "x"
         ],
         "zarr_format": 3,

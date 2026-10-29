@@ -6,7 +6,6 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from reformatters.common.projection import regular_latitude_longitude_grids
 from reformatters.common.template_utils import ignore_consolidated_metadata_spec_warning
 from reformatters.noaa.refs.forecast_hourly_virtual.template_config import (
     NoaaRefsForecastHourlyVirtualTemplateConfig,
@@ -106,11 +105,10 @@ def statistic_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RunCon
 @pytest.fixture
 def geographic_xy_store(tmp_path: Path) -> str:
     """A store shaped like the WeatherNext 2 products: geographic y/x dimension
-    coordinates, latitude ascending and x spanning 0 to 360, with 2D latitude/longitude
+    coordinates, latitude ascending and x spanning 0 to 360, with 1D latitude/longitude
     coordinates whose longitude wraps to -180 to 180 in place."""
     y = np.arange(-90, 91, 45, dtype=np.float64)
     x = np.arange(0, 360, 45, dtype=np.float64)
-    latitude, longitude = regular_latitude_longitude_grids(y, x)
     store_path = tmp_path / "wn2.zarr"
     ds = xr.Dataset(
         {
@@ -122,8 +120,8 @@ def geographic_xy_store(tmp_path: Path) -> str:
         coords={
             "y": y,
             "x": x,
-            "latitude": (("y", "x"), latitude),
-            "longitude": (("y", "x"), longitude),
+            "latitude": (("y",), y.astype(np.float32)),
+            "longitude": (("x",), (((x + 180) % 360) - 180).astype(np.float32)),
         },
         attrs={"dataset_id": "google-weathernext2-forecast-operational-virtual"},
     )

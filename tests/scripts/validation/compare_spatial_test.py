@@ -1,5 +1,6 @@
 from unittest.mock import Mock
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import xarray as xr
@@ -42,17 +43,29 @@ def test_align_reference_spatially_keeps_full_longitude_for_geographic_xy(
     np.testing.assert_array_equal(aligned.latitude.values, reference_ds.latitude.values)
 
 
+@pytest.mark.parametrize("two_dimensional", [False, True])
 def test_roll_longitude_seam_to_edge_makes_longitude_increase(
     geographic_xy_store: str,
+    two_dimensional: bool,
 ) -> None:
     data = load_zarr_dataset(geographic_xy_store)["temperature_2m"].load()
+    if two_dimensional:
+        latitude, longitude = xr.broadcast(data.latitude, data.longitude)
+        data = data.assign_coords(latitude=latitude, longitude=longitude)
 
     rolled = _roll_longitude_seam_to_edge(data)
 
     np.testing.assert_array_equal(
-        rolled["longitude"].values[0], [-180, -135, -90, -45, 0, 45, 90, 135]
+        rolled.longitude.isel(y=0, missing_dims="ignore").values,
+        [-180, -135, -90, -45, 0, 45, 90, 135],
     )
     np.testing.assert_array_equal(rolled.sel(x=225.0).values, data.sel(x=225.0).values)
+    fig, ax = plt.subplots()
+    mesh = ax.pcolormesh(rolled.longitude, rolled.latitude, rolled.values)
+    np.testing.assert_array_equal(mesh.get_array(), rolled.values)
+    mesh_longitude = np.asarray(mesh.get_coordinates())[..., 0]
+    np.testing.assert_array_equal(np.diff(mesh_longitude, axis=1), 45)
+    plt.close(fig)
 
 
 @pytest.mark.parametrize(

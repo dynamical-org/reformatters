@@ -102,12 +102,15 @@ def align_to_valid_time_analysis(
 
 
 def _roll_longitude_seam_to_edge(data: xr.DataArray) -> xr.DataArray:
-    """A copy of a global y/x field whose 2D longitude wraps from 180 to -180 within a
+    """A copy of a global y/x field whose longitude wraps from 180 to -180 within a
     row, rolled along x so longitude increases across the map and pcolormesh draws no
     cell spanning the globe. Fields without such a wrap are returned unchanged."""
-    if "x" not in data.dims or data["longitude"].dims != ("y", "x"):
+    if "x" not in data.dims or data["longitude"].dims not in (("x",), ("y", "x")):
         return data
-    wraps = np.flatnonzero(np.diff(data["longitude"].values[0]) < -180)
+    longitude = data["longitude"]
+    if "y" in longitude.dims:
+        longitude = longitude.isel(y=0)
+    wraps = np.flatnonzero(np.diff(longitude.values) < -180)
     if wraps.size == 0:
         return data
     return data.roll(x=-(int(wraps[0]) + 1), roll_coords=True)

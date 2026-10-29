@@ -537,7 +537,7 @@ def get_random_spatial_indices(
     lon_size = ds.sizes[lon_dim]
 
     lat_lo, lat_hi = 0, lat_size
-    if lat_dim == "latitude":
+    if ds.latitude.ndim == 1:
         lats = ds.latitude.values
         # Avoid polar grid points where many variables have edge-case behavior
         # (e.g. wind components degenerate, projections distort).
@@ -555,7 +555,7 @@ def get_random_spatial_indices(
 def nearest_point_index(ds: xr.Dataset, lat: float, lon: float) -> dict[str, int]:
     """Grid-cell index dict nearest a target lat/lon, for 1D geographic or 2D projected grids."""
     lat_dim, lon_dim = get_spatial_dimensions(ds)
-    if lat_dim == "latitude" and lon_dim == "longitude":
+    if ds.latitude.ndim == ds.longitude.ndim == 1:
         lat_idx = int(np.abs(ds.latitude.values - lat).argmin())
         lon_idx = int(np.abs(ds.longitude.values - lon).argmin())
         return {lat_dim: lat_idx, lon_dim: lon_idx}
@@ -583,16 +583,10 @@ def get_two_random_points(
             point1_sel = nearest_point_index(ds, *pinned[0])
         if len(pinned) >= 2:
             point2_sel = nearest_point_index(ds, *pinned[1])
-    if lat_dim == "latitude" and lon_dim == "longitude":
-        lat1 = float(ds.latitude[point1_sel["latitude"]])
-        lon1 = float(ds.longitude[point1_sel["longitude"]])
-        lat2 = float(ds.latitude[point2_sel["latitude"]])
-        lon2 = float(ds.longitude[point2_sel["longitude"]])
-    else:
-        lat1 = float(ds.latitude[point1_sel["y"], point1_sel["x"]])
-        lon1 = float(ds.longitude[point1_sel["y"], point1_sel["x"]])
-        lat2 = float(ds.latitude[point2_sel["y"], point2_sel["x"]])
-        lon2 = float(ds.longitude[point2_sel["y"], point2_sel["x"]])
+    point1 = ds.coords.to_dataset().isel(point1_sel)
+    point2 = ds.coords.to_dataset().isel(point2_sel)
+    lat1, lon1 = float(point1.latitude), float(point1.longitude)
+    lat2, lon2 = float(point2.latitude), float(point2.longitude)
     return point1_sel, point2_sel, (lat1, lon1), (lat2, lon2)
 
 

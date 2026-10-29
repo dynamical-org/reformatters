@@ -62,13 +62,3 @@ def _latitude_longitude_grids(
     lats = lats.astype(np.float32)
     lons = lons.astype(np.float32)
     return lats, lons
-
-
-def regular_latitude_longitude_grids(
-    latitudes: Array1D[np.float64], longitudes: Array1D[np.float64]
-) -> tuple[Array2D[np.float32], Array2D[np.float32]]:
-    """2D latitude and longitude of every cell of a regular latitude-longitude grid,
-    with longitude wrapped to [-180, 180)."""
-    wrapped_longitudes = (((longitudes + 180) % 360) - 180).astype(np.float32)
-    lons, lats = np.meshgrid(wrapped_longitudes, latitudes.astype(np.float32))
-    return lats, lons

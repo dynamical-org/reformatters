@@ -19,7 +19,6 @@ from reformatters.common.config_models import (
     Group,
     StatisticsApproximate,
 )
-from reformatters.common.projection import regular_latitude_longitude_grids
 from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
 from reformatters.common.types import (
     AppendDim,
@@ -165,9 +164,6 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
     def derive_coordinates(
         self, ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
-        latitudes, longitudes = regular_latitude_longitude_grids(
-            ds["y"].values, ds["x"].values
-        )
         return {
             "valid_time": ds["init_time"] + ds["lead_time"],
             "expected_forecast_length": (
@@ -178,8 +174,11 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     dtype="timedelta64[us]",
                 ),
             ),
-            "latitude": (("y", "x"), latitudes),
-            "longitude": (("y", "x"), longitudes),
+            "latitude": (("y",), ds["y"].values.astype(np.float32)),
+            "longitude": (
+                ("x",),
+                (((ds["x"].values + 180) % 360) - 180).astype(np.float32),
+            ),
             "spatial_ref": SPATIAL_REF_COORDS,
         }
 
@@ -316,7 +315,7 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     dtype="float32",
                     fill_value=np.nan,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
+                    chunks=(len(dim_coords["y"]),),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(
@@ -335,7 +334,7 @@ class GoogleWeathernext2ForecastVirtualTemplateConfig(
                     dtype="float32",
                     fill_value=np.nan,
                     compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
-                    chunks=(len(dim_coords["y"]), len(dim_coords["x"])),
+                    chunks=(len(dim_coords["x"]),),
                     shards=None,
                 ),
                 attrs=CoordinateAttrs(

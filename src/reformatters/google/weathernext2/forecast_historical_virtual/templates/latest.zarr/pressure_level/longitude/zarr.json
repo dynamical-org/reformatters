@@ -1,6 +1,5 @@
 {
   "shape": [
-    721,
     1440
   ],
   "data_type": "float32",
@@ -8,7 +7,6 @@
     "name": "regular",
     "configuration": {
       "chunk_shape": [
-        721,
         1440
       ]
     }
@@ -49,7 +47,6 @@
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [
-    "y",
     "x"
   ],
   "zarr_format": 3,
