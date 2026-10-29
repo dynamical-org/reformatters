@@ -3,10 +3,12 @@ import json
 from datetime import timedelta
 from pathlib import Path
 
+import fsspec
 import icechunk
 import pytest
+import s3fs
 
-from reformatters.common import storage
+from reformatters.common import kubernetes, storage
 from reformatters.common.config import Config, Env
 from reformatters.common.kubernetes import Job, ReformatCronJob
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
@@ -35,6 +37,22 @@ IMAGE = "example.invalid/profiling@sha256:" + "0" * 64
 @pytest.fixture(autouse=True)
 def prod_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Config, "env", Env.prod)
+
+    def forbidden_secret(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("Pilot tests must not load credentials")
+
+    monkeypatch.setattr(kubernetes, "load_secret", forbidden_secret)
+    monkeypatch.setattr(kubernetes.config, "load_kube_config", forbidden_secret)
+    monkeypatch.setattr(kubernetes.config, "load_incluster_config", forbidden_secret)
+    monkeypatch.setattr(s3fs.S3FileSystem, "__init__", forbidden_secret)
+    monkeypatch.setenv("AWS_CONFIG_FILE", "/dev/null")
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", "/dev/null")
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+    monkeypatch.setattr(
+        storage.StoreFactory,
+        "_coordination_fs",
+        lambda _self: fsspec.filesystem("memory"),
+    )
 
 
 @pytest.fixture
