@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
 from reformatters.common import template_utils
 from reformatters.common.pydantic import replace
@@ -16,6 +17,9 @@ from reformatters.noaa.mrms.conus_analysis_hourly.region_job import (
 )
 from reformatters.noaa.mrms.conus_analysis_hourly.template_config import (
     NoaaMrmsConusAnalysisHourlyTemplateConfig,
+)
+from tests.noaa.mrms.conus_analysis_hourly.dynamical_dataset_test import (
+    _set_time_shard_size,
 )
 
 
@@ -459,7 +463,9 @@ def test_operational_update_jobs(
     jobs, template_ds = NoaaMrmsRegionJob.operational_update_jobs(
         primary_store=store_factory.primary_store(),
         tmp_store=tmp_path / "tmp_ds.zarr",
-        get_template_fn=template_config.get_template,
+        get_template_fn=lambda end: xr.DataTree(
+            _set_time_shard_size(template_config.get_template(end).to_dataset(), 1)
+        ),
         append_dim=template_config.append_dim,
         all_data_vars=template_config.data_vars,
         reformat_job_name="test_job",
@@ -468,6 +474,9 @@ def test_operational_update_jobs(
 
     assert template_ds.time.max() == pd.Timestamp("2024-01-15T06:00")
     assert len(jobs) >= 1
+    assert min(job.template_ds.time.values[job.region.start] for job in jobs) == (
+        existing_ds.time.max() - pd.Timedelta("3h")
+    )
     for job in jobs:
         assert isinstance(job, NoaaMrmsRegionJob)
 

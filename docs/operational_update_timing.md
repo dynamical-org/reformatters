@@ -132,7 +132,7 @@ The dataset implementations define the values and boundaries of these exceptions
 - GEFS 35-day virtual uses one daily window; intermediate extension waves can wait until the next fire.
 - GEFS 35-day materialized extension has no completion trigger and waits for an eligible later run after its age gate.
 - WeatherNext 2 uses all members and levels of one variable and lead as its unit, measured from the unit's last object.
-- MRMS uses one hourly run; pass 1 is an exception.
+- MRMS uses one hourly run timed to radar-only arrival; the gauge passes and FLASH fill in on the following hour's run.
 
 Arrivals beyond a fire's chosen offset alert when currency or integrity checks detect them. Choose offsets to make this rare under normal source operation.
 

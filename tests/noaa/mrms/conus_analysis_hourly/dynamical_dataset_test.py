@@ -6,6 +6,7 @@ import pytest
 import xarray as xr
 from numpy.testing import assert_allclose, assert_array_equal
 from zarr.abc.store import Store
+from zarr.storage import MemoryStore
 
 from reformatters.common import (
     materialized_region_job as materialized_region_job_module,
@@ -244,3 +245,76 @@ def test_validators(dataset: NoaaMrmsConusAnalysisHourlyDataset) -> None:
     assert leading_tiers["flash_qpe_ffg_max_surface"] == 1.0
     assert leading_tiers["precipitation_radar_only_surface"] < 1.0
     assert leading_tiers["categorical_precipitation_type_surface"] < 1.0
+
+
+def _snapshot(latest: pd.Timestamp, periods: int = 5) -> xr.Dataset:
+    config = make_dataset().template_config
+    yy, xx = np.indices((20, 20))
+    gauge_holes = (yy + xx) % 5 == 0
+    ds = xr.Dataset(
+        coords={
+            "time": pd.date_range(end=latest, periods=periods, freq="1h"),
+            "latitude": np.arange(20),
+            "longitude": np.arange(20),
+        }
+    )
+    for var in config.data_vars:
+        data = np.ones((periods, 20, 20), dtype=np.float32)
+        match var.name:
+            case "categorical_precipitation_type_surface":
+                pass
+            case "precipitation_radar_only_surface":
+                data[:, (yy + xx) % 2 == 0] = np.nan
+            case "flash_qpe_ffg_max_surface":
+                data[:, (yy + xx) % 5 != 0] = np.nan
+            case _:
+                data[:, gauge_holes] = np.nan
+        if var.name in {
+            "precipitation_pass_1_surface",
+            "precipitation_pass_2_surface",
+            "flash_qpe_ffg_max_surface",
+        }:
+            data[-1] = np.nan
+        if var.name == "precipitation_surface":
+            data[-1] = np.where((yy + xx) % 2 == 0, np.nan, 1)
+        ds[var.name] = (("time", "latitude", "longitude"), data)
+    return ds
+
+
+def _context(ds: xr.Dataset, store: MemoryStore) -> validation.ValidationContext:
+    return validation.ValidationContext(
+        store=store,
+        ds=ds,
+        append_dim="time",
+        append_dim_frequency=pd.Timedelta("1h"),
+        data_vars=make_dataset().template_config.data_vars,
+    )
+
+
+def test_all_validators_accept_radar_only_with_newest_gauge_passes_and_flash_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    anchor = pd.Timestamp("2026-10-20T12:00")
+    monkeypatch.setattr(
+        pd.Timestamp, "now", lambda *a, **kw: anchor + pd.Timedelta("3m")
+    )
+    ds = _snapshot(anchor)
+    store = MemoryStore()
+    context = _context(ds, store)
+    for check in make_dataset().validators():
+        result = check.check(context)
+        assert result.passed, f"{check.name}: {result.message}"
+
+
+@pytest.mark.parametrize(
+    "var_name", [v.name for v in make_dataset().template_config.data_vars]
+)
+def test_nan_tiers_still_reject_an_incomplete_older_hour(var_name: str) -> None:
+    ds = _snapshot(pd.Timestamp("2026-10-20T12:00"))
+    ds[var_name][-2] = np.nan
+    (check,) = [
+        check
+        for check in make_dataset().validators()
+        if isinstance(check, validation.CheckRecentNans) and check.selects(var_name)
+    ]
+    assert not check.check(_context(ds, MemoryStore())).passed
