@@ -1,4 +1,3 @@
-import inspect
 import json
 import math
 import os
@@ -35,6 +34,7 @@ from reformatters.common.kubernetes import (
     get_deployed_cronjob_image,
 )
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.operational import OperationalResources
 from reformatters.common.region_job import (
@@ -64,7 +64,10 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     """Top level class managing a dataset configuration and processing."""
 
     template_config: TemplateConfig[DATA_VAR]
-    region_job_class: type[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
+    region_job_class: type[
+        MaterializedRegionJob[DATA_VAR, SOURCE_FILE_COORD]
+        | VirtualRegionJob[DATA_VAR, SOURCE_FILE_COORD]
+    ]
 
     primary_storage_config: StorageConfig
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
@@ -162,7 +165,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         ):
             job_fire_time = cron_job.previous_fire_time(pd.Timestamp.now())
         materialized_job = None
-        job_reference_time: Timestamp | None = None
+        job_reference_time = (
+            None if is_virtual else pd.Timestamp.now(tz="UTC").tz_localize(None)
+        )
         job_uid: str | None = None
         with self._monitor(
             ReformatCronJob,
@@ -818,32 +823,32 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         job_reference_time: Timestamp | None = None,
     ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
         """The jobs an operational update runs, and the template they write against."""
-        operational_update_jobs = self.region_job_class.operational_update_jobs
-        time_kwargs: dict[str, Any] = {}
-        parameters = inspect.signature(operational_update_jobs).parameters
-        assert job_reference_time is None or "job_reference_time" in parameters, (
-            f"{self.region_job_class.__name__}.operational_update_jobs must accept "
-            "job_reference_time for queued updates"
-        )
-        if "job_fire_time" in parameters:
-            time_kwargs["job_fire_time"] = (
-                job_fire_time
-                if job_fire_time is not None
-                else self._operational_cron_job(ReformatCronJob).previous_fire_time(
-                    pd.Timestamp.now()
-                )
+        job_class = self.region_job_class
+        if issubclass(job_class, MaterializedRegionJob):
+            assert job_reference_time is not None, (
+                "Materialized updates require job_reference_time"
             )
-        if "job_reference_time" in parameters:
-            time_kwargs["job_reference_time"] = job_reference_time
-
-        return operational_update_jobs(
+            return job_class.operational_update_jobs(
+                primary_store=self.store_factory.primary_store(),
+                tmp_store=tmp_store,
+                get_template_fn=self._get_template,
+                append_dim=self.template_config.append_dim,
+                all_data_vars=self.template_config.data_vars,
+                reformat_job_name=reformat_job_name,
+                job_reference_time=job_reference_time,
+            )
+        return job_class.operational_update_jobs(
             primary_store=self.store_factory.primary_store(),
             tmp_store=tmp_store,
             get_template_fn=self._get_template,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
             reformat_job_name=reformat_job_name,
-            **time_kwargs,
+            job_fire_time=job_fire_time
+            if job_fire_time is not None
+            else self._operational_cron_job(ReformatCronJob).previous_fire_time(
+                pd.Timestamp.now()
+            ),
         )
 
     def _virtual_validation_region_job(

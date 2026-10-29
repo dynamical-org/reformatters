@@ -719,10 +719,15 @@ def test_operational_update_jobs(
                 append_dim="init_time",
                 all_data_vars=example_data_vars,
                 reformat_job_name="test-update",
+                job_reference_time=pd.Timestamp("2026-10-26T14:20"),
             )
 
             # Verify results
-            assert jobs == mock_jobs
+            assert jobs == [job.model_copy.return_value for job in mock_jobs]
+            for job in mock_jobs:
+                job.model_copy.assert_called_once_with(
+                    update={"job_reference_time": pd.Timestamp("2026-10-26T14:20")}
+                )
             assert template_ds is not None
             assert len(template_ds.init_time) == 10
 

@@ -65,6 +65,9 @@ class EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset(
                 update_cron_job,
                 # f360 lands on GCS ~08:20-08:35 UTC
                 schedule="45 8 * * *",
+                concurrency_policy="Replace",
+                pod_active_deadline=timedelta(minutes=45),
+                active_deadline=None,
             )
         ]
 

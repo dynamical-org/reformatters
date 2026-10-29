@@ -8,6 +8,7 @@
 # from tests.common.dynamical_dataset_test import (
 #     NOOP_STORAGE_CONFIG,
 #     assert_configured_validators,
+#     set_local_update_reference_time,
 # )
 
 
@@ -26,11 +27,7 @@
 #     assert ds.time.min() == pd.Timestamp("2000-01-01")
 
 #     # Operational update
-#     monkeypatch.setattr(
-#         dataset.region_job_class,
-#         "_update_append_dim_end",
-#         lambda: pd.Timestamp("2000-01-03"),
-#     )
+#     set_local_update_reference_time(monkeypatch, pd.Timestamp("2000-01-03"))
 #     monkeypatch.setattr(
 #         dataset.region_job_class,
 #         "_update_append_dim_start",

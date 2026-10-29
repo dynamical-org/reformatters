@@ -104,7 +104,7 @@ If your dataset mixes single-level variables with variables on a dense vertical 
 
 ### 4. Implement `RegionJob` subclass
 
-Work through `src/reformatters/$DATASET_PATH/region_job.py`, implementing the methods the scaffolded code describes. Both kinds implement `generate_source_file_coords` (the source files a region needs) and `operational_update_jobs` (the update factory — skippable until you implement updates; a backfill runs without it). The rest differs by kind:
+Work through `src/reformatters/$DATASET_PATH/region_job.py`, implementing the methods the scaffolded code describes. Both kinds implement `generate_source_file_coords` (the source files a region needs) and `operational_update_jobs` (the update factory — skippable until you implement updates; a backfill runs without it). Materialized factories require `job_reference_time`, the Kubernetes Job creation time in naive UTC. Derive the window from it rather than reading the wall clock in the factory. Local and non-Allow update entrypoints capture one time explicitly; virtual factories use their own `job_fire_time` contract. The rest differs by kind:
 
 - **Materialized:** `download_file` (fetch a source file to disk) and `read_data` (load one variable into a numpy array). The base runs the download → read → transform → write pipeline; optional transformation hooks are described in the example.
 - **Virtual:** `discover_available` (which pending files are fetchable now) and `file_refs` (the byte-range references one file contributes). The base owns the write loop and atomic commits.

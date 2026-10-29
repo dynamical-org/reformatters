@@ -171,7 +171,7 @@ def test_operational_update_jobs(
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2022-01-01T12:34")),
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2022-01-03T12:34:00")),
     )
     # Set the append_dim_start for the update
     # Use a template_ds as a lightweight way to create a mock dataset with a known max append dim coordinate
@@ -187,6 +187,7 @@ def test_operational_update_jobs(
         append_dim=template_config.append_dim,
         all_data_vars=template_config.data_vars,
         reformat_job_name="test_job",
+        job_reference_time=pd.Timestamp("2022-01-01T12:34"),
     )
 
     assert template_ds.init_time.max() == pd.Timestamp("2022-01-01T12:00")
@@ -195,15 +196,3 @@ def test_operational_update_jobs(
     for job in jobs:
         assert isinstance(job, NoaaHrrrForecast48HourRegionJob)
         assert job.data_vars == template_config.data_vars
-
-
-def test_update_append_dim_end_is_tz_naive() -> None:
-    region_job = NoaaHrrrForecast48HourRegionJob.model_construct(
-        tmp_store=Mock(),
-        template_ds=Mock(),
-        data_vars=Mock(),
-        append_dim=Mock(),
-        region=Mock(),
-        reformat_job_name="test",
-    )
-    assert region_job._update_append_dim_end().tzinfo is None

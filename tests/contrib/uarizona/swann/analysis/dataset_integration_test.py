@@ -12,7 +12,10 @@ from reformatters.contrib.uarizona.swann.analysis.region_job import (
     UarizonaSwannAnalysisRegionJob,
     UarizonaSwannAnalysisSourceFileCoord,
 )
-from tests.common.dynamical_dataset_test import assert_configured_validators
+from tests.common.dynamical_dataset_test import (
+    assert_configured_validators,
+    set_local_update_reference_time,
+)
 
 pytestmark = [
     pytest.mark.slow,
@@ -46,11 +49,7 @@ def test_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
     assert ds.time.max() == pd.Timestamp("1981-10-01")
 
-    monkeypatch.setattr(
-        dataset.region_job_class,
-        "_update_append_dim_end",
-        lambda: pd.Timestamp("1981-10-04"),
-    )
+    set_local_update_reference_time(monkeypatch, pd.Timestamp("1981-10-04"))
 
     monkeypatch.setattr(
         dataset.region_job_class,
@@ -79,11 +78,7 @@ def test_update_template_trimming(monkeypatch: MonkeyPatch, tmp_path: Path) -> N
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
     assert ds.time.max() == pd.Timestamp("1981-10-01")
 
-    monkeypatch.setattr(
-        dataset.region_job_class,
-        "_update_append_dim_end",
-        lambda: pd.Timestamp("1981-10-04"),
-    )
+    set_local_update_reference_time(monkeypatch, pd.Timestamp("1981-10-04"))
 
     monkeypatch.setattr(
         dataset.region_job_class,

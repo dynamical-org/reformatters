@@ -148,7 +148,7 @@ class GefsForecast35DayRegionJob(
         all_data_vars: Sequence[NoaaGefsDataVar],
         reformat_job_name: str,
         *,
-        job_reference_time: Timestamp | None = None,
+        job_reference_time: Timestamp,
     ) -> tuple[
         Sequence[RegionJob[NoaaGefsDataVar, GefsForecast35DaySourceFileCoord]],
         xr.DataTree,
@@ -168,9 +168,7 @@ class GefsForecast35DayRegionJob(
         existing_ds = xr.open_zarr(primary_store, decode_timedelta=True, chunks=None)
         # Start by reprocessing the most recent init_time already in the dataset; it may be incomplete.
         append_dim_start = existing_ds[append_dim].max()
-        append_dim_end = (
-            job_reference_time if job_reference_time is not None else pd.Timestamp.now()
-        )
+        append_dim_end = job_reference_time
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(
@@ -181,9 +179,8 @@ class GefsForecast35DayRegionJob(
             reformat_job_name=reformat_job_name,
             filter_start=append_dim_start,
         )
-        if job_reference_time is not None:
-            jobs = [
-                job.model_copy(update={"job_reference_time": job_reference_time})
-                for job in jobs
-            ]
+        jobs = [
+            job.model_copy(update={"job_reference_time": job_reference_time})
+            for job in jobs
+        ]
         return jobs, template_ds

@@ -51,18 +51,15 @@ class EcccHrdpsForecastDataset(
             secret_names=["source-coop-storage-options-key"],
         )
 
-        # Datamart timestamps for the final 48h temperature file across 29 runs from
-        # 2026-08-28 through 2026-09-04 range from init+3h33m to init+5h28m. This
-        # init+4h30m schedule covers 28 of 29, including the +4h26m run on 2026-09-04,
-        # but not the +5h28m outlier on 2026-09-02. We read the Datamart directly rather
-        # than waiting for the archive job above to mirror the run.
         # An update covers the newest init time and the previous one it reprocesses,
         # which shard into one job each.
         workers = 2
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="30 4,10,16,22 * * *",
-            pod_active_deadline=timedelta(minutes=30),
+            concurrency_policy="Allow",
+            pod_active_deadline=timedelta(hours=6),
+            active_deadline=timedelta(hours=6),
             image=image_tag,
             dataset_id=self.dataset_id,
             cpu="3",
@@ -82,7 +79,7 @@ class EcccHrdpsForecastDataset(
     def validators(self) -> Sequence[validation.Validator]:
         """Return the operational validation checks to run on this dataset."""
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=5)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=4, minutes=30)),
             # append_dim_window=4 covers a day of 6-hourly cycles, so a truncated or missing
             # forecast is caught even after newer cycles land.
             validation.CheckRecentNans(append_dim_window=4),

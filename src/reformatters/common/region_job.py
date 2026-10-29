@@ -1,4 +1,4 @@
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from enum import Enum, auto
 from itertools import chain, pairwise
 from pathlib import Path
@@ -25,7 +25,6 @@ from pydantic import (
     field_serializer,
     field_validator,
 )
-from zarr.abc.store import Store
 
 from reformatters.common import storage
 from reformatters.common.config_models import DataVar
@@ -38,7 +37,6 @@ from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import (
     AppendDim,
-    DatetimeLike,
     Dim,
     Timedelta,
     Timestamp,
@@ -241,71 +239,6 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
             return self.template_ds.sel(
                 {self.append_dim: slice(None, max_append_dim_processed)}
             )
-
-    @classmethod
-    def operational_update_jobs(
-        cls,
-        primary_store: Store,
-        tmp_store: Path,
-        get_template_fn: Callable[[DatetimeLike], xr.DataTree],
-        append_dim: AppendDim,
-        all_data_vars: Sequence[DATA_VAR],
-        reformat_job_name: str,
-    ) -> tuple[Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]], xr.DataTree]:
-        """
-        Return the sequence of RegionJob instances necessary to update the dataset
-        from its current state to include the latest available data.
-
-        Also return the template_ds, expanded along append_dim through the end of
-        the data to process. The dataset returned here may extend beyond the
-        available data at the source, in which case `update_template_with_results`
-        will trim the dataset to the actual data processed.
-
-        The exact logic is dataset-specific, but it generally follows this pattern:
-        1. Figure out the range of time to process: append_dim_start (inclusive) and append_dim_end (exclusive)
-            a. Read existing data from the primary store to determine what's already processed
-            b. Optionally identify recent incomplete/non-final data for reprocessing
-        2. Call get_template_fn(append_dim_end) to get the template_ds
-        3. Create RegionJob instances by calling cls.get_jobs(..., filter_start=append_dim_start)
-
-        Parameters
-        ----------
-        primary_store : Store
-            The primary store to read existing data from and write updates to.
-        tmp_store : Path
-            The temporary Zarr store to write into while processing.
-        get_template_fn : Callable[[DatetimeLike], xr.DataTree]
-            Function to get the template_ds for the operational update.
-        append_dim : AppendDim
-            The dimension along which data is appended (e.g., "time").
-        all_data_vars : Sequence[DATA_VAR]
-            Sequence of all data variable configs for this dataset.
-        reformat_job_name : str
-            The name of the reformatting job, used for progress tracking.
-            This is often the name of the Kubernetes job, or "local".
-
-        A materialized implementation may declare `job_reference_time: Timestamp | None`: the
-        Kubernetes Job creation time, normalized to naive UTC. Using it for the window end
-        gives every index and replacement the same work even across an init boundary.
-        Without a reference time, local and non-Allow updates keep their clock behavior.
-
-        An implementation may additionally declare `job_fire_time: Timestamp | None`,
-        passed only to implementations that declare it: the scheduled fire of the
-        update cron running this job. Bounding the update by it rather than by the
-        wall clock gives every pod of one fire the same work, so a pod replacing an
-        evicted one processes what the pod it replaced was given, not what has
-        published since.
-
-        Returns
-        -------
-        Sequence[RegionJob[DATA_VAR, SOURCE_FILE_COORD]]
-            RegionJob instances that need processing for operational updates.
-        xr.DataTree
-            The template_ds for the operational update.
-        """
-        raise NotImplementedError(
-            "Subclasses implement operational_update_jobs() with dataset-specific logic"
-        )
 
     # ----- Most subclasses will not need to override the attributes and methods below -----
 

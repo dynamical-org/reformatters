@@ -23,7 +23,9 @@ class ExampleDataset(DynamicalDataset[ExampleDataVar, ExampleSourceFileCoord]):
         # operational_update_cron_job = ReformatCronJob(
         #     name=f"{self.dataset_id}-update",
         #     schedule="0 0 * * *",
-        #     pod_active_deadline=timedelta(minutes=30),
+        #     concurrency_policy="Allow",
+        #     pod_active_deadline=timedelta(hours=6),
+        #     active_deadline=timedelta(hours=6),
         #     image=image_tag,
         #     dataset_id=self.dataset_id,
         #     cpu="14",

@@ -91,7 +91,7 @@ def test_operational_jobs_include_only_expected_inits_and_stored_redo(
     stored_init: str,
     expected_end: str,
 ) -> None:
-    clock = Mock(return_value=pd.Timestamp(now))
+    clock = Mock(return_value=pd.Timestamp(now) + pd.Timedelta(days=2))
     monkeypatch.setattr(pd.Timestamp, "now", clock)
     existing = xr.Dataset(coords={"init_time": pd.date_range(stored_init, periods=1)})
     monkeypatch.setattr(xr, "open_zarr", Mock(return_value=existing))
@@ -103,6 +103,7 @@ def test_operational_jobs_include_only_expected_inits_and_stored_redo(
         append_dim=config.append_dim,
         all_data_vars=config.data_vars,
         reformat_job_name="test-update",
+        job_reference_time=pd.Timestamp(now).tz_convert(None),
     )
 
     expected_inits = pd.date_range(stored_init, expected_end)
@@ -119,7 +120,7 @@ def test_operational_jobs_include_only_expected_inits_and_stored_redo(
     assert all(job.region.stop == job.region.start + 1 for job in jobs)
     for node in template.subtree:
         assert node.init_time.values[-1] == pd.Timestamp(expected_end)
-    clock.assert_called_once_with("UTC")
+    clock.assert_not_called()
 
 
 # read_data fills one (init_time, lead_time, ensemble_member) slot of the output, so

@@ -161,7 +161,7 @@ def test_common_region_job_operational_update_jobs(
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda *args, **kwargs: pd.Timestamp("2022-01-01T12:34")),
+        classmethod(lambda *args, **kwargs: pd.Timestamp("2022-01-03T12:34:00")),
     )
     # Set the append_dim_start for the update
     existing_ds = template_config.get_template(
@@ -177,6 +177,7 @@ def test_common_region_job_operational_update_jobs(
         append_dim=template_config.append_dim,
         all_data_vars=template_config.data_vars,
         reformat_job_name="test_job",
+        job_reference_time=pd.Timestamp("2022-01-01T12:34"),
     )
 
     assert template_ds.init_time.max() == pd.Timestamp("2022-01-01T12:00")

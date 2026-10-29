@@ -336,7 +336,7 @@ def test_operational_update_jobs(
 
     monkeypatch.setattr(xr, "open_zarr", open_zarr)
     monkeypatch.setattr(
-        "pandas.Timestamp.now", lambda tz=None: pd.Timestamp("2025-09-30T00:01")
+        "pandas.Timestamp.now", lambda tz=None: pd.Timestamp("2025-10-02T00:01:00")
     )
 
     jobs, template_ds = NasaSmapLevel336KmV9RegionJob.operational_update_jobs(
@@ -346,12 +346,13 @@ def test_operational_update_jobs(
         append_dim=template_config.append_dim,
         all_data_vars=template_config.data_vars,
         reformat_job_name="test-update",
+        job_reference_time=pd.Timestamp("2025-09-30T00:01"),
     )
 
     # Should create jobs for the new time steps (2025-09-29 and 2025-09-30)
     assert len(jobs) == 1
 
-    # Template should extend to current time
+    # Template should extend through the reference time
     assert template_ds["time"].max().values == pd.Timestamp("2025-09-30")
 
     for job in jobs:

@@ -237,6 +237,8 @@ class EcmwfAifsEnsForecastRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[EcmwfDataVar],
         reformat_job_name: str,
+        *,
+        job_reference_time: pd.Timestamp,
     ) -> tuple[
         Sequence[RegionJob[EcmwfDataVar, EcmwfAifsEnsForecastSourceFileCoord]],
         xr.DataTree,
@@ -245,7 +247,7 @@ class EcmwfAifsEnsForecastRegionJob(
         append_dim_start = existing_ds[append_dim].max()
         # Subtracting 5.5h here keeps a not-yet-published
         # cycle out of scope so pods don't waste time trying files that won't exist.
-        append_dim_end = pd.Timestamp.now() - pd.Timedelta(hours=5.5)
+        append_dim_end = job_reference_time - pd.Timedelta(hours=5.5)
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(

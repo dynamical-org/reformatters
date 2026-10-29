@@ -203,6 +203,8 @@ class DwdIconEuForecast5DayRegionJob(
         append_dim: AppendDim,
         all_data_vars: Sequence[DwdIconEuDataVar],
         reformat_job_name: str,
+        *,
+        job_reference_time: pd.Timestamp,
     ) -> tuple[
         Sequence[RegionJob[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]],
         xr.DataTree,
@@ -210,7 +212,7 @@ class DwdIconEuForecast5DayRegionJob(
         """Return RegionJob instances to update the dataset from its current state to the latest available data."""
         existing_ds = xr.open_zarr(primary_store, chunks=None)
         append_dim_start = existing_ds[append_dim].max()
-        append_dim_end = pd.Timestamp.now()
+        append_dim_end = job_reference_time
         template_ds = get_template_fn(append_dim_end)
 
         jobs = cls.get_jobs(

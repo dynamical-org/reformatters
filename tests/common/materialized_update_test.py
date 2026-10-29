@@ -1018,40 +1018,6 @@ def test_hrrr_job_reference_keeps_all_indices_and_replacements_on_same_window(
     pilot.sleep.assert_not_called()
 
 
-def test_hrrr_without_job_reference_keeps_legacy_clock_window(
-    pilot: Pilot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(
-        NoaaHrrrForecast48HourDataset,
-        "_operational_update_jobs",
-        dynamical_dataset.DynamicalDataset._operational_update_jobs,
-    )
-    monkeypatch.setattr(
-        xr,
-        "open_zarr",
-        Mock(
-            return_value=xr.Dataset(
-                coords={"init_time": pd.date_range("2026-10-26", periods=2, freq="6h")}
-            )
-        ),
-    )
-    now = pd.Timestamp("2026-10-26T17:59:50")
-    monkeypatch.setattr(pd.Timestamp, "now", lambda *args, **kwargs: now)
-    before, first_template = pilot.dataset._operational_update_jobs("legacy", tmp_path)
-    now = pd.Timestamp("2026-10-26T18:00:10")
-    after, second_template = pilot.dataset._operational_update_jobs("legacy", tmp_path)
-
-    assert _job_positions(before) == [
-        (pd.Timestamp("2026-10-26T06:00"),),
-        (pd.Timestamp("2026-10-26T12:00"),),
-    ]
-    assert _job_positions(after) == [
-        *_job_positions(before),
-        (pd.Timestamp("2026-10-26T18:00"),),
-    ]
-    assert first_template.sizes["init_time"] < second_template.sizes["init_time"]
-
-
 def test_newly_created_job_without_status_is_writing(pilot: Pilot) -> None:
     job = _job("newborn")
     job.status = None
@@ -1101,31 +1067,55 @@ def test_update_forwards_current_jobs_utc_creation_time_only_to_planning(
     pilot.sleep.assert_not_called()
 
 
-def test_queued_update_rejects_builder_without_reference_time(
-    pilot: Pilot, monkeypatch: pytest.MonkeyPatch
+def test_materialized_planning_rejects_missing_reference_time(
+    pilot: Pilot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    current = _job("job")
-    pilot.jobs[:] = [current]
     monkeypatch.setattr(
         NoaaHrrrForecast48HourDataset,
         "_operational_update_jobs",
         dynamical_dataset.DynamicalDataset._operational_update_jobs,
     )
-
-    def builder_without_reference(
-        *args: object, **kwargs: object
-    ) -> tuple[list[RegionJob], xr.DataTree]:
-        raise AssertionError("unanchored builder must not run")
-
-    monkeypatch.setattr(
-        pilot.dataset.region_job_class,
-        "operational_update_jobs",
-        builder_without_reference,
-    )
     with pytest.raises(
-        AssertionError, match="must accept job_reference_time for queued updates"
+        AssertionError, match="Materialized updates require job_reference_time"
     ):
-        pilot.dataset.update("job")
-
+        pilot.dataset._operational_update_jobs("local", tmp_path)
     pilot.process.assert_not_called()
     pilot.validate.assert_not_called()
+
+
+@pytest.mark.parametrize("environment", [Env.test, Env.prod])
+def test_local_and_non_allow_entrypoints_capture_one_utc_reference(
+    pilot: Pilot,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    environment: Env,
+) -> None:
+    monkeypatch.setattr(Config, "env", environment)
+    if environment == Env.prod:
+        cron = pilot.dataset._operational_cron_job(
+            kubernetes.ReformatCronJob
+        ).model_copy(update={"concurrency_policy": "Replace", "active_deadline": None})
+        monkeypatch.setattr(
+            NoaaHrrrForecast48HourDataset,
+            "operational_kubernetes_resources",
+            lambda self, image_tag: [cron],
+        )
+    reference = pd.Timestamp("2026-10-26T13:53Z")
+    clock = Mock(return_value=reference)
+    monkeypatch.setattr(pd.Timestamp, "now", clock)
+    pilot.dataset.update("local")
+    utc_captures = [
+        call for call in clock.call_args_list if call.kwargs == {"tz": "UTC"}
+    ]
+    assert len(utc_captures) == 1
+    assert utc_captures[0].args == ()
+    pilot.compute.assert_called_once_with(
+        "local",
+        tmp_path,
+        job_fire_time=None,
+        job_reference_time=reference.tz_localize(None),
+    )
+    pilot.api.read_namespaced_job.assert_not_called()
+    pilot.api.list_namespaced_job.assert_not_called()
+    pilot.process.assert_called_once()
+    pilot.validate.assert_called_once()
