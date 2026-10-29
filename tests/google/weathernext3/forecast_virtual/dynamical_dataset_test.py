@@ -33,24 +33,22 @@ def test_update_reserves_time_for_inline_validation(
     assert dataset._virtual_poll_deadline(now) == fire + interval + pd.Timedelta(
         minutes=1, seconds=16
     )
-    (update,) = dataset.operational_kubernetes_resources("test")
     assert (
         update.schedule
         == {
-            (48, 0.05): "16 * * * *",
-            (48, 0.1): "16 * * * *",
-            (360, 0.05): "33 0,6,12,18 * * *",
-            (360, 0.1): "33 0,6,12,18 * * *",
-        }[(dataset.template_config.horizon_hours, dataset.template_config.grid_degrees)]
+            "google-weathernext3-forecast-48-hour-0-1-degree-virtual": "16 * * * *",
+            "google-weathernext3-forecast-48-hour-0-05-degree-virtual": "16 * * * *",
+            "google-weathernext3-forecast-15-day-0-1-degree-virtual": "33 0,6,12,18 * * *",
+            "google-weathernext3-forecast-15-day-0-05-degree-virtual": "33 0,6,12,18 * * *",
+        }[dataset.dataset_id]
     )
-    assert (
-        update.schedule
-        == {
-            (48, 0.05): "16 * * * *",
-            (48, 0.1): "16 * * * *",
-            (360, 0.05): "33 0,6,12,18 * * *",
-            (360, 0.1): "33 0,6,12,18 * * *",
-        }[(dataset.template_config.horizon_hours, dataset.template_config.grid_degrees)]
+    (completeness,) = [
+        check
+        for check in dataset.validators()
+        if isinstance(check, validation.CheckVirtualManifestCompleteness)
+    ]
+    assert completeness.min_present_fraction == (
+        (0.0, 0.0, 1.0) if dataset.template_config.horizon_hours == 48 else (1.0,)
     )
     assert update.suspend
     assert update.concurrency_policy == "Allow"

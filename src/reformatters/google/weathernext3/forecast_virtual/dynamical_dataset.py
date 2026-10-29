@@ -34,12 +34,11 @@ class GoogleWeathernext3ForecastVirtualDataset(
             .replace("15-day", "15d")
             .replace("48-hour", "48h")
         )
-        schedule = {
-            (48, 0.05): "16 * * * *",
-            (48, 0.1): "16 * * * *",
-            (360, 0.05): "33 0,6,12,18 * * *",
-            (360, 0.1): "33 0,6,12,18 * * *",
-        }[(self.template_config.horizon_hours, self.template_config.grid_degrees)]
+        schedule = (
+            "16 * * * *"
+            if self.region_job_class.init_frequency == pd.Timedelta("1h")
+            else "33 0,6,12,18 * * *"
+        )
         deadline = self.region_job_class.init_frequency + timedelta(
             minutes=4, seconds=23
         )
