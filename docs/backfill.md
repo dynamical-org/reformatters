@@ -39,6 +39,12 @@ The dataset must already exist on `main`; the branch must not exist. `main`, `_j
 
 An existing branch always fails worker-0 setup, including any worker-0 retry after branch creation. On failure, stop the Kubernetes job and all its workers before inspecting or deleting the branch, then launch a fresh job.
 
+## Profiling a bounded backfill
+
+Use a fresh, uncatalogued scratch store for profiling. Keep the source range short and parallelism low; set explicit runtime, transfer, storage and cost caps before launch. A partial run is useful if its evidence identifies the completed and failed work.
+
+Retain phase timings, CPU samples, memory, network and disk measurements with the image and worker assignment. Store that evidence outside coordination paths, which successful backfills clean up. Export and verify the evidence before deleting data, and give profiles their own retention deadline.
+
 ## Tuning parallelism
 
 - **jobs_per_pod** — aim for jobs that take 3–15 minutes, to amortize pod startup and reduce icechunk commit compare-and-set contention. Materialized: 2–4 for non-ensemble datasets, 1 for ensemble.
