@@ -1,0 +1,10 @@
+
+USER root
+COPY --from=uv /uv /usr/local/bin/uv
+RUN uv pip install --target /opt/profiler --no-deps --require-hashes -r /app/src/scripts/ifsens_profiling/profiler-requirements.txt
+USER app:app
+ARG PROFILING_SOURCE_SHA
+ENV PROFILING_SOURCE_SHA=$PROFILING_SOURCE_SHA
+ENV DYNAMICAL_ENV=prod
+RUN test -n "$PROFILING_SOURCE_SHA" && /opt/profiler/bin/py-spy --version && python -m src.scripts.ifsens_profiling preflight --run-token p20261029-000000000001 > /tmp/profiling-preflight.json
+ENTRYPOINT ["python", "-m", "src.scripts.ifsens_profiling"]

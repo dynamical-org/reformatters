@@ -1,0 +1,140 @@
+name: IFS ENS profiling image
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: >-
+      github.event.pull_request.head.ref == 'ifs-ens-profiling-pilot' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      CHECKOUT_ACTION: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      SETUP_QEMU_ACTION: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+      SETUP_BUILDX_ACTION: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      UPLOAD_ARTIFACT_ACTION: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Verify checkout is the PR head
+        run: |
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          echo "OUT_DIR=$RUNNER_TEMP/ifsens-profiling-image" >> "$GITHUB_ENV"
+          echo "DOCKERFILE=$RUNNER_TEMP/Dockerfile.profiling" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+        with:
+          platforms: arm64
+
+      - id: buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Assemble profiling Dockerfile
+        run: |
+          test -f deploy/profiling.Dockerfile.fragment
+          mkdir -p "$OUT_DIR"
+          { cat deploy/Dockerfile; echo; cat deploy/profiling.Dockerfile.fragment; } > "$DOCKERFILE"
+          cp "$DOCKERFILE" "$OUT_DIR/Dockerfile.profiling"
+
+      - name: Build OCI archive
+        env:
+          BUILDER_NAME: ${{ steps.buildx.outputs.name }}
+        run: |
+          docker buildx build \
+            --builder "$BUILDER_NAME" \
+            --platform linux/amd64,linux/arm64 \
+            --file "$DOCKERFILE" \
+            --build-arg "PROFILING_SOURCE_SHA=$HEAD_SHA" \
+            --provenance mode=min \
+            --metadata-file "$OUT_DIR/build-metadata.json" \
+            --output "type=oci,dest=$OUT_DIR/image.oci.tar" \
+            .
+
+      - name: Extract image index and platform manifests
+        run: |
+          index_digest=$(jq -er '."containerimage.digest"' "$OUT_DIR/build-metadata.json")
+          [[ "$index_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          tar -xOf "$OUT_DIR/image.oci.tar" "blobs/sha256/${index_digest#sha256:}" > "$OUT_DIR/image-index.json"
+          test "sha256:$(sha256sum "$OUT_DIR/image-index.json" | cut -d' ' -f1)" = "$index_digest"
+          jq -e --arg index_digest "$index_digest" '{
+              index_digest: $index_digest,
+              manifests: [.manifests[]
+                | select(.platform.os != "unknown" and .platform.architecture != "unknown")
+                | {platform: "\(.platform.os)/\(.platform.architecture)", digest, mediaType, size}]
+            }
+            | if ([.manifests[].platform] | sort) == ["linux/amd64", "linux/arm64"] then . else error("expected exactly linux/amd64 and linux/arm64 manifests") end' \
+            "$OUT_DIR/image-index.json" > "$OUT_DIR/platform-manifests.json"
+          cat "$OUT_DIR/platform-manifests.json"
+
+      - name: Record provenance
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          BUILDER_NAME: ${{ steps.buildx.outputs.name }}
+          BUILDER_DRIVER: ${{ steps.buildx.outputs.driver }}
+          BUILDER_PLATFORMS: ${{ steps.buildx.outputs.platforms }}
+        run: |
+          jq -n \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg pr_number "$PR_NUMBER" \
+            --arg head_ref "$HEAD_REF" \
+            --arg head_sha "$HEAD_SHA" \
+            --arg base_sha "$BASE_SHA" \
+            --arg workflow_ref "$WORKFLOW_REF" \
+            --arg workflow_sha "$WORKFLOW_SHA" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg runner_os "$RUNNER_OS" \
+            --arg runner_arch "$RUNNER_ARCH" \
+            --arg checkout "$CHECKOUT_ACTION" \
+            --arg setup_qemu "$SETUP_QEMU_ACTION" \
+            --arg setup_buildx "$SETUP_BUILDX_ACTION" \
+            --arg upload_artifact "$UPLOAD_ARTIFACT_ACTION" \
+            --arg buildx_version "$(docker buildx version)" \
+            --arg docker_version "$(docker version --format '{{.Server.Version}}')" \
+            --arg builder_name "$BUILDER_NAME" \
+            --arg builder_driver "$BUILDER_DRIVER" \
+            --arg builder_platforms "$BUILDER_PLATFORMS" \
+            --arg dockerfile_sha256 "$(sha256sum deploy/Dockerfile | cut -d' ' -f1)" \
+            --arg fragment_sha256 "$(sha256sum deploy/profiling.Dockerfile.fragment | cut -d' ' -f1)" \
+            '{
+              source: {repository: $repository, pr_number: $pr_number, head_ref: $head_ref, head_sha: $head_sha, base_sha: $base_sha,
+                       deploy_dockerfile_sha256: $dockerfile_sha256, profiling_fragment_sha256: $fragment_sha256},
+              workflow: {ref: $workflow_ref, sha: $workflow_sha, run_id: $run_id, run_attempt: $run_attempt,
+                         runner_os: $runner_os, runner_arch: $runner_arch},
+              actions: {checkout: $checkout, setup_qemu: $setup_qemu, setup_buildx: $setup_buildx, upload_artifact: $upload_artifact},
+              buildx: {version: $buildx_version, docker_version: $docker_version, builder: $builder_name,
+                       driver: $builder_driver, platforms: $builder_platforms,
+                       target_platforms: "linux/amd64,linux/arm64", build_args: {PROFILING_SOURCE_SHA: $head_sha}}
+            }' > "$OUT_DIR/provenance.json"
+          docker buildx inspect "$BUILDER_NAME" > "$OUT_DIR/buildx-inspect.txt"
+
+      - name: Checksum files
+        working-directory: ${{ runner.temp }}/ifsens-profiling-image
+        run: |
+          sha256sum image.oci.tar build-metadata.json image-index.json platform-manifests.json provenance.json buildx-inspect.txt Dockerfile.profiling > SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ifsens-profiling-image-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/ifsens-profiling-image
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
