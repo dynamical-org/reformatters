@@ -33,6 +33,7 @@ class NoaaHrrrForecast48HourDataset(
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
+            # Backstop schedule. Also triggered ASAP by noaa-hrrr-forecast-48-hour-virtual.
             schedule="4 2,8,14,20 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),
