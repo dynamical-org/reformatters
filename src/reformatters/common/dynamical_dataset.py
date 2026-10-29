@@ -285,6 +285,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         materialized_job: client.V1Job | None = None,
         job_fire_time: Timestamp | None = None,
     ) -> None:
+        # All validation failures log an exception, except the first failure of a
+        # materialized update that queues a re-pass. Failures on re-passes and on
+        # virtual datasets always alert.
         if materialized_job is None or kubernetes.retry_number(reformat_job_name) > 0:
             try:
                 with self._validation_monitor(reformat_job_name):
