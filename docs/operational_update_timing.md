@@ -33,7 +33,7 @@ The profiler prefers wxopticon’s anonymous per-artifact history for each readi
 
 Use the longest single-regime history available, at least 180 days (`--days`, default 365). Source-reported timestamps keep observed versus reconstructed provenance; overwritten listing timestamps need not represent first publication. A source without anonymous evidence keeps its hand-set constants. Cycle classes split at fifteen-minute median differences, using first visibility for virtuals and complete-unit arrival for materialized datasets. `E` is the earliest first visibility across all tiers and cycle classes in the full requested window, without exclusions or regime trimming. `--exclude-anchor` applies only to quantiles and re-pass/page estimates.
 
-Both the untriggered schedule offset `S` and a triggered consumer’s backstop `T` use `ceil_minute(p99 + 3 min)` per class. For virtual currency, apply that same rule to first visibility. Choose the latest first-tier class for a single materialized cron. The provisional max-normal cut walks upward from the median to the first adjacent gap larger than `g = max(3 min, p90 − p50)`. Compare rounded `p99 + 3 min` with rounded `max normal + 3 min`. A class needs hand values if the former exceeds the latter by more than fifteen minutes, more than 1% of its units exceed max normal, or it has fewer than 100 samples (300 for daily classes). Hand values replace only the p99-derived constants (materialized S/T and virtual `max_delay`); virtual polling fires still derive from first-visibility `E`. Flag histories shorter than 180 sampled days.
+Both the untriggered schedule offset `S` and a triggered consumer’s backstop `T` use `ceil_minute(p99 + 3 min)` per class. For virtual currency, apply that same rule to first visibility. Choose the latest first-tier class for a single materialized cron. The provisional max-normal cut walks upward from the median to the first adjacent gap larger than `g = max(3 min, p90 − p50)`. Compare rounded `p99 + 3 min` with rounded `max normal + 3 min`. A class needs hand values if the former exceeds the latter by more than fifteen minutes, more than 1% of its units exceed max normal, or it has fewer than 100 samples (300 for daily classes). Hand values replace only the p99-derived constants (materialized S/T and virtual `max_delay`); virtual polling fires derive from first-visibility `E`. Flag histories shorter than 180 sampled days.
 
 Search the whole sorted history for the two-segment split minimizing absolute deviations around the segment medians, with at least five samples on each side. Restart the class’s history there when the medians differ by at least fifteen minutes. A trailing cluster of at least two units and at least 1% of observations above the earlier max normal can also restart history. A retained segment must span more than 24 hours; otherwise keep the history and flag a suspected change for review. Repeat the fit on each retained segment until no further qualifying restart is found. Report the final retained history and recheck its sample count. Outliers within the retained regime stay in quantiles; a gap alone does not establish an outage.
 
@@ -59,7 +59,7 @@ Set both pod and Job active deadlines to `Δf + L + 1 min + V + 30 s`, with `Δf
 
 Select the fire once at execution start for initial job construction, the polling cutoff and end-of-run manifest/decode validation, including when startup crosses the successor fire. Currency checks use current time. A replacement starting after the successor fire may select its window and cutoff; the original Job deadline bounds lifetime even though the replacement's pod deadline restarts.
 
-Validate once after polling ends. Validation failure exits 20 and fails the Job; virtual datasets on `Allow` create no validation re-pass Job, so source lateness can alert at poll end under the currency rule below. Virtual CronJobs on `Replace` use the [single-retry lifecycle](#replace-cronjobs) instead. See [virtual operational updates](virtual_datasets.md#operational-updates) for writer coordination and recovery.
+Validate once after polling ends. Validation failure exits 20 and fails the Job; virtual datasets on `Allow` create no validation re-pass Job, so source lateness can alert at poll end under the currency rule below. Virtual CronJobs not on `Allow` use the [single-retry lifecycle](#non-allow-cronjobs) instead. See [virtual operational updates](virtual_datasets.md#operational-updates) for writer coordination and recovery.
 
 ## Currency and integrity validation
 
@@ -94,7 +94,7 @@ A scheduled Job takes the backstop check when a trigger for its CronJob was crea
 
 All indices, including replacement pods, reuse the matching-UID decision. `skip` and `finalized` exit 0 without processing or validation. On `run`, each index waits until no older Job is writing, checking every 30 seconds, before reading the store and computing jobs. Waiting only on older Jobs prevents deadlock; a finalized Job does not block the queue while validating or sleeping. A Job deciding whether to skip never records `run` first, so it cannot suppress a re-pass and then skip.
 
-Every materialized builder takes a required `job_reference_time`: the current Job's own `creationTimestamp` in naive UTC, which for a re-pass is the re-pass Job's. It anchors window and planning calculations, so all indices and replacements compute the same window across initialization boundaries. Local runs and `Replace` CronJobs capture one UTC reference time at entry. Download, polling, and validation clocks use current time. A virtual update's selected `job_fire_time` is a separate contract.
+Every materialized builder takes a required `job_reference_time`: the current Job's own `creationTimestamp` in naive UTC, which for a re-pass is the re-pass Job's. It anchors window and planning calculations, so all indices and replacements compute the same window across initialization boundaries. Local runs and non-`Allow` CronJobs capture one UTC reference time at entry. Download, polling, and validation clocks use current time. A virtual update's selected `job_fire_time` is a separate contract.
 
 The last index follows the [publication and cleanup order](parallel_processing.md#cleanup), then always validates, including when it had no region jobs. On successful validation, the run is done. A failure backs off as below. A re-pass failure pages before backing off; a first failure pages after its backoff only if no re-pass is submitted, and otherwise logs a warning with the failed checks:
 
@@ -107,9 +107,9 @@ An interrupted backoff is lost; a later trigger or scheduled fire covers it. A r
 
 Before exiting, the last index performs [expired state cleanup](parallel_processing.md#cleanup) outside the update check-in, after validation and any backoff/submission decisions, or when exiting on `skip` or `finalized`.
 
-### `Replace` CronJobs
+## Non-`Allow` CronJobs
 
-CronJobs on `Replace`, virtual or materialized, use neither the queue nor overlapping polling. On a validation failure they submit one immediate `-r1`, only when the next scheduled fire is farther away than the pod deadline. A multi-worker materialized replacement pod after cleanup waits for the deleted setup files until its deadline; a single-worker replacement reruns the update. Inspect termination reasons before rerunning the full update as a new Job.
+CronJobs on `Replace` or any other non-`Allow` policy, virtual or materialized, use neither the materialized queue nor overlapping polling. On a validation failure they submit one immediate `-r1`, only when the next scheduled fire is farther away than the pod deadline. A multi-worker materialized replacement pod after cleanup waits for the deleted setup files until its deadline; a single-worker replacement reruns the update. Inspect termination reasons before rerunning the full update as a new Job.
 
 ## Completion triggers
 
@@ -138,11 +138,6 @@ Each dataset's code defines the values and boundaries of its exception.
 - **MRMS:** one hourly run times to radar-only arrival, so the newest hour publishes before gauge correction; the gauge passes and FLASH fill in on the following hour's run.
 - **GEFS 35-day virtual:** one daily polling window covers the extension's member waves; intermediate waves can wait until the next fire.
 - **GEFS 35-day materialized:** the extension tier has no completion trigger, because its source window does not normally complete during a producer run; an age gate lets a later init's trigger or backstop reprocess it.
-- **WeatherNext 2 operational virtual:** its unit is all members and levels of one variable and lead, measured from the unit's last object; it keeps a hand-set fire and a seven-hour landing gate that selects the newest init, because its source has no anonymous arrival timestamps.
+- **WeatherNext 2 operational virtual:** its unit is all members and levels of one variable and lead, measured from the unit's last object; it uses a hand-set fire and a landing gate that selects the newest init, because its source has no anonymous arrival timestamps.
 - **IFS ENS 15-day:** its fire balances the source mirrors: leads not yet on GCS fall back to S3, which throttles many concurrent pods.
-- **IFS ENS 46-day daily and 6-hourly:** with no virtual sibling, the 46-day GRIB archiver triggers both, once per init.
-- **HRDPS:** a hand-set fire and `max_delay`, because its p99 is tail-dominated and its history is short.
-- **AIFS single and ensemble:** hand values from the source's current release regime, whose sample is below the profiler's minimum.
-- **RRFS sub-hourly virtual:** the window selects from one hour before the fire, so the anchor clamp is `a + 61 min`; the newest position requires 6/18 files because 00Z and 12Z publication can continue past the poll cutoff.
-- **HRRR analysis virtual:** its earliest first visibility is a prior-cycle input before the anchor, so its fire sits at the `a + 1 min` clamp.
-- **GEFS 16-day and REFS 3-hourly virtual:** values exclude verified anomalous anchors (stale GEFS indexes, a REFS archive-start bulk load) from quantiles; `E` keeps them.
+- **RRFS sub-hourly virtual:** its window selects from one hour before the fire, so the fire's anchor clamp moves one hour later.
