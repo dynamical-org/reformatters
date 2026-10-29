@@ -5,6 +5,7 @@ from math import ceil
 
 import numpy as np
 
+MATERIALIZED_DEADLINE_CAP = 6 * 3600
 VIRTUAL_POLL_LEAD = 15 * 60
 VIRTUAL_SHORT_POLL_LEAD = 3 * 60
 

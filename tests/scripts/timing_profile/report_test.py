@@ -153,12 +153,14 @@ def measured_units(
             3600,
             (780, 7980, 10800, None),
         ),
+        ([(0, (600,))], False, False, 86400, 86400, (780, 780, 21600, None)),
         ([(0, (60, 600, 3000, 6000))], True, True, 3600, 3600, (360, 1020, 3960, 270)),
     ],
     ids=[
         "virtual-forecast-max-validation",
         "materialized-latest-class-ceil",
         "three-hourly-analysis",
+        "materialized-daily-deadline-cap",
         "gated-analysis-visibility",
     ],
 )

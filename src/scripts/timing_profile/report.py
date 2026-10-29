@@ -20,6 +20,7 @@ from .datasets import Unit, anchor_spacing, is_virtual
 from .runtime import RuntimeStats
 from .sources import Listing, listing_prefix
 from .statistics import (
+    MATERIALIZED_DEADLINE_CAP,
     arrival_stats,
     ceil_minute,
     currency_delay,
@@ -449,7 +450,7 @@ def recommend(
         if virtual
         and runtime.startup_estimate is not None
         and runtime.validation_max is not None
-        else (None if virtual else interval)
+        else (None if virtual else min(interval, MATERIALIZED_DEADLINE_CAP))
     )
     return Recommendation(
         chosen,
