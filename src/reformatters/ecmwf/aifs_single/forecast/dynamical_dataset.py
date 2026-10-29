@@ -28,6 +28,7 @@ class EcmwfAifsSingleForecastDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # All source GRIB/index pairs are required for a complete init.
+            # Backstop schedule. Also triggered ASAP by ecmwf-aifs-single-forecast-virtual.
             schedule="39 5,11,17,23 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),

@@ -31,6 +31,7 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(
         workers = math.ceil(self.num_variable_groups() / 2)
         operational_update_cron_job = ReformatCronJob(
             name="ecmwf-ifs-ens-46-day-daily-update",
+            # Backstop schedule. Also triggered ASAP by ecmwf-ifs-ens-46-day-gribs.
             schedule="5 10 * * *",
             suspend=False,
             concurrency_policy="Allow",

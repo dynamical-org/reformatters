@@ -24,6 +24,7 @@ class GefsForecast35DayDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # The prior init's extension is reprocessed once its age gate permits it.
+            # Backstop schedule. Also triggered ASAP by noaa-gefs-forecast-16-day-0-5-degree-virtual.
             schedule="15 7 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),
