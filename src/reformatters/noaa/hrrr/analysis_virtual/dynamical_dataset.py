@@ -55,7 +55,7 @@ class NoaaHrrrAnalysisVirtualDataset(
         # The first visible hour requires both its own-cycle files and prior-cycle f01.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            schedule="1 * * * *",
+            schedule="31 * * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=1, minutes=3, seconds=22),
             active_deadline=timedelta(hours=1, minutes=3, seconds=22),

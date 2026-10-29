@@ -24,7 +24,7 @@ Adoption status is tracked here; recommendations do not activate polling, overla
 
 ### Virtual polling
 
-The [15-minute polling lead](https://github.com/dynamical-org/reformatters/pull/1291) is adopted by active `Allow` virtual crons. Fires use raw earliest usable-file arrival across the measured history and respect each dataset's selected window. GEFS 35-day retains its daily window, and WeatherNext 2 retains its seven-hour landing gate and existing fire. Deadlines and currency values are unchanged.
+The [15-minute polling lead](https://github.com/dynamical-org/reformatters/pull/1291) is adopted by active `Allow` virtual crons. Fires use earliest first visibility across the measured history and respect each dataset's selected window. GEFS 35-day retains its daily window, and WeatherNext 2 retains its seven-hour landing gate and existing fire. RRFS sub-hourly requires 3/18 files at the newest position at its earlier cutoff; older positions remain complete. Deadlines and currency values are unchanged.
 
 Discover about once per second and commit each tick. Exit when nothing remains pending. Poll until the next fire plus startup and an overlap allowance. Use `Allow` concurrency. A conflicted commit opens a fresh session, filters already-present files again, and recommits; a metadata refresh reads the store size from its committing session.
 

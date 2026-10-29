@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
+import icechunk
 import pandas as pd
 import pytest
 import xarray as xr
@@ -13,6 +14,7 @@ from reformatters.common import validation
 from reformatters.common.kubernetes import create_job_from_cronjob
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.common.types import DatetimeLike
+from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.noaa.refs.forecast_3_hourly_virtual.dynamical_dataset import (
     NoaaRefsForecast3HourlyVirtualDataset,
 )
@@ -166,7 +168,7 @@ def test_poll_deadline_update_schedule_and_decode_health(
     assert current.max_delay == max_delay
     assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
     assert completeness.min_present_fraction == (
-        (6 / 18, 1.0) if cls is NoaaRrfsForecastSubHourlyVirtualDataset else (1.0,)
+        (3 / 18, 1.0) if cls is NoaaRrfsForecastSubHourlyVirtualDataset else (1.0,)
     )
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
     assert decode.max_workers == 2
@@ -346,3 +348,101 @@ def test_legacy_virtual_retry_admission_and_fire_anchored_cutoff(
             retry.spec.template.spec.active_deadline_seconds
             == retry.spec.active_deadline_seconds
         )
+
+
+def test_sub_hourly_slow_cycle_passes_completeness_at_poll_cutoff(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset = NoaaRrfsForecastSubHourlyVirtualDataset(
+        primary_storage_config=StorageConfig(
+            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+        )
+    )
+    init = pd.Timestamp("2026-10-16T12")
+    fire = init + pd.Timedelta(minutes=dataset.update_offset_minutes)
+    cutoff = dataset._virtual_poll_deadline(fire)
+    assert cutoff == pd.Timestamp("2026-10-16T14:02:16")
+    arrivals = dict(
+        zip(
+            pd.timedelta_range("1h", "18h", freq="1h"),
+            [
+                7098,
+                7177,
+                7179,
+                7369,
+                7441,
+                7521,
+                7602,
+                7699,
+                7779,
+                7989,
+                7991,
+                8083,
+                8081,
+                8198,
+                8266,
+                8319,
+                8312,
+                8530,
+            ],
+            strict=True,
+        )
+    )
+    store = (
+        icechunk.Repository.create(
+            icechunk.local_filesystem_storage(str(tmp_path / "store"))
+        )
+        .writable_session("main")
+        .store
+    )
+
+    def template(end: DatetimeLike) -> xr.DataTree:
+        return xr.DataTree(
+            xr.Dataset(
+                coords={
+                    "init_time": pd.date_range(
+                        init - pd.Timedelta("24h"), end, freq="1h", inclusive="left"
+                    ),
+                    "lead_time": pd.timedelta_range("15min", "18h", freq="15min"),
+                }
+            )
+        )
+
+    (job,), _ = dataset.region_job_class.operational_update_jobs(
+        store,
+        tmp_path,
+        template,
+        "init_time",
+        dataset.template_config.data_vars,
+        "test",
+        fire,
+    )
+    assert isinstance(job, VirtualRegionJob)
+    monkeypatch.setattr(
+        type(job),
+        "filter_already_present",
+        lambda self, coords, store: [
+            coord
+            for coord in coords
+            if coord.init_time == init
+            and arrivals[coord.lead_time] > (cutoff - init).total_seconds()
+        ],
+    )
+    check = next(
+        v
+        for v in dataset.validators()
+        if isinstance(v, validation.CheckVirtualManifestCompleteness)
+    )
+    context = validation.ValidationContext(
+        store=store,
+        ds=xr.Dataset(coords={"init_time": [init]}),
+        append_dim="init_time",
+        region_job=job,
+    )
+    assert check.check(context).passed
+    assert (
+        not check.model_copy(update={"min_present_fraction": (4 / 18, 1.0)})
+        .check(context)
+        .passed
+    )
