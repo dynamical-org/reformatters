@@ -22,7 +22,7 @@ _FRESHNESS_DEADLINES = [
     ("noaa-gefs-forecast-10-day-0-25-degree-virtual", "2026-09-27 00:00", "4h09m"),
     ("noaa-gefs-forecast-16-day-0-5-degree-virtual", "2026-09-27 00:00", "4h08m"),
     ("noaa-gefs-forecast-35-day-0-5-degree-virtual", "2026-09-27 00:00", "3h50m"),
-    ("noaa-hrrr-forecast-48-hour", "2026-09-27 00:00", "2h12m"),
+    ("noaa-hrrr-forecast-48-hour", "2026-09-27 00:00", "2h04m"),
     ("noaa-hrrr-analysis", "2026-09-26 21:00", "3h10m"),
     ("noaa-hrrr-analysis-virtual", "2026-09-26 23:00", "80m"),
     ("noaa-rtma-analysis-virtual", "2026-09-27 00:00", "73m"),
@@ -262,7 +262,7 @@ def test_hrrr48_backstop_requires_missing_init_at_fire_plus_startup(
     init = pd.Timestamp("2026-10-27") + timedelta(hours=hour)
     (cron,) = dataset.operational_kubernetes_resources("test")
     fire = cron.next_fire_time(init)
-    assert fire == init + timedelta(hours=2, minutes=12)
+    assert fire == init + timedelta(hours=2, minutes=4)
     now = fire + timedelta(seconds=35)
     assert not _check_at_time(
         dataset_id, now, init - timedelta(hours=6), monkeypatch
