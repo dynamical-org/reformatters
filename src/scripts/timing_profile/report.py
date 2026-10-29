@@ -37,7 +37,7 @@ from .statistics import (
 )
 from .wxopticon import Evidence
 
-NAMED_EXCEPTIONS = frozenset(
+MANUAL_REVIEW_DATASETS = frozenset(
     {
         "noaa-gefs-forecast-35-day-0-5-degree-virtual",
         "noaa-mrms-conus-analysis-hourly",
@@ -534,7 +534,7 @@ def render_dataset(
             ]
         )
         return "\n".join(lines)
-    manual = dataset.dataset_id in NAMED_EXCEPTIONS
+    manual = dataset.dataset_id in MANUAL_REVIEW_DATASETS
     recommendation = recommend(
         polling_units,
         runtime,
@@ -805,11 +805,11 @@ def render_single_cron(
                     "",
                 ]
             )
-    if dataset.dataset_id in NAMED_EXCEPTIONS:
+    if dataset.dataset_id in MANUAL_REVIEW_DATASETS:
         lines.extend(
             [
                 "",
-                "One-cron recommendation: **keep constants; review manually** (named exception).",
+                "One-cron recommendation: **keep constants; review manually** (manual review).",
                 "",
             ]
         )

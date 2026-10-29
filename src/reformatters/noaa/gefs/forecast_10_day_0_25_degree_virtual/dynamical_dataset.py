@@ -46,7 +46,6 @@ class NoaaGefsForecast10Day025DegreeVirtualDataset(
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         cron_job_name_prefix = self.dataset_id.replace("-0-25-degree", "-0-25")
         # A run publishes ~init+3h47m through ~init+5h37m.
-        # Poll across the next fire while files remain pending.
         operational_update_cron_job = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
             schedule="29 3,9,15,21 * * *",

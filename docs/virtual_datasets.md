@@ -86,7 +86,7 @@ Crash recovery is automatic: committed refs are durable and the filter skips the
 
 The write loop discovers at the region job's `tick_interval` and commits each tick's usable files. An unreadable file is skipped for the rest of that pod's life and retried by the next pod. Files still unpublished at `poll_deadline` remain eligible for a later update.
 
-See [virtual polling](operational_update_timing.md#virtual-polling) for fire selection, polling, validation and legacy retry rules, and [currency and integrity validation](operational_update_timing.md#currency-and-integrity-validation) for validator timing.
+See [virtual polling](operational_update_timing.md#virtual-polling) for fire selection, polling and validation, [non-`Allow` CronJobs](operational_update_timing.md#non-allow-cronjobs) for their retry rule, and [currency and integrity validation](operational_update_timing.md#currency-and-integrity-validation) for validator timing.
 
 Serialize manual updates and backfills with scheduled and retry writers, including terminating pods; a CronJob policy provides no store-wide lock.
 

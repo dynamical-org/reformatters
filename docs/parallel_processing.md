@@ -83,7 +83,7 @@ Every Job inherits the `dynamical.org/cronjob-name` label from its CronJob's `jo
 
 ### Completion triggers
 
-Producers list consumers in `materialized_update_triggers`, with `init_hours` filtering each consumer's cycles. `_run_virtual_operational_update` dispatches from the write loop's completion flag for the newest append position in the selected-fire window. See the [completion-trigger rules](operational_update_timing.md#completion-triggers) for eligibility, completion conditions, backstop timing, and rollout requirements.
+Producers list consumers in `materialized_update_triggers`, with `init_hours` filtering each consumer's cycles. `_run_virtual_operational_update` dispatches from the write loop's completion flag for the newest append position in the selected-fire window. See the [completion-trigger rules](operational_update_timing.md#completion-triggers) for eligibility, completion conditions, backstop timing, and trigger activation requirements.
 
 `MaterializedUpdateTrigger` builds `<consumer>-t<YYYYmmddHHMM>z` names, shortening long prefixes with a digest. `create_job_from_cronjob(kind="trigger")` sets `RUN_KIND_ANNOTATION`.
 
