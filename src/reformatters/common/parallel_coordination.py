@@ -120,6 +120,7 @@ def parallel_setup(
     icechunk_repos: list[tuple[str, icechunk.Repository]],
     consolidated: bool,
     exclude_coord_value_chunks: Collection[str] = (),
+    keep_branch: bool = False,
 ) -> SetupInfo:
     if is_first:
         template_utils.write_metadata(template_ds, tmp_store, consolidated=consolidated)
@@ -135,12 +136,12 @@ def parallel_setup(
 
         # Icechunk: create temp branch, write full metadata, commit on branch.
         # This expands the dataset on the temp branch while readers on "main" are unaffected.
-        # Branch name is deterministic so worker 0 retries reuse the same branch.
+        # Generated branch names are deterministic so worker 0 retries reuse them.
         if icechunk_repos:
             repo_snapshots = setup_info.setdefault("repo_snapshots", {})
             for role, repo in icechunk_repos:
                 snapshot = repo_snapshots.setdefault(role, repo.lookup_branch("main"))
-                if branch_name in repo.list_branches():
+                if not keep_branch and branch_name in repo.list_branches():
                     # Branch already exists from a previous worker 0 attempt — reuse it.
                     log.info(f"Branch {branch_name} already exists on {role}, reusing")
                 else:
@@ -232,7 +233,7 @@ def collect_results(
     return merged
 
 
-def finalize(
+def finalize(  # noqa: PLR0912
     store_factory: StoreFactory,
     *,
     all_jobs: Sequence[RegionJob[Any, Any]],
@@ -248,6 +249,7 @@ def finalize(
     publish_zarr3_metadata: bool | None = None,
     exclude_coord_value_chunks: Collection[str] = (),
     job_uid: str | None = None,
+    keep_branch: bool = False,
 ) -> None:
     assert job_uid is None or branch_name != "main"
     publish_zarr3_metadata = (
@@ -304,7 +306,7 @@ def finalize(
         for role, repo in replicas_first:
             original_snapshot = setup_info.get("repo_snapshots", {}).get(role)
             current_main = repo.lookup_branch("main")
-            if current_main != original_snapshot:
+            if not keep_branch and current_main != original_snapshot:
                 if branch_name not in repo.list_branches() or _snapshot_is_on_branch(
                     repo, branch_name, current_main, original_snapshot
                 ):
@@ -331,7 +333,10 @@ def finalize(
             new_snapshot = session.commit(
                 commit_message, rebase_with=icechunk.ConflictDetector()
             )
-            repo.reset_branch("main", new_snapshot, from_snapshot_id=original_snapshot)
+            if not keep_branch:
+                repo.reset_branch(
+                    "main", new_snapshot, from_snapshot_id=original_snapshot
+                )
         if diverged_roles:
             # Leave the temp branches and coordination files in place for inspection.
             raise RuntimeError(
@@ -345,7 +350,7 @@ def finalize(
 
         # Second pass: clean up temp branches.
         for _role, repo in replicas_first:
-            if branch_name in repo.list_branches():
+            if not keep_branch and branch_name in repo.list_branches():
                 repo.delete_branch(branch_name)
 
     if workers_total > 1:

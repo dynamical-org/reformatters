@@ -25,6 +25,20 @@ Pick the operation by what you're doing (action operation name / equivalent CLI 
 
 `uv run main <dataset-id> backfill-kubernetes --help` lists every `--overwrite-*` and `--filter-*` flag. All filter timestamps (`--filter-contains`, `--filter-start`, `--filter-end`) must be full ISO with seconds precision, e.g. `2024-01-15T00:00:00`. Endpoint timestamps (`--append-dim-end`, `--filter-end`) are exclusive; `--filter-start` and `--filter-contains` are inclusive.
 
+## Prepare a private Icechunk branch
+
+For an occasional materialized backfill on an existing Icechunk primary without replicas, choose a new branch name:
+
+```sh
+DYNAMICAL_ENV=prod uv run main <dataset-id> backfill-kubernetes --keep-branch <new branch name> --overwrite-chunks [flags]
+```
+
+Worker 0 creates the branch from `main` in place of the generated temporary branch. Workers use the normal backfill processing path, and finalization retains the branch without resetting `main` or deleting the branch. Operational updates can continue on `main`. Omitting `--keep-branch` preserves normal publication behavior.
+
+The dataset must already exist on `main`; the branch must not exist. `main`, `_job_` names, empty or whitespace-padded names, Zarr/replica/virtual stores and metadata-only runs are unsupported. Overwrite guards read `main`; add `--overwrite-metadata` for expansion or new arrays.
+
+An existing branch always fails worker-0 setup, including any worker-0 retry after branch creation. On failure, stop the Kubernetes job and all its workers before inspecting or deleting the branch, then launch a fresh job.
+
 ## Tuning parallelism
 
 - **jobs_per_pod** — aim for jobs that take 3–15 minutes, to amortize pod startup and reduce icechunk commit compare-and-set contention. Materialized: 2–4 for non-ensemble datasets, 1 for ensemble.
@@ -61,4 +75,4 @@ Parallelism beyond what the cluster can schedule starves it: operational update 
 
 ## Concurrency with operational updates
 
-An operational update that publishes mid-backfill makes an overwrite backfill's finalize fail loudly (the update wins; re-run the backfill). Do **not** suspend an active update cron to avoid this — that delays the production pipeline. Instead run the backfill between update fires, splitting a long history into several smaller `filter_start`/`filter_end` backfills. See "Concurrent jobs writing to the same dataset" in [parallel_processing.md](parallel_processing.md).
+For a backfill targeting `main`, an operational update that publishes mid-backfill makes an overwrite backfill's finalize fail loudly (the update wins; re-run the backfill). Do **not** suspend an active update cron to avoid this — that delays the production pipeline. Instead run the backfill between update fires, splitting a long history into several smaller `filter_start`/`filter_end` backfills. See "Concurrent jobs writing to the same dataset" in [parallel_processing.md](parallel_processing.md).

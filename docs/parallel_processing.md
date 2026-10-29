@@ -53,11 +53,13 @@ For fresh-store backfills, metadata is written before workers start (the dataset
 
 ### Icechunk stores
 
-All metadata and chunk writes happen on a temporary branch (`_job_{job_name}`). Readers on `main` are unaffected. The flow:
+By default, metadata and chunk writes happen on a temporary branch (`_job_{job_name}`). Readers on `main` are unaffected. The flow:
 
 1. **Worker 0 setup** — creates a temp branch from main's current snapshot, copies expanded metadata from the local tmp store, commits on the branch
 2. **All workers** — open sessions on the temp branch, write chunk data, commit with `ConflictDetector` rebase (uncooperative distributed writes)
 3. **Last worker finalization** — writes final metadata on the branch, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. This branch reset is what makes all writes visible to readers. The `from_snapshot_id` check ensures no concurrent process moved main.
+
+With `--keep-branch`, a materialized backfill creates the named private branch from `main` instead of a generated temporary branch. See [private branch backfills](backfill.md#prepare-a-private-icechunk-branch).
 
 ### Virtual Icechunk operational updates (one worker per Job)
 
