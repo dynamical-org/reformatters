@@ -73,6 +73,7 @@ def test_terms_licence_and_attribution(
 def test_template_and_operations(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
 ) -> None:
+    assert dataset.region_job_class.tick_interval == pd.Timedelta("30s")
     config = dataset.template_config
     template = config.get_template(
         config.append_dim_start + config.append_dim_frequency
