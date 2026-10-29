@@ -21,7 +21,7 @@ class NoaaMrmsConusAnalysisHourlyDataset(
     region_job_class: type[NoaaMrmsRegionJob] = NoaaMrmsRegionJob
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        # Target radar-only arrival; gauge passes fill in on the following hour's run.
+        # Target radar-only arrival; the gauge passes and FLASH fill in on the following hour's run.
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             schedule="3 * * * *",
