@@ -23,7 +23,7 @@ class NoaaNdviCdrAnalysisDataset(
             name=f"{self.dataset_id}-update",
             schedule="0 20 * * *",
             concurrency_policy="Replace",
-            pod_active_deadline=timedelta(minutes=30),
+            pod_active_deadline=timedelta(minutes=60),  # runs take <30 min
             active_deadline=None,
             image=image_tag,
             dataset_id=self.dataset_id,
