@@ -142,12 +142,17 @@ def virtual_fire(
 def virtual_poll_lead(
     earliest: float, startup: float, interval: float, completion_p99: float | None
 ) -> float:
-    cutoff = (virtual_fire(earliest, startup) // 60) * 60 + interval + startup + 60
+    fire = (virtual_fire(earliest, startup) // 60) * 60
+    cutoff = virtual_poll_cutoff(fire, interval, startup)
     return (
         VIRTUAL_SHORT_POLL_LEAD
         if completion_p99 is not None and cutoff < completion_p99
         else VIRTUAL_POLL_LEAD
     )
+
+
+def virtual_poll_cutoff(fire: float, interval: float, startup: float) -> float:
+    return fire + interval + startup + 60
 
 
 def virtual_deadline(interval: float, startup: float, validation_max: float) -> float:
