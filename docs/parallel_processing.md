@@ -33,7 +33,7 @@ Readers must always see a consistent view — either the old data or the fully u
 
 ### Structure guard (operational updates)
 
-Before any writes, worker 0 of an operational update asserts that the update template's structure still matches the already-published store — for every variable present in the store, the variable must still exist and its dims, on-disk dtype, chunks, and shards must be unchanged (`template_utils.assert_no_structural_drift_from_existing_store`). A drifted template (a removed/renamed variable or a changed dtype/dims/chunks/shards) would corrupt the existing archive or break readers, so the update fails fast and leaves the live store untouched. Changing structure requires a backfill.
+Before any writes, worker 0 of an operational update asserts that the update template's structure still matches the already-published store — the first append-dimension coordinate must match in each nonempty stored group, and every variable present in the store must still exist with unchanged dims, on-disk dtype, chunks, and shards (`template_utils.assert_no_structural_drift_from_existing_store`). A drifted template (a changed append origin, a removed/renamed variable, or a changed dtype/dims/chunks/shards) would corrupt the existing archive or break readers, so the update fails fast and leaves the live store untouched. Changing structure requires a backfill.
 
 ### Retraction guard (operational updates)
 

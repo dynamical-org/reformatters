@@ -203,8 +203,9 @@ def assert_no_structural_drift_from_existing_store(
     worker 0 before any data is written and raises before damage is done.
 
     Compares every variable across all groups (by var.path) and every non-append
-    dimension coordinate's values (a reordered vertical level or moved lat/lon would
-    relabel existing chunks). Only variables/coords present in `existing_ds` are checked, so the
+    dimension coordinate's values, plus the append coordinate's first value (a changed
+    origin, reordered vertical level or moved lat/lon would relabel existing chunks).
+    Only variables/coords present in `existing_ds` are checked, so the
     template may freely add new ones. Callers run this for operational updates;
     overwrite backfills run assert_safe_overwrite instead.
 
@@ -221,6 +222,16 @@ def assert_no_structural_drift_from_existing_store(
             "run a backfill to change structure. Mismatches:\n"
             + "\n".join(f"- {m}" for m in mismatches)
         )
+    for node in existing_ds.subtree:
+        if append_dim not in node.coords or node.sizes[append_dim] == 0:
+            continue
+        existing_origin = node.coords[append_dim].values[0]
+        template_origin = template_ds[node.path].coords[append_dim].values[0]
+        if existing_origin != template_origin:
+            raise ValueError(
+                f"{node.path}: {append_dim} origin differs: existing store starts at "
+                f"{existing_origin}, update template starts at {template_origin}"
+            )
 
 
 def structural_mismatches(

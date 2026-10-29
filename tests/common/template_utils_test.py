@@ -3,6 +3,7 @@ from pathlib import Path
 
 import dask.array
 import numpy as np
+import pandas as pd
 import pytest
 import xarray as xr
 from gribberish.zarr import GribberishCodec
@@ -301,6 +302,48 @@ def test_structural_drift_passes_for_identical_structure() -> None:
     existing = _structured_ds(var0=_structured_var(dtype=np.dtype("float32")))
     template = _structured_ds(var0=_structured_var(dtype="float32"))
     assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+@pytest.mark.parametrize("append_dim", ["time", "init_time"])
+@pytest.mark.parametrize("group", ["/", "/pressure_level"])
+@pytest.mark.parametrize("template_start", ["2024-12-31", "2025-01-02"])
+def test_structural_drift_rejects_changed_append_origin(
+    append_dim: str, group: str, template_start: str
+) -> None:
+    existing = xr.DataTree.from_dict(
+        {group: xr.Dataset(coords={append_dim: pd.date_range("2025-01-01", periods=2)})}
+    )
+    template = xr.DataTree.from_dict(
+        {
+            group: xr.Dataset(
+                coords={append_dim: pd.date_range(template_start, periods=3)}
+            )
+        }
+    )
+
+    with pytest.raises(ValueError, match=f"{append_dim} origin differs"):
+        assert_no_structural_drift_from_existing_store(template, existing, append_dim)
+
+
+def test_structural_drift_allows_append_extension() -> None:
+    existing = xr.DataTree(
+        xr.Dataset(coords={"time": pd.date_range("2025-01-01", periods=2)})
+    )
+    template = xr.DataTree(
+        xr.Dataset(coords={"time": pd.date_range("2025-01-01", periods=3)})
+    )
+
+    assert_no_structural_drift_from_existing_store(template, existing, "time")
+
+
+def test_structural_drift_allows_empty_append_coordinate() -> None:
+    template = xr.DataTree(
+        xr.Dataset(coords={"time": pd.date_range("2025-01-01", periods=2)})
+    )
+
+    assert_no_structural_drift_from_existing_store(
+        template, template.isel(time=slice(0, 0)), "time"
+    )
 
 
 def test_structural_drift_allows_new_variables_in_template() -> None:
