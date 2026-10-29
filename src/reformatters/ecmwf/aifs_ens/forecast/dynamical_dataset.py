@@ -27,7 +27,6 @@ class EcmwfAifsEnsForecastDataset(
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
-            # Both control and perturbed GRIB/index pairs are required for a complete init.
             schedule="59 5,11,17,23 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),
