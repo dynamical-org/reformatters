@@ -13,6 +13,4 @@ class GoogleWeathernext3Forecast15Day01DegreeVirtualRegionJob(
 ):
     init_frequency: ClassVar[Timedelta] = pd.Timedelta("6h")
     manifest_init_split: ClassVar[int] = 64
-    operational_update_window: ClassVar[Timedelta] = pd.Timedelta(
-        "360h"
-    ) + pd.Timedelta("2D")
+    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
