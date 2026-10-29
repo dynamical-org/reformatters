@@ -19,8 +19,8 @@ _ADOPTIONS = {
     "ecmwf-ifs-ens-forecast-15-day-0-25-degree": ("5 8 * * *", "8h40m", 24),
     "ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree": ("5 10 * * *", "58h5m", 24),
     "ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree": ("5 10 * * *", "58h5m", 24),
-    "ecmwf-aifs-single-forecast": ("38 1,7,13,19 * * *", "7h38m", 6),
-    "ecmwf-aifs-ens-forecast": ("44 1,7,13,19 * * *", "7h44m", 6),
+    "ecmwf-aifs-single-forecast": ("39 5,11,17,23 * * *", "5h39m", 6),
+    "ecmwf-aifs-ens-forecast": ("59 5,11,17,23 * * *", "5h59m", 6),
     "dwd-icon-eu-forecast-5-day": ("52 3,9,15,21 * * *", "3h52m", 6),
     "eccc-hrdps-forecast": ("30 4,10,16,22 * * *", "4h30m", 6),
     "nasa-imerg-analysis-early": ("38 * * * *", "8h", 1),
@@ -128,8 +128,8 @@ def test_materialized_builders_use_reference_not_wall_clock(
 @pytest.mark.parametrize(
     ("dataset_id", "offset"),
     [
-        ("ecmwf-aifs-single-forecast", "7h38m"),
-        ("ecmwf-aifs-ens-forecast", "7h44m"),
+        ("ecmwf-aifs-single-forecast", "5h39m"),
+        ("ecmwf-aifs-ens-forecast", "5h59m"),
         ("eccc-hrdps-forecast", "4h30m"),
         ("dwd-icon-eu-forecast-5-day", "3h52m"),
         ("ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree", "58h5m"),
