@@ -62,13 +62,13 @@ def test_materialized_family_budgets_and_timing(dataset_id: str) -> None:
     ]
     assert cron.schedule == schedule
     assert cron.concurrency_policy == "Allow"
-    assert cron.pod_active_deadline == timedelta(hours=hours)
-    assert cron.active_deadline == timedelta(hours=hours)
+    assert cron.pod_active_deadline == timedelta(hours=min(hours, 6))
+    assert cron.active_deadline == timedelta(hours=min(hours, 6))
     (currency,) = [v for v in dataset.validators() if isinstance(v, CheckCurrentData)]
     assert currency.max_delay == pd.Timedelta(delay)
     rendered = cron.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
-    assert rendered["activeDeadlineSeconds"] == hours * 3600
-    assert rendered["template"]["spec"]["activeDeadlineSeconds"] == hours * 3600
+    assert rendered["activeDeadlineSeconds"] == min(hours, 6) * 3600
+    assert rendered["template"]["spec"]["activeDeadlineSeconds"] == min(hours, 6) * 3600
 
 
 @pytest.mark.parametrize(
@@ -156,7 +156,7 @@ def test_adopted_forecast_currency_requires_init_at_its_full_fire(
     assert _check_at_time(dataset_id, fire, init, monkeypatch).passed
 
 
-def test_materialized_allow_deadlines_equal_minimum_calendar_fire_interval() -> None:
+def test_materialized_allow_deadlines_cap_minimum_calendar_fire_interval() -> None:
     calendar_start = pd.Timestamp("2023-01-01")
     calendar_end = pd.Timestamp("2025-01-01")
     for dataset in _MATERIALIZED_DATASETS:
@@ -172,12 +172,14 @@ def test_materialized_allow_deadlines_equal_minimum_calendar_fire_interval() -> 
                 next_fire = cron.next_fire_time(fire)
                 intervals.append(next_fire - fire)
                 fire = next_fire
-            assert cron.pod_active_deadline == cron.active_deadline == min(intervals), (
-                dataset.dataset_id
-            )
+            assert (
+                cron.pod_active_deadline
+                == cron.active_deadline
+                == min(timedelta(hours=6), *intervals)
+            ), dataset.dataset_id
 
 
-def test_chirps_calendar_deadlines_use_shortest_interval() -> None:
+def test_chirps_calendar_deadlines_are_capped_below_shortest_interval() -> None:
     dataset = dataset_for("ucsb-chc-chirps-analysis-final")
     (cron,) = dataset.operational_kubernetes_resources("test")
     boundary = pd.Timestamp("2026-11-01")
@@ -187,7 +189,7 @@ def test_chirps_calendar_deadlines_use_shortest_interval() -> None:
     assert cron.previous_fire_time(
         boundary + timedelta(days=3)
     ) - boundary == timedelta(days=3)
-    assert cron.pod_active_deadline == cron.active_deadline == timedelta(days=1)
+    assert cron.pod_active_deadline == cron.active_deadline == timedelta(hours=6)
 
 
 def test_deprecated_plain_zarr_updater_keeps_legacy_lifecycle() -> None:
