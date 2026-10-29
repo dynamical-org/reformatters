@@ -475,7 +475,7 @@ def test_icon_shaped_rate_denominator_excludes_empty_but_keeps_partial_units() -
     assert read_rates(arrivals, 750, 10, 30, 20) == (0.5, 0.25)
 
 
-def test_virtual_hand_value_withholds_currency_but_preserves_raw_e_fire() -> None:
+def test_virtual_hand_value_preserves_polling_fire() -> None:
     units = measured_units(
         [(0, (600,))] * 97 + [(0, (3000,)), (0, (600,)), (0, (9000,))], copies=4
     )
@@ -610,3 +610,54 @@ def test_year_of_real_aifs_history_requires_a_hand_value_for_latest_regime() -> 
     assert result.classes[0].hand_value
     assert result.offset is None
     assert result.delay is None
+
+
+def test_polling_e_uses_first_visibility_instead_of_earlier_raw_file() -> None:
+    anchor = pd.Timestamp("2026-01-01")
+    early = frozenset(["s3://bucket/cycle/prior-f01"])
+    gate = frozenset(["s3://bucket/cycle/own-f00"])
+    unit = Unit(anchor, "position", (early, gate), 0, ((gate,),))
+    measured = aggregate_unit(
+        unit,
+        {
+            "s3://bucket/cycle/": Listing(
+                {
+                    next(iter(early)): anchor - pd.Timedelta(seconds=701),
+                    next(iter(gate)): anchor + pd.Timedelta(seconds=2840),
+                },
+                "S3",
+            )
+        },
+    )
+    assert measured.raw_first == -701
+    assert measured.first == 2840
+    units = [measured]
+    result = recommend(
+        units,
+        runtime(),
+        virtual=True,
+        interval=3600,
+        currency_interval=3600,
+        spacing=3600,
+    )
+    assert result.offset == 1860
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-hrrr-analysis-virtual"
+    )
+    cron = next(
+        resource
+        for resource in dataset.operational_kubernetes_resources("test")
+        if isinstance(resource, ReformatCronJob)
+    )
+    rendered = render_dataset(
+        dataset,
+        cron,
+        units,
+        runtime(),
+        units[0].unit.anchor + pd.Timedelta("1h"),
+        None,
+        set(),
+    )
+    assert "without exclusions: 00:47:20." in rendered
+    assert "One-cron offset: 00:31:00" in rendered
+    assert "Anchor guard" not in rendered

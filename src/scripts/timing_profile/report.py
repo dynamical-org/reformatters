@@ -346,7 +346,7 @@ def recommend(
     end: pd.Timestamp | None = None,
     excluded: set[pd.Timestamp] | None = None,
 ) -> Recommendation:
-    raw = [unit.raw_first for unit in units if unit.raw_first is not None]
+    first = [unit.first for unit in units if unit.first is not None]
     if manual or not units:
         return Recommendation(None, None, None, None, ())
     end = (
@@ -374,8 +374,8 @@ def recommend(
             stats = arrival_stats(arrivals)
             threshold = schedule_offset(stats)
             offset = (
-                virtual_fire(min(raw), runtime.startup_estimate)
-                if virtual and raw and runtime.startup_estimate is not None
+                virtual_fire(min(first), runtime.startup_estimate)
+                if virtual and first and runtime.startup_estimate is not None
                 else (None if virtual else schedule_offset(stats))
             )
             if not virtual:
@@ -407,8 +407,8 @@ def recommend(
     first_tier = [value for value in classes if value.tier == tiers[0]]
     offsets = [value.offset for value in first_tier if value.offset is not None]
     chosen = (
-        (virtual_fire(min(raw), runtime.startup_estimate) // 60) * 60
-        if virtual and raw and runtime.startup_estimate is not None
+        (virtual_fire(min(first), runtime.startup_estimate) // 60) * 60
+        if virtual and first and runtime.startup_estimate is not None
         else (None if virtual or not offsets else ceil_minute(max(offsets)))
     )
     if not virtual and any(value.hand_value for value in first_tier):
@@ -651,16 +651,16 @@ def render_dataset(
 def render_polling_evidence(
     units: Sequence[MeasuredUnit], runtime: RuntimeStats
 ) -> list[str]:
-    raw = [unit.raw_first for unit in units if unit.raw_first is not None]
-    if not raw:
+    first = [unit.first for unit in units if unit.first is not None]
+    if not first:
         return []
     lines = [
-        f"Polling E over the full requested window, all tiers/classes, without exclusions: {duration(min(raw))}.",
+        f"Polling E over the full requested window, all tiers/classes, without exclusions: {duration(min(first))}.",
         "",
     ]
     if (
         runtime.startup_estimate is not None
-        and min(raw) - runtime.startup_estimate - VIRTUAL_POLL_LEAD < 60
+        and min(first) - runtime.startup_estimate - VIRTUAL_POLL_LEAD < 60
     ):
         lines.extend(
             [
@@ -735,7 +735,7 @@ def render_single_cron(
         lines.extend(
             [
                 "",
-                f"One-cron offset: {duration(chosen)}. {'Uses raw first-file E across the full requested window, minus L and 15 min, clamped after the anchor.' if virtual else 'Uses latest class and chosen S; adoption remains manual.'}",
+                f"One-cron offset: {duration(chosen)}. {'Uses first-visibility E across the full requested window, minus L and 15 min, clamped after the anchor.' if virtual else 'Uses latest class and chosen S; adoption remains manual.'}",
                 "",
             ]
         )
