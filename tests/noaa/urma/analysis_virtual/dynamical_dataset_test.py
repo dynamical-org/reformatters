@@ -47,14 +47,15 @@ def test_urma_operations_storage_and_validators(tmp_path: Path) -> None:
     assert not dataset.replica_storage_configs
     (cron,) = dataset.operational_kubernetes_resources("test-image")
     assert cron.as_kubernetes_object()["spec"]["suspend"] is False
-    assert cron.schedule == "45 * * * *"
-    assert cron.pod_active_deadline == timedelta(minutes=59)
-    assert dataset.virtual_poll_deadline_grace == timedelta(minutes=2)
+    assert cron.schedule == "35 * * * *"
+    assert cron.pod_active_deadline == timedelta(minutes=62, seconds=9)
+    assert cron.active_deadline == cron.pod_active_deadline
+    assert dataset.virtual_poll_deadline_grace == timedelta(seconds=43)
     assert (cron.workers_total, cron.parallelism) == (1, 1)
     assert (cron.cpu, cron.memory) == ("1.7", "7G")
     current, completeness, decode = dataset.validators()
     assert isinstance(current, validation.CheckCurrentData)
-    assert current.max_delay == timedelta(hours=7, minutes=40)
+    assert current.max_delay == timedelta(hours=7, minutes=17)
     assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
     assert not decode.allow_all_nan_vars
@@ -98,7 +99,7 @@ def test_local_full_dataset_reads_all_fields_and_times_validators(
         region_job=job,
     )
     timings = {}
-    now = time + pd.Timedelta("7h42min")
+    now = time + pd.Timedelta("7h19min")
     total_start = perf_counter()
     with monkeypatch.context() as clock:
         clock.setattr(
@@ -169,7 +170,16 @@ def test_full_dataset_append_idempotence_and_freshness_failure(
 ) -> None:
     dataset = make_dataset(tmp_path, "2026-10-12T11:00")
     dataset.backfill_local(append_dim_end=pd.Timestamp("2026-10-12T12:00"))
-    now = pd.Timestamp("2026-10-12T19:42")
+    now = pd.Timestamp("2026-10-12T19:19")
+
+    def finish_poll(seconds: float) -> None:
+        nonlocal now
+        assert 0 <= seconds <= 1
+        now = pd.Timestamp("2026-10-12T19:36:26")
+
+    monkeypatch.setattr(
+        "reformatters.common.virtual_region_job.time.sleep", finish_poll
+    )
     discover = NoaaUrmaAnalysisVirtualRegionJob.discover_available
     monkeypatch.setattr(
         NoaaUrmaAnalysisVirtualRegionJob,
@@ -203,6 +213,7 @@ def test_full_dataset_append_idempotence_and_freshness_failure(
         dataset.update("test-full-update")
         repo = dataset.store_factory.icechunk_repos(sort="primary-first")[0][1]
         snapshots = sum(1 for _ in repo.ancestry(branch="main"))
+        now = pd.Timestamp("2026-10-12T19:19")
         dataset.update("test-idempotent-update")
         assert sum(1 for _ in repo.ancestry(branch="main")) == snapshots
         validation_job = dataset._virtual_validation_region_job(

@@ -26,7 +26,7 @@ class NoaaRtmaAnalysisVirtualDataset(
     update_schedule: ClassVar[str] = "26 * * * *"
     update_deadline: ClassVar[timedelta] = timedelta(hours=1, minutes=2, seconds=9)
     update_cron_suspended: ClassVar[bool] = False
-    max_delay: ClassVar[timedelta] = timedelta(minutes=73)
+    max_delay: ClassVar[timedelta] = timedelta(minutes=74)
     concurrency_policy: ClassVar[ConcurrencyPolicy] = "Allow"
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=43)
 
@@ -54,9 +54,7 @@ class NoaaRtmaAnalysisVirtualDataset(
                 name=f"{self.dataset_id}-update",
                 schedule=self.update_schedule,
                 concurrency_policy=self.concurrency_policy,
-                active_deadline=(
-                    self.update_deadline if self.concurrency_policy == "Allow" else None
-                ),
+                active_deadline=self.update_deadline,
                 pod_active_deadline=self.update_deadline,
                 image=image_tag,
                 dataset_id=self.dataset_id,

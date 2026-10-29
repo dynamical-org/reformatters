@@ -13,6 +13,11 @@ from reformatters.ecmwf.aifs_single.forecast.region_job import (
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.source_file_coord import (
     OpenDataSourceFileCoord,
 )
+from reformatters.google.weathernext3.forecast_virtual.dynamical_dataset import (
+    GoogleWeathernext3ForecastVirtualDataset,
+)
+from reformatters.google.weathernext3.forecast_virtual.source import source_store_url
+from reformatters.google.weathernext3.forecast_virtual.template_config import STATISTICS
 from reformatters.noaa.gefs.forecast_16_day_0_5_degree_virtual.region_job import (
     NoaaGefsForecast16Day05DegreeVirtualRegionJob,
 )
@@ -20,6 +25,91 @@ from scripts.timing_profile.datasets import expected_units, source_gap, usable_f
 from scripts.timing_profile.report import aggregate_unit, recommend
 from scripts.timing_profile.runtime import RuntimeStats
 from scripts.timing_profile.sources import Listing, TimestampSource, listing_prefix
+
+
+@pytest.mark.parametrize(
+    ("dataset_id", "prefix", "filename", "frequency"),
+    [
+        (
+            "noaa-rtma-analysis-virtual",
+            "s3://noaa-rtma-pds/rtma2p5.20261020/",
+            "rtma2p5.t{time:%H}z.2dvaranl_ndfd.grb2_wexp",
+            "1h",
+        ),
+        (
+            "noaa-rtma-ru-analysis-virtual",
+            "s3://noaa-rtma-pds/rtma2p5_ru.20261020/",
+            "rtma2p5_ru.t{time:%H%M}z.2dvaranl_ndfd.grb2",
+            "15min",
+        ),
+        (
+            "noaa-urma-analysis-virtual",
+            "s3://noaa-urma-pds/urma2p5.20261020/",
+            "urma2p5.t{time:%H}z.2dvaranl_ndfd.grb2_wexp",
+            "1h",
+        ),
+    ],
+)
+def test_rtma_family_units_are_one_index_free_file_per_position(
+    dataset_id: str, prefix: str, filename: str, frequency: str, tmp_path: Path
+) -> None:
+    dataset = next(ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == dataset_id)
+    start = pd.Timestamp("2026-10-20")
+    source = TimestampSource(tmp_path, 1)
+    units = list(expected_units(dataset, start, start + pd.Timedelta("1h"), source))
+    source.close()
+    assert [unit.anchor for unit in units] == list(
+        pd.date_range(start, periods=len(units), freq=frequency)
+    )
+    assert len(units) == (4 if frequency == "15min" else 1)
+    for unit in units:
+        assert unit.tier == "position"
+        assert unit.anchor_minus_label == 0
+        assert unit.files == (frozenset([prefix + filename.format(time=unit.anchor)]),)
+
+
+@pytest.mark.parametrize(
+    "dataset",
+    [ds for ds in DYNAMICAL_DATASETS if "weathernext3" in ds.dataset_id],
+    ids=lambda ds: ds.dataset_id,
+)
+def test_weathernext3_units_require_every_statistic_for_each_variable_and_lead(
+    dataset: GoogleWeathernext3ForecastVirtualDataset,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = dataset.template_config
+    coords = config.dimension_coordinates()
+    leads = [1, 48] if config.horizon_hours == 48 else [1, 48, 49, 360]
+    coords["lead_time"] = pd.to_timedelta(leads, unit="h")
+
+    def small_coords(self: TemplateConfig[Any]) -> dict[str, Any]:
+        return coords
+
+    monkeypatch.setattr(type(config), "dimension_coordinates", small_coords)
+    start = pd.Timestamp("2026-10-20")
+    source = TimestampSource(tmp_path, 1)
+    units = list(expected_units(dataset, start, start + pd.Timedelta("2h"), source))
+    source.close()
+    anchors = pd.date_range(
+        start,
+        start + pd.Timedelta("2h"),
+        freq=config.append_dim_frequency,
+        inclusive="left",
+    )
+    assert len(units) == len(anchors) * len(config.data_vars) * len(leads)
+    for unit in units:
+        var_path, lead = unit.tier.split(" f")
+        var = next(var for var in config.data_vars if var.path == var_path)
+        lead_index = int(lead) - 1
+        assert unit.anchor in anchors
+        assert unit.anchor_minus_label == 0
+        assert unit.files == (
+            frozenset(
+                f"{source_store_url(unit.anchor)}/{var.internal_attrs.source_name}_{statistic}/c/{lead_index}/0/0"
+                for statistic in STATISTICS
+            ),
+        )
 
 
 @pytest.mark.parametrize(

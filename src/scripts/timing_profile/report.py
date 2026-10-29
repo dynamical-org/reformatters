@@ -272,7 +272,9 @@ def recommended_cron(offset: float, interval: float, cron: ReformatCronJob) -> s
     minute = rounded_minutes % 60
     hour_shift = rounded_minutes // 60
     if interval < 3600:
-        return f"{minute % round(interval / 60)}-59/{round(interval / 60)} * * * *"
+        step = round(interval / 60)
+        minutes = range(minute % step, 60, step)
+        return f"{','.join(map(str, minutes))} * * * *"
     hours = sorted(
         {
             (hour + hour_shift) % 24

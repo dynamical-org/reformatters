@@ -533,7 +533,7 @@ def retry_job_name(job_name: str, max_retries: int = 1) -> tuple[bool, str]:
 # Operational schedules use selected minutes and hours, and either every day or
 # every Nth day of the month.
 _SCHEDULE_PATTERN = re.compile(
-    r"(?P<minutes>\d{1,2}|\*/\d{1,2}) "
+    r"(?P<minutes>\d{1,2}(?:,\d{1,2})*|(?:\*|\d{1,2}-\d{1,2})/\d{1,2}) "
     r"(?P<hours>\*|\d{1,2}(?:,\d{1,2})*|(?:\*|\d{1,2}-\d{1,2})/\d{1,2}) "
     r"(?P<days_of_month>\*|\*/\d{1,2}) \* \*"
 )
@@ -546,8 +546,8 @@ def _parse_schedule(
     match = _SCHEDULE_PATTERN.fullmatch(schedule)
     assert match is not None, (
         f"Unsupported cron schedule {schedule!r}, expected "
-        "`<minutes> <hours> <days-of-month> * *` with minutes as a number or `*/N`, hours as `*`, `*/N`, "
-        "`A-B/N`, or a comma separated list and days-of-month as `*` or `*/N`"
+        "`<minutes> <hours> <days-of-month> * *` with minutes and hours as a number, `*/N`, "
+        "`A-B/N`, or a comma separated list, hours also as `*`, and days-of-month as `*` or `*/N`"
     )
     minutes = _parse_schedule_field(match["minutes"], 0, 59)
     hours = _parse_schedule_field(match["hours"], 0, 23)
@@ -583,4 +583,7 @@ def _parse_schedule_field(field: str, start: int, end: int) -> frozenset[int]:
         selected_start, selected_end = (int(bound) for bound in spec.split("-"))
     else:
         return frozenset({int(spec)})
+    assert start <= selected_start <= selected_end <= end, (
+        f"Cron schedule range {spec!r} must be within {start}-{end}"
+    )
     return frozenset(range(selected_start, selected_end + 1, int(step) if step else 1))

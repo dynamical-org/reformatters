@@ -80,6 +80,15 @@ def test_recommended_cron_wraps_offsets_and_preserves_day_fields() -> None:
     )
     assert recommended_cron(8 * 3600 + 15 * 60, 6 * 3600, cron) == "15 2,8,14,20 * * *"
     assert recommended_cron(17 * 60, 3600, cron) == "17 * * * *"
+    quarter_hour = recommended_cron(6 * 60, 15 * 60, cron)
+    assert quarter_hour == "6,21,36,51 * * * *"
+    shifted = cron.model_copy(update={"schedule": quarter_hour})
+    assert shifted.next_fire_time(pd.Timestamp("2026-10-29T23:51")) == pd.Timestamp(
+        "2026-10-30T00:06"
+    )
+    assert shifted.previous_fire_time(
+        pd.Timestamp("2026-10-30T00:05:59")
+    ) == pd.Timestamp("2026-10-29T23:51")
 
 
 def test_calendar_intervals_bound_deadline_and_scalar_currency() -> None:

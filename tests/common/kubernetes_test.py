@@ -584,6 +584,8 @@ def _cron_job(schedule: str) -> ReformatCronJob:
         ("*/15 23 */3 * *", "2026-09-01T22:00", "2026-08-31T23:45"),
         ("*/15 23 */3 * *", "2026-10-01T22:00", "2026-09-28T23:45"),
         ("*/7 * * * *", "2026-08-02T23:59", "2026-08-02T23:56"),
+        ("6-59/15 * * * *", "2026-08-03T00:05:59", "2026-08-02T23:51"),
+        ("6,21,36,51 * * * *", "2026-08-03T00:05:59", "2026-08-02T23:51"),
         # Before this hour's fire, so the previous hour's.
         ("50 * * * *", "2026-08-02T23:12", "2026-08-02T22:50"),
         ("53 1,7,13,19 * * *", "2026-08-02T03:00", "2026-08-02T01:53"),
@@ -612,6 +614,10 @@ def test_previous_fire_time(schedule: str, now: str, expected: str) -> None:
         "5 1,2/2 * * *",  # a step within a list
         "0 24 * * *",
         "60 0 * * *",
+        "6,60 * * * *",
+        "6-60/15 * * * *",
+        "6-59/0 * * * *",
+        "6,21/15 * * * *",
     ],
 )
 def test_previous_fire_time_rejects_unsupported_schedule(schedule: str) -> None:
@@ -631,6 +637,8 @@ def test_previous_fire_time_rejects_unsupported_schedule(schedule: str) -> None:
         ("*/15 23 */3 * *", "2026-08-31T23:45", "2026-09-01T23:00"),
         ("*/15 23 */3 * *", "2026-09-28T23:45", "2026-10-01T23:00"),
         ("*/7 * * * *", "2026-08-02T23:56", "2026-08-03T00:00"),
+        ("6-59/15 * * * *", "2026-08-02T23:51", "2026-08-03T00:06"),
+        ("6,21,36,51 * * * *", "2026-08-02T23:51", "2026-08-03T00:06"),
         ("53 1,7,13,19 * * *", "2026-08-02T19:53", "2026-08-03T01:53"),
         ("0 23 */3 * *", "2026-09-28T23:00", "2026-10-01T23:00"),
     ],
@@ -641,10 +649,16 @@ def test_next_fire_time(schedule: str, now: str, expected: str) -> None:
     )
 
 
-@pytest.mark.parametrize("minute", [0, 15, 30, 45])
+@pytest.mark.parametrize(
+    "schedule", ["*/15 * * * *", "6-59/15 * * * *", "6,21,36,51 * * * *"]
+)
+@pytest.mark.parametrize("quarter", [0, 1, 2, 3])
 @pytest.mark.parametrize("seconds", [0, 1, 59])
-def test_quarter_hour_fire_boundaries(minute: int, seconds: int) -> None:
-    cron = _cron_job("*/15 * * * *")
+def test_quarter_hour_fire_boundaries(
+    schedule: str, quarter: int, seconds: int
+) -> None:
+    cron = _cron_job(schedule)
+    minute = quarter * 15 + (0 if schedule.startswith("*/") else 6)
     fire = pd.Timestamp("2026-08-02T23:00Z") + timedelta(minutes=minute)
     now = fire + timedelta(seconds=seconds)
     assert cron.previous_fire_time(now) == fire
