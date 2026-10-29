@@ -7,7 +7,7 @@ For each dataset an update (`-update`) CronJob runs processing in parallel acros
 ## Sentry monitoring
 _Requires sentry organization invitation._
 
-`-update` alerts mean an update failed, timed out, or missed its run; `-validate` alerts mean checks failed or never ran; if both fire, start with `-update`.
+`-update` alerts mean an update failed, timed out, or missed its run; `-validate` alerts mean checks failed or never ran; if both fire, start with `-update`. Materialized updates on the [re-pass lifecycle](operational_update_timing.md#materialized-queue-and-re-passes) suppress the first validation failure only when a re-pass is submitted; every re-pass failure alerts.
 - [Crons overview](https://dynamical.sentry.io/insights/crons/) - Start here. If all green, we're good. If red, click in to see the issue and logs.
 - [Issues](https://dynamical.sentry.io/issues/?statsPeriod=12h)
 - [Logs](https://dynamical.sentry.io/explore/logs/) - You can filter these by `cron_job_name` / `job_name` / `pod_name` attributes.

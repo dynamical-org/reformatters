@@ -66,13 +66,15 @@ Validate once after polling ends. Validation failure exits 20 and fails the Job;
 
 Use one scalar per dataset. Later positions in a multi-position unit are detected later. Compute it against the final single cron, including minute rounding and every cycle class, rather than against processing completion. Use the profiler's recommendations to review the current cron, deadlines, and `max_delay` together.
 
-Currency does not replace integrity checks. Use `CheckVirtualManifestCompleteness` to require complete older positions and detect interior gaps, and use recent NaNs, decode health, replica, and expected-shard checks as appropriate. Tune leading completeness tiers and NaN thresholds by hand when they false-alert. Integrity failures can page before the currency fire. Validation errors page, and Sentry cron monitors alert on missed, timeout, and error check-ins. See [validation](validation.md) for configuring and inspecting checks.
+Currency does not replace integrity checks. Use `CheckVirtualManifestCompleteness` to require complete older positions and detect interior gaps, and use recent NaNs, decode health, replica, and expected-shard checks as appropriate. Tune leading completeness tiers and NaN thresholds by hand when they false-alert. Integrity failures can page before the currency fire. Validation errors page except for a queued materialized run's first failure when a re-pass is submitted; Sentry cron monitors also alert on missed and timeout check-ins. See [validation](validation.md) for configuring and inspecting checks.
 
 ## Materialized deadlines and monitoring
 
 Materialized pod and Job active deadlines equal `min(Δf, 6h)`, where `Δf` is the interval between scheduled fires. Sentry's `max_runtime` matches the pod deadline, so a hung update alerts at that deadline. Virtual budgets follow [virtual polling](#virtual-polling).
 
 The update check-in covers the start decision, queue wait, processing, and finalization. A skipping Job closes it successfully without validation. Validation has its own check-in after publication. End-of-run backoff is outside both check-ins.
+
+A queued materialized run's first validation sends only a terminal check-in (`ok`, or `error` when no re-pass is submitted); re-passes keep `in_progress`. With no first-pass timeout check-in, an established monitor covers a lost first validation or re-pass, including off-schedule triggers, through a missed scheduled slot at the fire plus the pod deadline plus 10 minutes, unless another run's validation check-in arrives first.
 
 ## Materialized queue and re-passes
 
@@ -90,7 +92,7 @@ All indices, including replacement pods, reuse the matching-UID decision. `skip`
 
 Every materialized builder requires the explicit `job_reference_time` argument. Its current Job's own `creationTimestamp`, normalized to UTC, anchors window and planning calculations; a re-pass uses its own Job's creation time. All indices and replacements therefore compute the same window across initialization boundaries. The update entrypoint captures one UTC reference time for local and non-Allow updates. Materialized and virtual factories have separate contracts and explicit kind dispatch. Download, polling, and validation clocks keep current time. This reference is distinct from a virtual update's selected `job_fire_time`.
 
-The last index follows the [publication and cleanup order](parallel_processing.md#cleanup), then always validates, including when it had no region jobs. On successful validation, the run is done. On failure, it reports the error before backing off outside the check-ins:
+The last index follows the [publication and cleanup order](parallel_processing.md#cleanup), then always validates, including when it had no region jobs. On successful validation, the run is done. A failure backs off as below. A re-pass failure pages before backing off; a first failure pages after its backoff only if no re-pass is submitted, and otherwise logs a warning with the failed checks:
 
 - Sleep 5 minutes before `-r1`, 10 before `-r2`, 20 before `-r3`, and 30 before each later re-pass, through `-r16`.
 - From 30 seconds into sleep, check every 30 seconds and immediately before submission for a newer nonterminal Job with matching-UID `run` state. Yield to one without submitting; absent, skipped, finalized, terminal, or stale-UID state does not suppress a re-pass.
@@ -129,3 +131,7 @@ The dataset implementations define the values and boundaries of these exceptions
 - MRMS uses one hourly run; pass 1 is an exception.
 
 Arrivals beyond a fire's chosen offset alert when currency or integrity checks detect them. Choose offsets to make this rare under normal source operation.
+
+## Possible follow-up: quiet re-pass window
+
+Not implemented. If an untriggered materialized dataset with a high-variance source alerts more often than is acceptable, give it a per-dataset quiet window: re-pass validation failures stay quiet until the fire plus that window, and page only if the unit is still missing after it. Late units still publish through re-passes as soon as they arrive; only the alert waits.

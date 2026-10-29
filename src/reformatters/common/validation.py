@@ -756,7 +756,7 @@ class CheckReplicaMatchesPrimary(Validator):
             try:
                 xr.testing.assert_equal(primary_ds[coord], replica_ds[coord])
             except AssertionError as e:
-                log.exception(e)
+                log.warning(e, exc_info=True)
                 problem_coords.append(coord)
         if problem_coords:
             return ValidationResult(
@@ -806,7 +806,7 @@ class CheckReplicaMatchesPrimary(Validator):
                 log.info(f"Comparing {var} in replica and primary stores")
                 xr.testing.assert_equal(replica_ds_last_chunk, primary_ds_last_chunk)
             except AssertionError as e:
-                log.exception(e)
+                log.warning(e, exc_info=True)
                 problem_vars.append(str(var))
 
             replica_ds_last_chunk.close()

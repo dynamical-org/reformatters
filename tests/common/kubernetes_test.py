@@ -24,6 +24,7 @@ from reformatters.common.kubernetes import (
     create_job_from_cronjob,
     load_secret,
     retry_job_name,
+    retry_number,
 )
 
 
@@ -852,6 +853,28 @@ def test_create_job_propagates_non_conflict_api_error(
         create_job_from_cronjob("weather-update", "weather-retry-r1")
     assert error.value.status == 403
     batch.read_namespaced_job.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("job_name", "expected"),
+    [
+        ("forecast-update-12345", 0),
+        ("forecast-t202610260600z", 0),
+        ("operator-job", 0),
+        ("forecast-r1-update", 0),
+        ("forecast-update-r0", 0),
+        ("forecast-update-r01", 0),
+        ("forecast-update-r1", 1),
+        ("forecast-update-r16", 16),
+        ("forecast-update-r17", 17),
+        ("a" * 52, 0),
+        (retry_job_name("a" * 52)[1], 1),
+    ],
+)
+def test_retry_number_uses_only_a_positive_terminal_suffix(
+    job_name: str, expected: int
+) -> None:
+    assert retry_number(job_name) == expected
 
 
 def test_retry_job_name_is_anchored_and_length_safe() -> None:
