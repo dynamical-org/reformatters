@@ -50,22 +50,22 @@ _FRESHNESS_DEADLINES = [
     (
         "google-weathernext3-forecast-15-day-0-1-degree-virtual",
         "2026-09-26 12:00",
-        "12h",
+        "9h",
     ),
     (
         "google-weathernext3-forecast-48-hour-0-1-degree-virtual",
         "2026-09-26 13:00",
-        "12h",
+        "9h",
     ),
     (
         "google-weathernext3-forecast-15-day-0-05-degree-virtual",
         "2026-09-26 12:00",
-        "12h",
+        "9h",
     ),
     (
         "google-weathernext3-forecast-48-hour-0-05-degree-virtual",
         "2026-09-26 13:00",
-        "12h",
+        "9h",
     ),
     ("nasa-imerg-analysis-early", "2026-09-26 16:30", "8h"),
     ("nasa-imerg-analysis-late", "2026-09-26 06:30", "18h"),
