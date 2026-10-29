@@ -29,8 +29,11 @@ import argparse
 import os
 import sys
 import tempfile
+import time
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
+from itertools import groupby
 from pathlib import Path
 from typing import Any, Literal
 
@@ -120,61 +123,77 @@ def measure_source(
     source_mode: Literal["auto", "listings"] = "auto",
 ) -> str:
     gap = source_gap(dataset.dataset_id)
-    if "weathernext" in dataset.dataset_id and gap is None:
-        bucket = (
-            "weathernext3_statistics_spatial"
-            if "weathernext3" in dataset.dataset_id
-            else "weathernext"
-        )
-        gap = source.probe_gcs(bucket)
-    units = [] if gap else list(expected_units(dataset, start, end, source))
-    evidence, source_note = (
-        WxopticonSource(source).measure(dataset.dataset_id, units)
-        if source_mode == "auto" and not gap
-        else (
-            {},
-            "anonymous listings explicitly selected"
-            if source_mode == "listings"
-            else "no anonymous source evidence",
-        )
+    weather_next = "weathernext" in dataset.dataset_id
+    pending = iter(()) if gap else expected_units(dataset, start, end, source)
+    batches = (
+        groupby(pending, key=lambda unit: unit.anchor)
+        if weather_next
+        else ((None, pending),)
     )
-    mapped = [
-        all(url in evidence for file in unit.files for url in file) for unit in units
-    ]
-    prefixes = {
-        listing_prefix(url)
-        for unit, covered in zip(units, mapped, strict=True)
-        if not covered
-        for file in unit.files
-        for url in file
-    }
-    log.info(
-        "%s: %d readiness units, %d listing prefixes",
-        dataset.dataset_id,
-        len(units),
-        len(prefixes),
-    )
-    listings = source.list_many(prefixes)
-    measured = [
-        aggregate_unit(
-            unit,
-            listings,
-            as_of=end,
-            evidence=evidence if covered else None,
-            first_unmapped=next(
-                (
-                    url
-                    for file in unit.files
-                    for url in sorted(file)
-                    if url not in evidence
-                ),
-                None,
-            )
+    measured = []
+    source_notes = set()
+    started = time.monotonic()
+    proxy_requests = source.proxy_requests
+    for anchor, batch in batches:
+        units = list(batch)
+        evidence, source_note = (
+            WxopticonSource(source).measure(dataset.dataset_id, units)
+            if source_mode == "auto" and not gap
+            else ({}, "anonymous listings explicitly selected")
+        )
+        source_notes.add(source_note)
+        mapped = [
+            all(url in evidence for file in unit.files for url in file)
+            for unit in units
+        ]
+        prefixes = {
+            listing_prefix(url)
+            for unit, covered in zip(units, mapped, strict=True)
             if not covered
-            else None,
+            for file in unit.files
+            for url in file
+        }
+        log.info(
+            "%s %s: %d readiness units, %d listing prefixes",
+            dataset.dataset_id,
+            anchor or "",
+            len(units),
+            len(prefixes),
         )
-        for unit, covered in zip(units, mapped, strict=True)
-    ]
+        listings = source.list_many(prefixes)
+        source_notes.update(listing.note for listing in listings.values())
+        for unit, covered in zip(units, mapped, strict=True):
+            result = aggregate_unit(
+                unit,
+                listings,
+                as_of=end,
+                evidence=evidence if covered else None,
+                first_unmapped=next(
+                    (
+                        url
+                        for file in unit.files
+                        for url in sorted(file)
+                        if url not in evidence
+                    ),
+                    None,
+                )
+                if not covered
+                else None,
+            )
+            if weather_next:
+                result = replace(
+                    result,
+                    unit=replace(unit, files=()),
+                    file_count=len(unit.files),
+                    file_arrivals={},
+                )
+            measured.append(result)
+    if weather_next and not gap:
+        source_notes.add(
+            f"proxy capture: {source.proxy_requests - proxy_requests} requests in "
+            f"{time.monotonic() - started:.1f}s elapsed, paced at at most 2 requests/s; "
+            "capture duration is not publication latency"
+        )
     return render_dataset(
         dataset,
         cron,
@@ -182,7 +201,7 @@ def measure_source(
         runtime,
         end,
         gap,
-        {source_note, *(listing.note for listing in listings.values())},
+        source_notes,
         excluded=excluded,
     )
 

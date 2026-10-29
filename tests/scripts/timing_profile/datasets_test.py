@@ -97,19 +97,19 @@ def test_weathernext3_units_require_every_statistic_for_each_variable_and_lead(
         freq=config.append_dim_frequency,
         inclusive="left",
     )
-    assert len(units) == len(anchors) * len(config.data_vars) * len(leads)
+    assert len(units) == len(anchors)
     for unit in units:
-        var_path, lead = unit.tier.split(" f")
-        var = next(var for var in config.data_vars if var.path == var_path)
-        lead_index = int(lead) - 1
+        assert unit.tier == "run"
         assert unit.anchor in anchors
         assert unit.anchor_minus_label == 0
-        assert unit.files == (
+        assert set(unit.files) == {
             frozenset(
-                f"{source_store_url(unit.anchor)}/{var.internal_attrs.source_name}_{statistic}/c/{lead_index}/0/0"
+                f"https://wn.dynamical.org/chunks/{source_store_url(unit.anchor).split('/', 3)[-1]}/{var.internal_attrs.source_name}_{statistic}/c/{lead - 1}/0/0"
                 for statistic in STATISTICS
-            ),
-        )
+            )
+            for var in config.data_vars
+            for lead in leads
+        }
 
 
 @pytest.mark.parametrize(
@@ -254,10 +254,11 @@ def test_weathernext_unit_contains_every_configured_member_and_level(
         )
     )
     source.close()
-    pressure = next(unit for unit in units if unit.tier.startswith("pressure_level/"))
-    assert len(pressure.files) == 1
-    assert len(pressure.files[0]) == 2 * len(coords["pressure_level"])
-    assert all(url.startswith("gs://weathernext/") for url in pressure.files[0])
+    (unit,) = units
+    assert unit.tier == "run"
+    pressure = next(file for file in unit.files if "/temperature/" in next(iter(file)))
+    assert len(pressure) == 2 * len(coords["pressure_level"])
+    assert all(url.startswith("https://wn.dynamical.org/chunks/") for url in pressure)
 
 
 def test_ecmwf_materialized_units_measure_the_operational_gcs_primary() -> None:

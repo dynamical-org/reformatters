@@ -30,7 +30,6 @@ from reformatters.ecmwf.archive_gribs.request_shards import initialization_selec
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.source_file_coord import (
     OpenDataSourceFileCoord,
 )
-from reformatters.google.weathernext_virtual.listing import PROXY_LOCATION_PREFIX
 from reformatters.google.weathernext_virtual.region_job import (
     WeatherNextVirtualRegionJob,
 )
@@ -266,20 +265,9 @@ def expected_units(
                         else "tier 2 (extension)"
                     )
                 if isinstance(job, WeatherNextVirtualRegionJob):
-                    tier = f"{coord.data_vars[0].path} f{int(coord.lead_time.total_seconds() / 3600):03}"
                     files = frozenset(
                         canonical_url(chunk.location)
                         for chunk in job._source_chunks(coord)  # noqa: SLF001
-                    )
-                    # Proxy URLs map directly to GCS object keys.
-                    bucket = (
-                        "weathernext3_statistics_spatial"
-                        if "weathernext3" in dataset_id
-                        else "weathernext"
-                    )
-                    files = frozenset(
-                        url.replace(PROXY_LOCATION_PREFIX, f"gs://{bucket}/")
-                        for url in files
                     )
                 else:
                     files = usable_file(coord)

@@ -1,17 +1,25 @@
+import gzip
 import hashlib
 import json
 import re
+import time
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from html import unescape
 from pathlib import Path
+from threading import Lock
 from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
 import pandas as pd
 
 from reformatters.common.logging import get_logger
+from reformatters.common.retry import retry
+from reformatters.google.weathernext_virtual.listing import (
+    OBJECTS_LOCATION,
+    PROXY_LOCATION_PREFIX,
+)
 
 log = get_logger(__name__)
 
@@ -20,6 +28,7 @@ log = get_logger(__name__)
 class Listing:
     objects: dict[str, pd.Timestamp]
     note: str
+    provenance: str = "current_object_write"
 
 
 def canonical_url(url: str) -> str:
@@ -39,6 +48,17 @@ def canonical_url(url: str) -> str:
 
 
 def listing_prefix(url: str) -> str:
+    if url.startswith(PROXY_LOCATION_PREFIX):
+        root, _, chunk = url.partition("/predictions.zarr/")
+        variable = chunk.split("/", 1)[0]
+        if "weathernext_3_" in root:
+            variable = variable.rsplit("_", 1)[0] + "_"
+        return (
+            root
+            + "/predictions.zarr/"
+            + variable
+            + ("" if "weathernext_3_" in root else "/")
+        )
     return canonical_url(url).rsplit("/", 1)[0] + "/"
 
 
@@ -61,6 +81,9 @@ class TimestampSource:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.workers = workers
         self.client = httpx.Client(timeout=60, follow_redirects=True)
+        self.proxy_requests = 0
+        self._proxy_lock = Lock()
+        self._next_proxy_request = 0.0
 
     def close(self) -> None:
         self.client.close()
@@ -81,9 +104,12 @@ class TimestampSource:
             return Listing(
                 {key: pd.Timestamp(value) for key, value in payload["objects"].items()},
                 payload["note"],
+                payload.get("provenance", "current_object_write"),
             )
         parsed = urlsplit(prefix)
-        if parsed.scheme == "s3":
+        if prefix.startswith(PROXY_LOCATION_PREFIX):
+            result = self._weathernext(prefix)
+        elif parsed.scheme == "s3":
             result = self._s3(parsed.netloc, unquote(parsed.path.lstrip("/")))
         elif parsed.scheme == "gs":
             result = self._gcs(parsed.netloc, unquote(parsed.path.lstrip("/")))
@@ -105,6 +131,7 @@ class TimestampSource:
                     "prefix": prefix,
                     "fetched_at": pd.Timestamp.now(tz="UTC").isoformat(),
                     "note": result.note,
+                    "provenance": result.provenance,
                     "objects": {
                         key: value.isoformat() for key, value in result.objects.items()
                     },
@@ -112,6 +139,81 @@ class TimestampSource:
             )
         )
         return result
+
+    def _weathernext(self, prefix: str) -> Listing:
+        key = prefix.removeprefix(PROXY_LOCATION_PREFIX)
+        params = {"prefix": key, "maxResults": "1000"}
+        if "weathernext_2_" in key:
+            members = "{" + ",".join(map(str, range(64))) + "}"
+            params.update(matchGlob=key + members + ".*", delimiter="/")
+        objects = {}
+        page = 0
+        raw_path = self.cache_dir / (
+            hashlib.sha256(prefix.encode()).hexdigest() + ".jsonl.gz"
+        )
+        temporary = raw_path.with_suffix(".gz.tmp")
+        with gzip.open(temporary, "wt", compresslevel=1) as raw:
+            while True:
+                page += 1
+
+                def get_page(page: int = page) -> httpx.Response:
+                    waiting = time.monotonic()
+                    with self._proxy_lock:
+                        time.sleep(
+                            max(0.0, self._next_proxy_request - time.monotonic())
+                        )
+                        self._next_proxy_request = time.monotonic() + 0.5
+                        self.proxy_requests += 1
+                    started = time.monotonic()
+                    started_at = pd.Timestamp.now(tz="UTC").isoformat()
+                    status = None
+                    try:
+                        response = self.client.get(OBJECTS_LOCATION, params=params)
+                        status = response.status_code
+                    finally:
+                        record = {
+                            "prefix": prefix,
+                            "page": page,
+                            "started_at": started_at,
+                            "ended_at": pd.Timestamp.now(tz="UTC").isoformat(),
+                            "request_seconds": time.monotonic() - started,
+                            "pacing_wait_seconds": started - waiting,
+                            "status": status,
+                        }
+                        with (self.cache_dir / "weathernext-requests.jsonl").open(
+                            "a"
+                        ) as requests:
+                            requests.write(json.dumps(record) + "\n")
+                    if (
+                        response.status_code in {408, 429}
+                        or response.status_code >= 500
+                    ):
+                        response.raise_for_status()
+                    return response
+
+                response = retry(
+                    get_page,
+                    retryable_exceptions=(httpx.RequestError, httpx.HTTPStatusError),
+                )
+                response.raise_for_status()
+                payload = response.json()
+                for entry in payload.get("items", []):
+                    assert entry["name"].startswith(key)
+                    raw.write(json.dumps(entry) + "\n")
+                    if int(entry["size"]) > 0:
+                        objects[PROXY_LOCATION_PREFIX + entry["name"]] = pd.Timestamp(
+                            entry["timeFinalized"]
+                        ).tz_convert(None)
+                token = payload.get("nextPageToken")
+                if token is None:
+                    break
+                params["pageToken"] = token
+        temporary.replace(raw_path)
+        return Listing(
+            objects,
+            "WeatherNext proxy timeFinalized; reconstructed current-generation source availability, not first observed proxy visibility; reuploads can overstate arrival",
+            "reconstructed_source_finalization",
+        )
 
     def _s3(self, bucket: str, prefix: str) -> Listing:
         objects = {}
@@ -145,16 +247,6 @@ class TimestampSource:
                     objects, "S3 LastModified; overwrites can overstate arrival"
                 )
             params["continuation-token"] = token
-
-    def probe_gcs(self, bucket: str) -> str | None:
-        response = self.client.get(
-            f"https://storage.googleapis.com/storage/v1/b/{bucket}/o",
-            params={"maxResults": "1", "fields": "items(name,updated)"},
-        )
-        if response.status_code in {401, 403, 404}:
-            return f"GCS HTTP {response.status_code}; no anonymous source timestamps; proxy arrival timing unverified"
-        response.raise_for_status()
-        return None
 
     def _gcs(self, bucket: str, prefix: str) -> Listing:
         objects = {}

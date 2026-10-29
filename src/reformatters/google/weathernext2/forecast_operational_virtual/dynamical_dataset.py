@@ -57,7 +57,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
         cron_job_name_prefix = self.dataset_id.replace("weathernext2", "wn2")
         update = ReformatCronJob(
             name=f"{cron_job_name_prefix}-update",
-            schedule="5 1,7,13,19 * * *",
+            schedule="3 0,6,12,18 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6, minutes=4, seconds=23),
             active_deadline=timedelta(hours=6, minutes=4, seconds=23),
@@ -72,7 +72,7 @@ class GoogleWeathernext2ForecastOperationalVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=12)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=9)),
             validation.CheckVirtualManifestCompleteness(
                 min_present_fraction=(0.05, 1.0)
             ),
