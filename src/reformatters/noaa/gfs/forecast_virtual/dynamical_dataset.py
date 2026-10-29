@@ -7,6 +7,7 @@ from pydantic import Field
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
@@ -34,6 +35,10 @@ class NoaaGfsForecastVirtualDataset(
     )
 
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=2, seconds=31)
+
+    materialized_update_triggers: ClassVar[tuple[MaterializedUpdateTrigger, ...]] = (
+        MaterializedUpdateTrigger(target_cronjob="noaa-gfs-forecast-update"),
+    )
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(

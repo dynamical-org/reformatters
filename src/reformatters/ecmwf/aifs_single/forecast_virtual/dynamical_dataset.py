@@ -7,6 +7,7 @@ from pydantic import Field
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.storage import (
     IcechunkVirtualConfig,
     manifest_append_dim_split,
@@ -38,6 +39,10 @@ class EcmwfAifsSingleForecastVirtualDataset(
     )
 
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=44)
+
+    materialized_update_triggers: ClassVar[tuple[MaterializedUpdateTrigger, ...]] = (
+        MaterializedUpdateTrigger(target_cronjob="ecmwf-aifs-single-forecast-update"),
+    )
 
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(

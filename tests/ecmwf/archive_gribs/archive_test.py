@@ -1,4 +1,6 @@
 from collections.abc import Iterator, Sequence
+from contextlib import nullcontext
+from functools import partial
 from pathlib import Path, PurePosixPath
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -6,6 +8,8 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
+from reformatters.common.config import Config, Env
+from reformatters.ecmwf.archive_gribs import forecast_46_day_archiver as archiver_module
 from reformatters.ecmwf.archive_gribs.archive import (
     Publication,
     archive_initialization,
@@ -660,3 +664,64 @@ def test_a_fully_archived_initialization_does_not_wait(
 
     archive_bucket["constraints"].assert_not_called()
     assert clock.sleeps == []
+
+
+@pytest.mark.parametrize(
+    ("release_offset", "expected_triggers"),
+    [("55h", 2), ("56h", 2), ("56h2m", 0)],
+)
+def test_late_publication_is_archived_before_triggering_both_consumers(
+    tmp_path: Path,
+    archive_bucket: dict[str, MagicMock],
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
+    release_offset: str,
+    expected_triggers: int,
+) -> None:
+    monkeypatch.setattr(Config, "env", Env.prod)
+    release = INIT_TIME + pd.Timedelta(release_offset)
+    unpublished_probes = int((release - WAIT_START) / POLL_INTERVAL)
+    probe_starts = ecds_publishes(
+        archive_bucket, clock, ["unpublished"] * unpublished_probes + ["published"]
+    )
+    archiver = archiver_module.EcmwfIfsEns46DayGribArchiver()
+    with (
+        patch.object(type(archiver), "_monitor", return_value=nullcontext()),
+        patch.object(
+            type(archiver),
+            "init_times_to_archive",
+            return_value=[INIT_TIME.tz_localize(None)],
+        ),
+        patch.object(archiver_module.kubernetes, "load_secret", return_value=None),
+        patch.object(
+            archiver_module, "initialization_selections", return_value=SELECTIONS
+        ),
+        patch.object(
+            archiver_module,
+            "archive_initialization",
+            side_effect=partial(archive_initialization, work_dir=tmp_path),
+        ),
+        patch.object(archiver_module.kubernetes, "create_job_from_cronjob") as submit,
+    ):
+        events = MagicMock()
+        events.attach_mock(archive_bucket["copy_local_file"], "upload")
+        events.attach_mock(submit, "submit")
+        archiver.archive_grib_files("late-release", concurrent_requests=1)
+
+    assert probe_starts[-1] == min(
+        release, INIT_TIME + archiver_module.PUBLICATION_DEADLINE
+    )
+    assert submit.call_count == expected_triggers
+    if expected_triggers:
+        assert_retrieved(archive_bucket)
+        assert [call[0] for call in events.mock_calls] == ["upload"] * (
+            2 * len(SELECTIONS)
+        ) + ["submit"] * 2
+        assert {call.args[0] for call in submit.call_args_list} == {
+            "ecmwf-ifs-ens-46-day-daily-update",
+            "ecmwf-ifs-ens-46-day-6-hourly-update",
+        }
+        assert all(call.kwargs == {"kind": "trigger"} for call in submit.call_args_list)
+    else:
+        archive_bucket["request"].return_value.retrieve.assert_not_called()
+        archive_bucket["copy_local_file"].assert_not_called()

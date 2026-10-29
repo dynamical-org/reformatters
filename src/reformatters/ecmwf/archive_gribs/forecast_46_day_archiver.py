@@ -9,16 +9,16 @@ datasets — what a reformatter reading this bucket can expect to find.
 import os
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import Annotated, Any, Final, Literal
+from typing import Annotated, Any, ClassVar, Final, Literal
 
 import pandas as pd
 import typer
 
 from reformatters.common import kubernetes
 from reformatters.common.config import Config
-from reformatters.common.iterating import digest
 from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
+from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.operational import OperationalResources
 from reformatters.ecmwf.archive_gribs.archive import (
     DEFAULT_CONCURRENT_REQUESTS,
@@ -37,7 +37,7 @@ ARCHIVE_BASE_URL: Final = f"https://s3-us-west-2.amazonaws.com/us-west-2.opendat
 # 2026-10-01, with some selections visible about 2 minutes before the rest).
 PUBLICATION_DELAY: Final = pd.Timedelta("51h")
 # How long after its 00 UTC reference time a run keeps polling for the newest initialization.
-PUBLICATION_DEADLINE: Final = pd.Timedelta("54h30m")
+PUBLICATION_DEADLINE: Final = pd.Timedelta("56h")
 LICENCE_DELAY: Final = pd.Timedelta("48h")
 # ECMWF IFS ENS 46-day initializes at 00 UTC only.
 INIT_FREQUENCY: Final = pd.Timedelta("1D")
@@ -123,6 +123,13 @@ def latest_init_time(now: pd.Timestamp, delay: pd.Timedelta) -> pd.Timestamp:
 class EcmwfIfsEns46DayGribArchiver(OperationalResources):
     """Retrieves ECMWF IFS ENS 46-day initializations from ECDS into dynamical's GRIB archive."""
 
+    materialized_update_triggers: ClassVar[tuple[MaterializedUpdateTrigger, ...]] = (
+        MaterializedUpdateTrigger(target_cronjob="ecmwf-ifs-ens-46-day-daily-update"),
+        MaterializedUpdateTrigger(
+            target_cronjob="ecmwf-ifs-ens-46-day-6-hourly-update"
+        ),
+    )
+
     @property
     def dataset_id(self) -> str:
         return "ecmwf-ifs-ens-46-day-gribs"
@@ -198,12 +205,8 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                     newest_ready = ready
 
             if newest_ready and Config.is_prod and dst_root_path == ARCHIVE_RCLONE_ROOT:
-                for frequency in MATERIALIZED_PRODUCT_ECDS_VARIABLES:
-                    cron_name = f"ecmwf-ifs-ens-46-day-{frequency}-update"
-                    kubernetes.create_job_from_cronjob(
-                        cron_name,
-                        f"{cron_name}-t{digest([reformat_job_name], length=4)}",
-                    )
+                for trigger in self.materialized_update_triggers:
+                    trigger.dispatch(max(init_times))
 
     def init_times_to_archive(
         self, init_times_back: int, now: pd.Timestamp | None = None

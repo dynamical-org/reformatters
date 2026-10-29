@@ -29,6 +29,7 @@ class EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset(
         workers = self.num_variable_groups()
         update = ReformatCronJob(
             name="ecmwf-ifs-ens-46-day-6-hourly-update",
+            # Backstop schedule. Also triggered ASAP by ecmwf-ifs-ens-46-day-gribs.
             schedule="5 10 * * *",
             suspend=False,
             concurrency_policy="Allow",

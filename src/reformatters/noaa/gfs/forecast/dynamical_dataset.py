@@ -20,6 +20,7 @@ class NoaaGfsForecastDataset(DynamicalDataset[NoaaDataVar, NoaaGfsSourceFileCoor
         workers = 2 * self.num_variable_groups()
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
+            # Backstop schedule. Also triggered ASAP by noaa-gfs-forecast-virtual.
             schedule="44 5,11,17,23 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),

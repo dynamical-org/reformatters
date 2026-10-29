@@ -219,11 +219,12 @@ def test_archive_triggers_after_completion(
                 "ecmwf-ifs-ens-46-day-6-hourly-update",
             }
             for call in first_calls:
-                assert len(call.args[1]) in (39, 42)
+                assert len(call.args[1]) <= 52
                 assert len(f"{call.args[1]}-999-xxxxx") <= 63
-                assert not call.kwargs
+                assert call.args[1].endswith(f"-t{max(init_times):%Y%m%d%H%M}z")
+                assert call.kwargs == {"kind": "trigger"}
         submit.reset_mock()
-        archiver.archive_grib_files("archive-job-123", dst_root_path=destination)
+        archiver.archive_grib_files("different-archive-job", dst_root_path=destination)
         assert submit.call_args_list == first_calls
 
 
@@ -301,7 +302,7 @@ def test_only_the_newest_initialization_waits_for_publication(
     }
     assert all(init_time.tz is None for init_time in deadlines)
     assert deadlines == {
-        pd.Timestamp("2026-08-18"): pd.Timestamp("2026-08-20T06:30", tz="UTC"),
+        pd.Timestamp("2026-08-18"): pd.Timestamp("2026-08-20T08:00", tz="UTC"),
         pd.Timestamp("2026-08-17"): None,
         pd.Timestamp("2026-08-16"): None,
     }
