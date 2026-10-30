@@ -69,6 +69,14 @@ uv sync \
     --no-install-project
 EOT
 
+COPY deploy/profiler-requirements.txt /_profiler/
+RUN --mount=type=cache,target=/root/.cache \
+    uv pip install \
+        --target /opt/profiler \
+        --no-deps \
+        --require-hashes \
+        -r /_profiler/profiler-requirements.txt
+
 # Now install the APPLICATION from `/src` without any dependencies.
 # `/src` will NOT be copied into the runtime container.
 # As of uv 0.4.11, you can also use
@@ -129,6 +137,7 @@ EOT
 # Copy the pre-built `/app` directory to the runtime container
 # and change the ownership to user app and group app in one step.
 COPY --from=build --chown=app:app /app /app
+COPY --from=build /opt/profiler /opt/profiler
 
 COPY . /app/
 
@@ -139,4 +148,5 @@ WORKDIR /app
 RUN <<EOT
 python -V
 python src/reformatters/__main__.py --help
+/opt/profiler/bin/py-spy --version
 EOT

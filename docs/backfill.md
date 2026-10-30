@@ -14,6 +14,14 @@ Run a backfill only after the dataset's code is merged to `main`: the GitHub act
 - **GitHub Action (preferred).** The [Manual: Backfill](https://github.com/dynamical-org/reformatters/actions/workflows/manual-backfill.yml) action (workflow_dispatch, requires repo write access) runs only from `main`, waits for main's tip to finish deploying, and submits the job with that deploy's image. It exposes only the safe operations.
 - **Kubernetes from your machine.** `DYNAMICAL_ENV=prod uv run main <dataset-id> backfill-kubernetes [flags]`, then track with `kubectl get jobs`. Complete README.md > Deploying to the cloud > Setup first.
 
+## Profiling
+
+Manual Backfill exposes an opt-in `profile` checkbox (CLI `--profile`). It selects a bounded, disposable destination and enables phase timings, stack samples and resource evidence. It is off by default. The supported request, acceptance gates and cleanup commands are in the [profiling runbook](../src/reformatters/ecmwf/ifs_ens/profiling/README.md); other requests fail validation.
+
+Use a fresh, uncatalogued scratch store for profiling. Keep the source range short and parallelism low; set explicit runtime, transfer, storage and cost caps before launch. A partial run is useful if its evidence identifies the completed and failed work.
+
+Retain phase timings, CPU samples, memory, network and disk measurements with the image and worker assignment. Store that evidence outside coordination paths, which successful backfills clean up. Export and verify the evidence before deleting data, and give profiles their own retention deadline.
+
 ## Operations
 
 Pick the operation by what you're doing (action operation name / equivalent CLI flags):
@@ -38,12 +46,6 @@ Worker 0 creates the branch from `main` in place of the generated temporary bran
 The dataset must already exist on `main`; the branch must not exist. `main`, `_job_` names, empty or whitespace-padded names, Zarr/replica/virtual stores and metadata-only runs are unsupported. Overwrite guards read `main`; add `--overwrite-metadata` for expansion or new arrays.
 
 An existing branch always fails worker-0 setup, including any worker-0 retry after branch creation. On failure, stop the Kubernetes job and all its workers before inspecting or deleting the branch, then launch a fresh job.
-
-## Profiling a bounded backfill
-
-Use a fresh, uncatalogued scratch store for profiling. Keep the source range short and parallelism low; set explicit runtime, transfer, storage and cost caps before launch. A partial run is useful if its evidence identifies the completed and failed work.
-
-Retain phase timings, CPU samples, memory, network and disk measurements with the image and worker assignment. Store that evidence outside coordination paths, which successful backfills clean up. Export and verify the evidence before deleting data, and give profiles their own retention deadline.
 
 ## Tuning parallelism
 

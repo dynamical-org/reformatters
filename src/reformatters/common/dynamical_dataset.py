@@ -408,6 +408,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
         keep_branch: str | None = None,
+        profile: bool = False,
     ) -> None:
         """Run dataset reformatting using Kubernetes index jobs.
 
@@ -416,6 +417,27 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         assert self._can_run_in_kubernetes(), (
             "backfill_kubernetes is only supported in prod environment"
         )
+
+        if profile:
+            from reformatters.ecmwf.ifs_ens.profiling.driver import (  # noqa: PLC0415
+                backfill_profile,
+            )
+
+            backfill_profile(
+                self,
+                append_dim_end=append_dim_end,
+                jobs_per_pod=jobs_per_pod,
+                max_parallelism=max_parallelism,
+                filter_start=filter_start,
+                filter_end=filter_end,
+                filter_contains=filter_contains,
+                filter_variable_names=filter_variable_names,
+                docker_image=docker_image,
+                overwrite_chunks=overwrite_chunks,
+                overwrite_metadata=overwrite_metadata,
+                keep_branch=keep_branch,
+            )
+            return
 
         if keep_branch is not None:
             self._validate_keep_branch(keep_branch, overwrite_chunks)
@@ -451,15 +473,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             log.info("Metadata refresh complete, no chunk data written.")
             return
 
-        reformat_jobs = [
-            r
-            for r in self.operational_kubernetes_resources(image_tag="placeholder")
-            if isinstance(r, ReformatCronJob)
-        ]
-        assert len(reformat_jobs) == 1, (
-            f"Can't infer kubernetes resources for backfill job from {reformat_jobs}."
-        )
-        reformat_job = reformat_jobs[0]
+        reformat_job = self._backfill_resource()
 
         image_tag = docker_image or get_deployed_cronjob_image(reformat_job.name)
         log.info(f"Using image {image_tag}")
@@ -520,13 +534,45 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         if keep_branch is not None:
             command.append(f"--keep-branch={keep_branch}")
 
-        kubernetes_job = Job(
+        kubernetes_job = self._backfill_job(
+            command, image_tag, workers_total, parallelism, reformat_job
+        )
+
+        subprocess.run(
+            ["/usr/bin/kubectl", "apply", "-f", "-"],
+            input=json.dumps(kubernetes_job.as_kubernetes_object()),
+            text=True,
+            check=True,
+        )
+
+        log.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
+
+    def _backfill_resource(self) -> ReformatCronJob:
+        reformat_jobs = [
+            r
+            for r in self.operational_kubernetes_resources(image_tag="placeholder")
+            if isinstance(r, ReformatCronJob)
+        ]
+        assert len(reformat_jobs) == 1, (
+            f"Can't infer kubernetes resources for backfill job from {reformat_jobs}."
+        )
+        return reformat_jobs[0]
+
+    def _backfill_job(
+        self,
+        command: Sequence[str],
+        image: str,
+        workers_total: int,
+        parallelism: int,
+        resource: ReformatCronJob,
+    ) -> Job:
+        return Job(
             command=command,
-            image=image_tag,
+            image=image,
             dataset_id=self.dataset_id,
             workers_total=workers_total,
             parallelism=parallelism,
-            **reformat_job.model_dump(
+            **resource.model_dump(
                 include={
                     "cpu",
                     "memory",
@@ -537,14 +583,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 }
             ),
         )
-        subprocess.run(
-            ["/usr/bin/kubectl", "apply", "-f", "-"],
-            input=json.dumps(kubernetes_job.as_kubernetes_object()),
-            text=True,
-            check=True,
-        )
-
-        log.info(f"Submitted kubernetes job {kubernetes_job.job_name}")
 
     def backfill_local(
         self,

@@ -61,6 +61,14 @@ jobs:
       - name: Install this project
         run: "uv pip install -e ."
 
+      - name: Install profiling sampler
+        if: matrix.suite == 'other'
+        run: |
+          uv pip install --target "$RUNNER_TEMP/profiler" --no-deps --require-hashes -r deploy/profiler-requirements.txt
+          test -x "$RUNNER_TEMP/profiler/bin/py-spy"
+          "$RUNNER_TEMP/profiler/bin/py-spy" --version
+          echo "PY_SPY_TEST_BINARY=$RUNNER_TEMP/profiler/bin/py-spy" >> "$GITHUB_ENV"
+
       - name: Run Ruff
         if: matrix.suite == 'other'
         run: uv run ruff check --output-format=github

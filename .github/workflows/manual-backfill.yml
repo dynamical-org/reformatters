@@ -95,6 +95,11 @@ name: 'Manual: Backfill'
         required: false
         type: string
         default: '10'
+      profile:
+        description: Profile a bounded ENS scratch backfill (requires acceptance of public scratch storage and code-only credential isolation; see the profiling runbook).
+        required: false
+        type: boolean
+        default: false
 concurrency:
   group: k8s-manual-${{ github.actor }}-${{ github.run_id }}
   cancel-in-progress: false
@@ -191,11 +196,15 @@ jobs:
         FILTER_VARIABLE_NAMES: ${{ github.event.inputs.filter_variable_names }}
         JOBS_PER_POD: ${{ github.event.inputs.jobs_per_pod }}
         MAX_PARALLELISM: ${{ github.event.inputs.max_parallelism }}
+        PROFILE: ${{ github.event.inputs.profile }}
       run: |
         #!/bin/bash
         set -euo pipefail
 
         ARGS=()
+        if [ "${PROFILE}" = "true" ]; then
+          ARGS+=(--profile)
+        fi
         # overwrite-metadata alone rewrites metadata in place and launches no workers,
         # so the CLI rejects the image those workers would have run.
         if [ "${OPERATION}" != "overwrite-metadata" ]; then
