@@ -5,10 +5,13 @@ import re
 import tempfile
 import time
 import xml.etree.ElementTree as ET
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from html import unescape
 from pathlib import Path
+from typing import IO
 from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
@@ -57,12 +60,19 @@ def listing_prefix(url: str) -> str:
     return canonical_url(url).rsplit("/", 1)[0] + "/"
 
 
-def write_atomic(path: Path, text: str) -> None:
+@contextmanager
+def atomic_file(path: Path) -> Iterator[IO[bytes]]:
+    """Yield a private file that replaces path only once it is closed."""
     with tempfile.NamedTemporaryFile(
-        "w", dir=path.parent, prefix=path.name, suffix=".tmp", delete=False
+        dir=path.parent, prefix=path.name, suffix=".tmp", delete=False
     ) as file:
-        file.write(text)
+        yield file
     Path(file.name).replace(path)
+
+
+def write_atomic(path: Path, text: str) -> None:
+    with atomic_file(path) as file:
+        file.write(text.encode())
 
 
 def parse_http_listing(url: str, body: str) -> dict[str, pd.Timestamp]:
@@ -206,11 +216,12 @@ class TimestampSource:
         raw_path = self.cache_dir / (
             hashlib.sha256(prefix.encode()).hexdigest() + ".jsonl.gz"
         )
-        temporary = raw_path.with_suffix(".gz.tmp")
-        with gzip.open(temporary, "wt", compresslevel=1) as raw:
+        with (
+            atomic_file(raw_path) as file,
+            gzip.open(file, "wt", compresslevel=1) as raw,
+        ):
             while True:
                 page += 1
-
                 response = self.get(OBJECTS_LOCATION, params, (prefix, page))
                 response.raise_for_status()
                 payload = response.json()
@@ -225,7 +236,6 @@ class TimestampSource:
                 if token is None:
                     break
                 params["pageToken"] = token
-        temporary.replace(raw_path)
         return Listing(
             objects,
             "WeatherNext proxy timeFinalized; reconstructed current-generation source availability, not first observed proxy visibility; reuploads can overstate arrival",

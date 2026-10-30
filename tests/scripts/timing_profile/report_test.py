@@ -262,6 +262,7 @@ def test_mrms_reports_radar_only_and_keeps_constants() -> None:
     )
     assert "### radar-only (exception)" in rendered
     assert "keep constants; review manually" in rendered
+    assert "radar-only latency matters most" in rendered
     assert "| Cron |" not in rendered
     assert "S candidate" not in rendered
     assert "| chosen |" not in rendered
@@ -784,5 +785,19 @@ def test_triggered_consumer_reports_its_producer_and_backstop() -> None:
         set(),
         triggered_by=["noaa-gfs-forecast-virtual"],
     )
-    assert "Triggered by noaa-gfs-forecast-virtual; the cron is a backstop" in rendered
+    assert (
+        "Triggered by noaa-gfs-forecast-virtual; the cron is a backstop at the first readiness tier's T, and max_delay matches its offset."
+        in rendered
+    )
     assert "Uses latest class and chosen backstop T" in rendered
+    moved = render_dataset(
+        dataset,
+        cron.model_copy(update={"schedule": "50 5,11,17,23 * * *"}),
+        units,
+        runtime(),
+        units[-1].unit.anchor + pd.Timedelta("6h"),
+        None,
+        set(),
+        triggered_by=["noaa-gfs-forecast-virtual"],
+    )
+    assert "max_delay differs from its offset" in moved

@@ -21,7 +21,7 @@ _FRESHNESS_DEADLINES = [
     ("noaa-gefs-analysis-0-25-degree-virtual", "2026-09-27 00:00", "4h09m"),
     ("noaa-gefs-forecast-10-day-0-25-degree-virtual", "2026-09-27 00:00", "4h09m"),
     ("noaa-gefs-forecast-16-day-0-5-degree-virtual", "2026-09-27 00:00", "4h08m"),
-    ("noaa-gefs-forecast-35-day-0-5-degree-virtual", "2026-09-27 00:00", "3h50m"),
+    ("noaa-gefs-forecast-35-day-0-5-degree-virtual", "2026-09-27 00:00", "3h56m"),
     ("noaa-hrrr-forecast-48-hour", "2026-09-27 00:00", "2h04m"),
     ("noaa-hrrr-analysis", "2026-09-26 21:00", "3h10m"),
     ("noaa-hrrr-analysis-virtual", "2026-09-26 23:00", "80m"),
@@ -36,7 +36,7 @@ _FRESHNESS_DEADLINES = [
     ("noaa-rrfs-ens-forecast-virtual", "2026-09-27 00:00", "122m"),
     ("noaa-refs-forecast-hourly-virtual", "2026-09-27 00:00", "150m"),
     ("noaa-refs-forecast-3-hourly-virtual", "2026-09-27 00:00", "2h36m"),
-    ("noaa-mrms-conus-analysis-hourly", "2026-09-27 00:00", "5m"),
+    ("noaa-mrms-conus-analysis-hourly", "2026-09-27 00:00", "3m"),
     ("ecmwf-ifs-ens-forecast-15-day-0-25-degree", "2026-09-27 00:00", "8h40m"),
     ("ecmwf-ifs-ens-15-day-deprecated-zarr-v3", "2026-09-27 00:00", "9h20m"),
     ("ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree", "2026-09-23 00:00", "58h05m"),
@@ -179,7 +179,7 @@ def test_aifs_validation_requires_the_current_init(
     [
         ("noaa-hrrr-forecast-18-hour-virtual", "2026-09-27 00:51", "2026-09-26 23:00"),
         ("noaa-gfs-forecast-virtual", "2026-09-27 03:49", "2026-09-26 18:00"),
-        ("noaa-mrms-conus-analysis-hourly", "2026-09-27 05:04", "2026-09-27 04:00"),
+        ("noaa-mrms-conus-analysis-hourly", "2026-09-27 05:02", "2026-09-27 04:00"),
         ("noaa-hrrr-analysis", "2026-09-27 03:58", "2026-09-27 00:00"),
     ],
 )

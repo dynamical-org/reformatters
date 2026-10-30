@@ -208,3 +208,34 @@ def test_trigger_producers_include_archivers() -> None:
         )
         for name in producers
     )
+
+
+def test_triggered_consumer_is_found_by_its_cronjob_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        TimestampSource, "list", lambda self, prefix: Listing({}, "no objects")
+    )
+    output = tmp_path / "values.md"
+    main(
+        [
+            "--dataset",
+            "noaa-gfs-forecast",
+            "--days",
+            "1",
+            "--source",
+            "listings",
+            "--as-of",
+            "2026-10-26T00:00",
+            "--checkins-dir",
+            str(tmp_path),
+            "--cache-dir",
+            str(tmp_path / "capture"),
+            "--output",
+            str(output),
+        ]
+    )
+    assert (
+        "Triggered by noaa-gfs-forecast-virtual; the cron is a backstop at the first readiness tier's T, and max_delay matches its offset."
+        in output.read_text()
+    )

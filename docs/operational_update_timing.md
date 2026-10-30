@@ -27,7 +27,7 @@ Run the advisory profiler locally:
 uv run python -m scripts.timing_profile --days 365 --checkins-dir /path/to/checkins --output /tmp/values-table.md
 ```
 
-Startup (`L`), processing (`R`), and validation (`V`) come only from Sentry check-ins. An operator exports each dataset's update monitor and its `-validate` monitor as `<monitor slug>.json` into one directory and passes it as `--checkins-dir`; alternatively, omit `--checkins-dir` to fetch fresh check-ins using a read-only `SENTRY_AUTH_TOKEN` supplied in the environment. See `--help` for the export format and measurement limitations. Without check-ins, deadlines, validation grace, and re-pass/page estimates stay unmeasured and keep their constants, and virtual polling fires assume `L = 0`, the latest acceptable fire. The tool changes no dataset code and has no recurring schedule.
+Startup (`L`), processing (`R`), and validation (`V`) come only from Sentry check-ins. An operator exports each dataset's update monitor and its `-validate` monitor as `<monitor slug>.json` into one directory and passes it as `--checkins-dir`; alternatively, omit `--checkins-dir` to fetch fresh check-ins using a read-only `SENTRY_AUTH_TOKEN` supplied in the environment. See `--help` for the export format and measurement limitations. Without check-ins, virtual deadlines, validation grace, and runtime-based re-pass/page rates stay unmeasured and keep their constants, and virtual polling fires assume `L = 0`, the latest acceptable fire. The tool changes no dataset code and has no recurring schedule.
 
 By default the profiler measures every registered dataset whose update CronJob is not suspended and lists the suspended ones it skipped. One run uses one `--as-of` for every dataset, defaulting to its start; give every process of a multi-process capture the same `--as-of`. Source requests retry throttling and disconnects.
 
@@ -41,10 +41,10 @@ Both the untriggered schedule offset `S` and a triggered consumer’s backstop `
 
 Choose a hand value for `S` or `T` by the following procedure; virtual `max_delay` and a triggered consumer's backstop derive from it as from a measured `T`. First compute a candidate:
 
-- Where the source changed regime, use only its current-regime units: those after the profiler's regime restart, with `--exclude-anchor` for verified anomalies. The candidate is `ceil_minute(p99 + 3 min)` of those units.
+- Where the source changed regime, use only its current-regime units: those after the profiler's regime restart, or, for a source change the provider confirms, a `--days` window that starts after it; use `--exclude-anchor` for verified anomalies. The candidate is `ceil_minute(p99 + 3 min)` of those units.
 - Otherwise the candidate is `ceil_minute(max normal + 3 min)`.
 
-Keep the existing constant unless observations contradict it: it is earlier than the class's max normal, or later than the candidate. Otherwise use the candidate. A class whose history cannot reach 180 sampled days is flagged in the change and uses this procedure.
+Keep the existing constant unless observations contradict it. A constant earlier than the max normal of the units the candidate uses is contradicted. An untriggered `S` later than the candidate is also contradicted, because the wait costs latency; a later backstop `T` or virtual `T` is not, because it only delays an alert. If it is contradicted, use the candidate. A class whose history cannot reach 180 sampled days is flagged in the change and uses this procedure.
 
 Search the whole sorted history for the two-segment split minimizing absolute deviations around the segment medians, with at least five samples on each side. Restart the class’s history there when the medians differ by at least fifteen minutes. A trailing cluster of at least two units and at least 1% of observations above the earlier max normal can also restart history. A retained segment must span more than 24 hours; otherwise keep the history and flag a suspected change for review. Repeat the fit on each retained segment until no further qualifying restart is found. Report the final retained history and recheck its sample count. Outliers within the retained regime stay in quantiles; a gap alone does not establish an outage.
 
@@ -146,7 +146,7 @@ If an untriggered materialized dataset with a high-variance source alerts more o
 
 Each dataset's code defines the values and boundaries of its exception.
 
-- **MRMS:** one hourly run times to radar-only arrival, so the newest hour publishes before gauge correction; the gauge passes and FLASH fill in on the following hour's run.
+- **MRMS:** the hourly run fires at :03, near the radar-only p95 (radar-only QPE arrives at p50 2:50, p99 3:17), not at its `T`, because radar-only latency matters most to users; pod startup carries the first read past the radar-only p99. `max_delay` is the rule value for that fire. The newest hour's gauge passes and FLASH fill in on the following hour's run.
 - **GEFS 35-day virtual:** one daily polling window covers the extension's member waves. It fires before the previous initialization's overnight extension finishes, and a hand-set deadline keeps it polling through the newest morning wave; intermediate waves can wait until the next fire.
 - **GEFS 35-day materialized:** the extension tier has no completion trigger, because its source window does not normally complete during a producer run; an age gate lets a later init's trigger or backstop reprocess it.
 - **WeatherNext 2 operational virtual:** its unit is all members and levels of one variable and lead, measured from the unit's last object; its window ends at the fire's six-hour floor, so an init is first eligible at init + 6h.

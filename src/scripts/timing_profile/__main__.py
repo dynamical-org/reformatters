@@ -23,8 +23,9 @@ offline monitor exports. An operator exports GET /api/0/organizations/<org>/
 monitors/<slug>/checkins/, following Link's next cursor through the window, and
 saves the concatenated JSON arrays as <slug>.json. Slugs are ReformatCronJob.name
 and its -validate counterpart, not necessarily the dataset ID. Tokens are not saved.
-An empty --checkins-dir leaves L/R/V unmeasured: deadlines, grace and re-pass/page
-rates are not recommended, and virtual polling fires assume L = 0.
+An empty --checkins-dir leaves L/R/V unmeasured: virtual deadlines, validation grace
+and runtime-based re-pass/page rates are not recommended, and virtual polling fires
+assume L = 0.
 
 Default selection is every registered dataset whose update CronJob is not suspended;
 suspended ones are listed and skipped. One run pins one --as-of (default: run start);

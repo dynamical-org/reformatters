@@ -37,12 +37,11 @@ from .statistics import (
 )
 from .wxopticon import Evidence
 
-MANUAL_REVIEW_DATASETS = frozenset(
-    {
-        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
-        "noaa-mrms-conus-analysis-hourly",
-    }
-)
+# Dataset exceptions whose hand constants the rule must not replace, with the reason.
+MANUAL_REVIEW_DATASETS = {
+    "noaa-gefs-forecast-35-day-0-5-degree-virtual": "one daily polling window fires before the previous initialization's overnight extension finishes; a hand-set deadline keeps it polling through the newest morning wave",
+    "noaa-mrms-conus-analysis-hourly": "fires near the radar-only p95, not at its T, because radar-only latency matters most to users; pod startup carries the first read past the radar-only p99",
+}
 
 
 @dataclass(frozen=True)
@@ -272,6 +271,10 @@ def cron_interval(
         intervals.append((fire - previous).total_seconds())
         fire = previous
     return max(intervals) if maximum else min(intervals)
+
+
+def fires_at(cron: ReformatCronJob, time: pd.Timestamp) -> bool:
+    return cron.previous_fire_time(time) == time
 
 
 def recommended_cron(offset: float, interval: float, cron: ReformatCronJob) -> str:
@@ -509,7 +512,7 @@ def render_dataset(
         "",
         *(
             [
-                f"Triggered by {', '.join(triggered_by)}; the cron is a backstop at the first readiness tier's T, and max_delay matches its offset.",
+                f"Triggered by {', '.join(triggered_by)}; the cron is a backstop at the first readiness tier's T, and max_delay {'matches' if current_delay is not None and fires_at(cron, pd.Timestamp(dataset.template_config.append_dim_start) + pd.Timedelta(seconds=current_delay)) else 'differs from'} its offset.",
                 "",
             ]
             if triggered_by
@@ -839,7 +842,7 @@ def render_single_cron(
         lines.extend(
             [
                 "",
-                "One-cron recommendation: **keep constants; review manually** (manual review).",
+                f"One-cron recommendation: **keep constants; review manually** (dataset exception: {MANUAL_REVIEW_DATASETS[dataset.dataset_id]}).",
                 "",
             ]
         )
