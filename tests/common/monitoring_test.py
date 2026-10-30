@@ -253,6 +253,26 @@ def test_monitor_rounds_runtime_up_to_the_pod_deadline(
     ] == [max_runtime, max_runtime]
 
 
+def test_monitor_schedule_override_keeps_runtime_at_the_pod_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(type(Config), "is_sentry_enabled", True)
+    capture = Mock()
+    monkeypatch.setattr(sentry_sdk.crons, "capture_checkin", capture)
+    monkeypatch.setattr(sentry_sdk, "flush", Mock())
+    cron = _CRON_JOB.model_copy(update={"pod_active_deadline": timedelta(hours=2)})
+
+    with monitor_cron(cron, "job-name", schedule="30 5 * * *", checkin_margin=131):
+        pass
+
+    assert capture.call_count == 2
+    for call in capture.call_args_list:
+        config = call.kwargs["monitor_config"]
+        assert config["schedule"] == {"type": "crontab", "value": "30 5 * * *"}
+        assert config["checkin_margin"] == 131
+        assert config["max_runtime"] == 120
+
+
 def test_install_sigterm_logger(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

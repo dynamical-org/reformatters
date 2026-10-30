@@ -989,6 +989,7 @@ def _recording_monitor(
         send_in_progress: bool,
         send_result: bool,
         monitor_name: str | None,
+        schedule: str | None,
         checkin_margin: int,
     ) -> Iterator[None]:
         events.append(("enter", monitor_name or cron_job.name))
