@@ -90,6 +90,7 @@ def monitor_cron(
     send_in_progress: bool = True,
     send_result: bool = True,
     monitor_name: str | None = None,
+    schedule: str | None = None,
     checkin_margin: int = 10,
 ) -> Iterator[None]:
     """Send Sentry cron check-ins for `cron_job` around the wrapped block, so a
@@ -108,7 +109,10 @@ def monitor_cron(
             check_in_id=digest([monitor_slug, reformat_job_name], length=32),
             status=status,
             monitor_config={
-                "schedule": {"type": "crontab", "value": cron_job.schedule},
+                "schedule": {
+                    "type": "crontab",
+                    "value": schedule or cron_job.schedule,
+                },
                 "timezone": "UTC",
                 "checkin_margin": checkin_margin,
                 "max_runtime": math.ceil(

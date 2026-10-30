@@ -73,6 +73,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     icechunk_virtual_config: IcechunkVirtualConfig | None = None
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=30)
+    validation_monitor_schedule: ClassVar[str | None] = None
+    validation_monitor_margin: ClassVar[timedelta | None] = None
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """
@@ -849,10 +851,15 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             reformat_job_name,
             send_in_progress=send_in_progress,
             monitor_name=self._validation_monitor_name,
-            # Validate shares the same cron schedule as update, but we give it margin
+            schedule=self.validation_monitor_schedule,
+            # By default validate shares the update cron schedule, but we give it margin
             # so it's not expected to start until after the update work completes.
-            checkin_margin=lambda cron: (
-                math.ceil(cron.pod_active_deadline.total_seconds() / 60) + 10
+            checkin_margin=lambda cron: math.ceil(
+                (
+                    self.validation_monitor_margin
+                    or cron.pod_active_deadline + timedelta(minutes=10)
+                ).total_seconds()
+                / 60
             ),
         )
 

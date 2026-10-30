@@ -1,6 +1,7 @@
 import math
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 from reformatters.common import validation
 from reformatters.common.config_models import source_fill_value_var_names
@@ -24,6 +25,10 @@ class EcmwfIfsEnsForecast46Day15DegreeDataset(
         EcmwfIfsEnsForecast46Day15DegreeTemplateConfig()
     )
     region_job_class: type[EcmwfIfsEns46DayRegionJob] = EcmwfIfsEns46DayRegionJob
+    # Validate monitor window: the trigger's validation, which follows the
+    # ecmwf-ifs-ens-46-day-gribs fire, through the backstop's run.
+    validation_monitor_schedule: ClassVar[str | None] = "0 3 * * *"
+    validation_monitor_margin: ClassVar[timedelta | None] = timedelta(minutes=443)
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update this dataset."""

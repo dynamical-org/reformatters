@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import ClassVar
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -17,6 +18,9 @@ class GefsForecast35DayDataset(
 
     template_config: GefsForecast35DayTemplateConfig = GefsForecast35DayTemplateConfig()
     region_job_class: type[GefsForecast35DayRegionJob] = GefsForecast35DayRegionJob
+    # Validate monitor window: the trigger's validation through the backstop's run.
+    validation_monitor_schedule: ClassVar[str | None] = "30 5 * * *"
+    validation_monitor_margin: ClassVar[timedelta | None] = timedelta(minutes=131)
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
         """Return the kubernetes cron job definitions to operationally update this dataset."""
