@@ -68,6 +68,8 @@ ADOPTED_VIRTUAL_IDS = (
     "noaa-hrrr-forecast-18-hour-virtual",
     "noaa-hrrr-forecast-48-hour-virtual",
     "noaa-rtma-analysis-virtual",
+    "noaa-rtma-ru-analysis-virtual",
+    "noaa-urma-analysis-virtual",
     "noaa-rrfs-forecast-84-hour-virtual",
     "noaa-rrfs-forecast-18-hour-virtual",
     "noaa-rrfs-forecast-sub-hourly-virtual",
@@ -81,11 +83,7 @@ ADOPTED_VIRTUAL_IDS = (
     "google-weathernext3-forecast-15-day-0-05-degree-virtual",
     "google-weathernext3-forecast-48-hour-0-05-degree-virtual",
 )
-LEGACY_VIRTUAL_IDS = (
-    "google-weathernext2-forecast-historical-virtual",
-    "noaa-rtma-ru-analysis-virtual",
-    "noaa-urma-analysis-virtual",
-)
+LEGACY_VIRTUAL_IDS = ("google-weathernext2-forecast-historical-virtual",)
 DATASETS_BY_ID = {dataset.dataset_id: dataset for dataset in DYNAMICAL_DATASETS}
 
 
@@ -101,10 +99,7 @@ def test_virtual_lifecycle_cohorts_cover_registered_virtuals() -> None:
         cron = DATASETS_BY_ID[dataset_id]._operational_cron_job(
             kubernetes.ReformatCronJob
         )
-        assert cron.suspend is (
-            dataset_id
-            not in {"noaa-rtma-ru-analysis-virtual", "noaa-urma-analysis-virtual"}
-        )
+        assert cron.suspend
         assert cron.concurrency_policy != "Allow"
 
 

@@ -44,7 +44,7 @@ SOURCE_LOCATION_PREFIX = "gs://weathernext/"
 _SOURCE_ZARR_PREFIX = f"{SOURCE_LOCATION_PREFIX}weathernext_2_0_0/zarr/"
 _SOURCE_LEVEL_INDEX = {level: index for index, level in enumerate(PRESSURE_LEVELS)}
 _OPERATIONAL_MEMBER_GLOB = "{" + ",".join(map(str, range(64))) + "}"
-OPERATIONAL_SOURCE_LANDING_DELAY = pd.Timedelta("7h")
+OPERATIONAL_SOURCE_LANDING_DELAY = pd.Timedelta("6h")
 # The two layouts pack chunks differently, so splits are sized per product and per
 # array group by ref density; see docs/virtual_datasets.md.
 HISTORICAL_MANIFEST_INIT_SPLIT = 128

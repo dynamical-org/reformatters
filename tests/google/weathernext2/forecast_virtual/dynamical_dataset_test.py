@@ -4,14 +4,20 @@ from pathlib import Path
 
 import icechunk
 import pandas as pd
+import xarray as xr
+from zarr.storage import MemoryStore
 
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.common.types import DatetimeLike
 from reformatters.google.weathernext2.forecast_historical_virtual.dynamical_dataset import (
     GoogleWeathernext2ForecastHistoricalVirtualDataset,
 )
 from reformatters.google.weathernext2.forecast_operational_virtual.dynamical_dataset import (
     GoogleWeathernext2ForecastOperationalVirtualDataset,
+)
+from reformatters.google.weathernext2.forecast_virtual.region_job import (
+    OPERATIONAL_SOURCE_LANDING_DELAY,
 )
 
 
@@ -70,12 +76,12 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     (update,) = dataset.operational_kubernetes_resources("test")
     assert dataset.region_job_class.tick_interval == pd.Timedelta("15s")
     assert update.name == "google-wn2-forecast-operational-virtual-update"
-    assert update.schedule == "5 1,7,13,19 * * *"
-    assert update.previous_fire_time(pd.Timestamp("2026-09-04T02:05")) == pd.Timestamp(
-        "2026-09-04T01:05"
+    assert update.schedule == "3 0,6,12,18 * * *"
+    assert update.previous_fire_time(pd.Timestamp("2026-09-04T01:00")) == pd.Timestamp(
+        "2026-09-04T00:03"
     )
-    assert update.previous_fire_time(pd.Timestamp("2026-09-04T00:59")) == pd.Timestamp(
-        "2026-09-03T19:05"
+    assert update.previous_fire_time(pd.Timestamp("2026-09-04T00:00")) == pd.Timestamp(
+        "2026-09-03T18:03"
     )
     assert update.workers_total == 1
     assert update.parallelism == 1
@@ -86,7 +92,7 @@ def test_operational_product_has_virtual_health_checks_and_splits(
     )
     assert update.concurrency_policy == "Allow"
     assert update.suspend is False
-    fire = pd.Timestamp("2026-10-20T07:05")
+    fire = pd.Timestamp("2026-10-20T06:03")
     assert dataset._virtual_poll_deadline(
         fire + pd.Timedelta("1min")
     ) == fire + pd.Timedelta("6h1m16s")
@@ -96,7 +102,7 @@ def test_operational_product_has_virtual_health_checks_and_splits(
         for item in dataset.validators()
         if isinstance(item, validation.CheckCurrentData)
     ]
-    assert current.max_delay == timedelta(hours=12)
+    assert current.max_delay == timedelta(hours=9)
     (completeness,) = [
         item
         for item in dataset.validators()
@@ -133,3 +139,41 @@ def test_both_products_use_the_raw_http_chunk_container(tmp_path: Path) -> None:
         (container,) = dataset.icechunk_virtual_config.containers
         assert container.url_prefix == "https://wn.dynamical.org/chunks/"
         assert isinstance(container.store, icechunk.ObjectStoreConfig.Http)
+
+
+def test_operational_fire_selects_arriving_init_and_keeps_successor_overlap(
+    tmp_path: Path,
+) -> None:
+    dataset = GoogleWeathernext2ForecastOperationalVirtualDataset(
+        primary_storage_config=_storage(tmp_path)
+    )
+    config = dataset.template_config
+    (cron,) = dataset.operational_kubernetes_resources("test")
+
+    def get_template(end: DatetimeLike) -> xr.DataTree:
+        return xr.DataTree(
+            xr.Dataset(coords={"init_time": config.append_dim_coordinates(end)})
+        )
+
+    for hour in (0, 6, 12, 18):
+        anchor = pd.Timestamp("2026-10-28") + pd.Timedelta(hours=hour)
+        fire = cron.previous_fire_time(anchor + pd.Timedelta("6h18m21s"))
+        successor = cron.next_fire_time(fire)
+        for selected_fire, newest in (
+            (fire, anchor),
+            (successor, anchor + pd.Timedelta("6h")),
+        ):
+            (job,), template = dataset.region_job_class.operational_update_jobs(
+                MemoryStore(),
+                tmp_path,
+                get_template,
+                "init_time",
+                config.data_vars[:1],
+                "window-test",
+                selected_fire,
+            )
+            inits = template.to_dataset().get_index("init_time")[job.region]
+            assert inits[-1] == newest
+            assert anchor in inits
+            assert newest - config.append_dim_frequency in inits
+        assert fire - anchor >= OPERATIONAL_SOURCE_LANDING_DELAY

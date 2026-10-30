@@ -55,6 +55,11 @@ class MeasuredUnit:
     source: str = "listings"
     provenance: dict[str, int] = field(default_factory=dict)
     first_unmapped: str | None = None
+    file_count: int | None = None
+
+    @property
+    def expected_files(self) -> int:
+        return len(self.unit.files) if self.file_count is None else self.file_count
 
 
 def aggregate_unit(
@@ -86,7 +91,9 @@ def aggregate_unit(
         offset = (usable - unit.anchor).total_seconds()
         available[file] = offset
         provenance.update(
-            evidence[url].provenance if evidence is not None else "current_object_write"
+            evidence[url].provenance
+            if evidence is not None
+            else listings[listing_prefix(url)].provenance
             for url in file
         )
     visible = (
@@ -156,7 +163,7 @@ def rate_arrivals(
     return [
         unit.complete
         for unit in units
-        if unit.missing_files < len(unit.unit.files)
+        if unit.missing_files < unit.expected_files
         and (
             unit.complete is not None
             or (end - unit.unit.anchor).total_seconds() > horizon
@@ -272,7 +279,9 @@ def recommended_cron(offset: float, interval: float, cron: ReformatCronJob) -> s
     minute = rounded_minutes % 60
     hour_shift = rounded_minutes // 60
     if interval < 3600:
-        return f"{minute % round(interval / 60)}-59/{round(interval / 60)} * * * *"
+        step = round(interval / 60)
+        minutes = range(minute % step, 60, step)
+        return f"{','.join(map(str, minutes))} * * * *"
     hours = sorted(
         {
             (hour + hour_shift) % 24
@@ -507,6 +516,11 @@ def render_dataset(
             for file in unit.unit.files
             for url in file
         }
+        | {
+            listing_prefix(unit.first_unmapped)
+            for unit in units
+            if not unit.unit.files and unit.first_unmapped is not None
+        }
     )
     buckets = sorted(
         {url.split("/", 3)[0] + "//" + url.split("/", 3)[2] for url in identities}
@@ -623,7 +637,7 @@ def render_dataset(
                 eligible = rate_arrivals(grouped, end, horizon)
                 empty = sum(
                     unit.complete is None
-                    and unit.missing_files == len(unit.unit.files)
+                    and unit.missing_files == unit.expected_files
                     and (end - unit.unit.anchor).total_seconds() > horizon
                     for unit in grouped
                 )

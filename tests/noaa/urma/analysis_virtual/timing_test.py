@@ -38,8 +38,8 @@ from reformatters.noaa.urma.analysis_virtual.template_config import (
 
 START = pd.Timestamp("2026-10-12T11:00")
 FILE_TIME = pd.Timestamp("2026-10-12T12:00")
-FIRE = pd.Timestamp("2026-10-12T18:45")
-CUTOFF = FIRE + pd.Timedelta("57min")
+FIRE = pd.Timestamp("2026-10-12T18:35")
+CUTOFF = FIRE + pd.Timedelta("61min26s")
 
 
 class TimingTemplateConfig(NoaaUrmaAnalysisVirtualTemplateConfig):
@@ -76,7 +76,7 @@ def make_dataset(tmp_path: Path) -> NoaaUrmaAnalysisVirtualDataset:
     )
 
 
-@pytest.mark.parametrize("minute", [42, 44])
+@pytest.mark.parametrize("minute", [36, 37])
 @pytest.mark.parametrize("missing_due_hour", [False, True])
 def test_validation_checks_newest_due_hour_at_poll_finalization(
     tmp_path: Path,
@@ -101,7 +101,7 @@ def test_validation_checks_newest_due_hour_at_poll_finalization(
     result = current.check(context)
     assert result.passed == (not missing_due_hour), result.message
     assert f"time={FILE_TIME.isoformat()}" in result.message
-    assert current.max_delay == timedelta(hours=7, minutes=40)
+    assert current.max_delay == timedelta(hours=7, minutes=17)
     if missing_due_hour:
         assert "Missing time=" in result.message
         assert f"latest present is {START.isoformat()}" in result.message
@@ -114,12 +114,16 @@ def test_unshifted_window_and_actual_fire_poll_deadline(tmp_path: Path) -> None:
     )
     assert NoaaUrmaAnalysisVirtualRegionJob.tick_interval == pd.Timedelta("1s")
     (cron,) = dataset.operational_kubernetes_resources("test-image")
-    assert cron.schedule == "45 * * * *"
+    assert cron.schedule == "35 * * * *"
     assert not cron.suspend
     assert cron.as_kubernetes_object()["spec"]["suspend"] is False
     assert (cron.workers_total, cron.parallelism) == (1, 1)
-    assert cron.pod_active_deadline == timedelta(minutes=59)
-    for now in (FIRE, FIRE + pd.Timedelta("25min"), CUTOFF):
+    assert cron.pod_active_deadline == timedelta(minutes=62, seconds=9)
+    for now in (
+        FIRE,
+        FIRE + pd.Timedelta("25min"),
+        cron.next_fire_time(FIRE) - pd.Timedelta("1s"),
+    ):
         assert dataset._virtual_poll_deadline(now) == CUTOFF
     template_utils.write_metadata(
         dataset.template_config.get_template(START),
@@ -151,7 +155,7 @@ def test_unshifted_window_and_actual_fire_poll_deadline(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("publication_time", "early"),
     [
-        ("2026-10-12T18:45", True),
+        ("2026-10-12T18:35", True),
         ("2026-10-12T18:58", False),
         ("2026-10-12T19:35:36", False),
     ],

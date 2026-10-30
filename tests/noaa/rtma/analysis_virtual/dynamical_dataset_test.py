@@ -36,6 +36,8 @@ def test_active_writer_polls_across_the_next_fire(tmp_path: Path) -> None:
     assert (cron.workers_total, cron.parallelism) == (1, 1)
     assert cron.schedule == "26 * * * *"
     assert cron.pod_active_deadline == timedelta(minutes=62, seconds=9)
+    assert cron.active_deadline == cron.pod_active_deadline
+    assert dataset.virtual_poll_deadline_grace == timedelta(seconds=43)
     fire = pd.Timestamp("2026-10-16T00:26")
     deadline = dataset._virtual_poll_deadline(fire)
     assert fire + timedelta(hours=1) < deadline < fire + cron.pod_active_deadline
@@ -43,7 +45,7 @@ def test_active_writer_polls_across_the_next_fire(tmp_path: Path) -> None:
     assert dataset.region_job_class.operational_update_window == pd.Timedelta("24h")
     current, complete, decode = dataset.validators()
     assert isinstance(current, validation.CheckCurrentData)
-    assert current.max_delay == timedelta(minutes=73)
+    assert current.max_delay == timedelta(minutes=74)
     assert isinstance(complete, validation.CheckVirtualManifestCompleteness)
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
     (container,) = dataset.icechunk_virtual_config.containers

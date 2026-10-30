@@ -413,7 +413,7 @@ def test_direct_operational_update_uses_utc_clock(
     )
 
     assert template.to_dataset().get_index("init_time")[-1] == pd.Timestamp(
-        "2025-03-20T00:00"
+        "2025-03-20T06:00"
     )
 
 
@@ -570,7 +570,7 @@ def test_unrestricted_update_includes_newest_init_and_revisits_missing_steps(
     hour: int,
 ) -> None:
     fire_time = pd.Timestamp("2025-03-20") + pd.Timedelta(hours=hour, minutes=5)
-    newest_init = (fire_time - pd.Timedelta("7h")).floor("6h")
+    newest_init = (fire_time - pd.Timedelta("6h")).floor("6h")
     older_init = newest_init - pd.Timedelta("18h")
     var = _var(OPERATIONAL, "temperature_2m")
     jobs, template = (
@@ -636,10 +636,10 @@ def test_unrestricted_update_includes_newest_init_and_revisits_missing_steps(
 @pytest.mark.parametrize(
     ("fire_time", "newest_init"),
     [
-        (pd.Timestamp("2025-03-20T13:00"), pd.Timestamp("2025-03-20T06:00")),
-        (pd.Timestamp("2025-03-20T12:59:59"), pd.Timestamp("2025-03-20T00:00")),
-        (pd.Timestamp("2025-03-20T13:05"), pd.Timestamp("2025-03-20T06:00")),
-        (pd.Timestamp("2025-03-20T18:59"), pd.Timestamp("2025-03-20T06:00")),
+        (pd.Timestamp("2025-03-20T12:00"), pd.Timestamp("2025-03-20T06:00")),
+        (pd.Timestamp("2025-03-20T11:59:59"), pd.Timestamp("2025-03-20T00:00")),
+        (pd.Timestamp("2025-03-20T12:05"), pd.Timestamp("2025-03-20T06:00")),
+        (pd.Timestamp("2025-03-20T17:59"), pd.Timestamp("2025-03-20T06:00")),
     ],
 )
 def test_unrestricted_update_extent_tracks_source_landing(

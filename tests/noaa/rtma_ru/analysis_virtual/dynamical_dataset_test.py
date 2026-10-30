@@ -32,31 +32,33 @@ def make_dataset(
     )
 
 
-def test_active_quarter_hour_single_writer_configuration(tmp_path: Path) -> None:
+def test_active_quarter_hour_overlapping_polling_configuration(tmp_path: Path) -> None:
     dataset = make_dataset(tmp_path)
     (cron,) = dataset.operational_kubernetes_resources("test-image")
     assert not cron.suspend
     assert cron.as_kubernetes_object()["spec"]["suspend"] is False
     assert (cron.workers_total, cron.parallelism) == (1, 1)
     assert (cron.cpu, cron.memory) == ("1.7", "7G")
-    assert cron.schedule == "*/15 * * * *"
-    assert cron.pod_active_deadline == timedelta(minutes=14)
-    assert dataset.virtual_poll_deadline_grace == timedelta(minutes=2)
+    assert cron.schedule == "6,21,36,51 * * * *"
+    assert cron.pod_active_deadline == timedelta(minutes=17, seconds=9)
+    assert cron.active_deadline == cron.pod_active_deadline
+    assert dataset.virtual_poll_deadline_grace == timedelta(seconds=43)
     assert dataset.region_job_class.operational_update_window == pd.Timedelta("24h")
-    for minute in (0, 15, 30, 45):
+    for minute in (6, 21, 36, 51):
         fire = pd.Timestamp("2026-10-16T00:00") + timedelta(minutes=minute)
         deadline = dataset._virtual_poll_deadline(fire)
         assert cron.previous_fire_time(fire) == fire
-        assert deadline == fire + timedelta(minutes=12)
+        assert deadline == fire + timedelta(minutes=16, seconds=26)
         assert (
             fire
+            < cron.next_fire_time(fire)
             < deadline
             < fire + cron.pod_active_deadline
-            < cron.next_fire_time(fire)
+            < cron.next_fire_time(cron.next_fire_time(fire))
         )
     current, complete, decode = dataset.validators()
     assert isinstance(current, validation.CheckCurrentData)
-    assert current.max_delay == timedelta(minutes=45)
+    assert current.max_delay == timedelta(minutes=43)
     assert isinstance(complete, validation.CheckVirtualManifestCompleteness)
     assert isinstance(decode, validation.CheckVirtualDecodeHealth)
     assert not decode.allow_all_nan_vars
@@ -188,11 +190,11 @@ def test_operational_update_appends_quarter_hour_and_validates(
 ) -> None:
     dataset = make_dataset(tmp_path, "2020-07-28T12:30")
     dataset.backfill_local(append_dim_end=pd.Timestamp("2020-07-28T12:45"))
-    now = pd.Timestamp("2020-07-28T13:44")
+    now = pd.Timestamp("2020-07-28T13:35")
     (cron,) = dataset.operational_kubernetes_resources("test-image")
-    assert cron.previous_fire_time(now) == pd.Timestamp("2020-07-28T13:30")
-    assert dataset._virtual_poll_deadline(now) == pd.Timestamp("2020-07-28T13:42")
-    assert dataset._virtual_poll_deadline(now) < now
+    assert cron.previous_fire_time(now) == pd.Timestamp("2020-07-28T13:21")
+    assert dataset._virtual_poll_deadline(now) == pd.Timestamp("2020-07-28T13:37:26")
+    assert now < dataset._virtual_poll_deadline(now)
     with monkeypatch.context() as clock:
         clock.setattr(pd.Timestamp, "now", classmethod(lambda *args, **kwargs: now))
         before = xr.open_zarr(
