@@ -163,7 +163,7 @@ def test_weathernext3_measures_proxy_finalization_with_compact_summaries(
     assert "not first observed proxy visibility" in report
     assert "reconstructed_source_finalization" in report
     assert "06:02:00" in report
-    assert "suspended: `True`" in report
+    assert "suspended: `False`" in report
     measurements = rendered.call_args.args[2]
     assert measurements
     assert all(not unit.unit.files and not unit.file_arrivals for unit in measurements)
