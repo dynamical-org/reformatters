@@ -195,7 +195,7 @@ See [docs/parallel_processing.md](docs/parallel_processing.md) for details on co
 
 ## Code Style
 
-Optimize the codebase you leave behind, not the size of your diff. Every change — code, architectural design, comments/docstrings, documentation — is judged by one outcome: is the **total codebase** afterward simpler, more maintainable, and easier to understand? Concretely: extend an existing utility or approach rather than introducing a parallel one; when a new approach is genuinely simpler and more general, migrate the old pattern into it rather than leaving both; a larger change that leaves one way of doing things beats a minimal change that leaves two. Documentation follows the same rule — each addition compounds, over many changes, toward either a codebase that explains itself or one buried in stale narratives. Always look for ways to simplify, and identify and suggest architectural improvements.
+Leave the codebase easier to understand, operate, and change. Prefer the simplest approach that meets the actual need, judging simplicity across the resulting codebase rather than just the immediate change. Judge added code and architectural complexity by whether their lasting benefits justify the burden on future maintainers. When a modest change to the requirements would substantially improve the solution, propose the tradeoff to the user.
 
 * Write code that explains itself rather than needs comments. See [Comments and docstrings](#comments-and-docstrings) below.
 * Don't write error handing code unless I ask for it, nor smooth over exceptions/errors unless they are expected as part of control flow. In general, write code that will raise an exception early if something isn't expected. Enforce important expectations with asserts.
@@ -205,7 +205,7 @@ Optimize the codebase you leave behind, not the size of your diff. Every change 
 * Test each module with pytest
 * Log don't print: `from reformatters.common.logging import get_logger` and `log = get_logger(__name__)`
 * Dataset-specific details never go in evergreen docs except to note an exception to a general rule; the code is the source of truth.
-* Keep documentation up to date. After making a change that would update any .md file in the repo (CLAUDE.md, docs/*, etc.), always update relevant docs, regardless of if you have been explicitly asked.
+* Update documentation that a change makes inaccurate.
 * CLAUDE.md is an alias for AGENTS.md
 
 ### Comments and docstrings
