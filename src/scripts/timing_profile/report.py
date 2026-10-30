@@ -41,6 +41,7 @@ from .wxopticon import Evidence
 MANUAL_REVIEW_DATASETS = {
     "noaa-gefs-forecast-35-day-0-5-degree-virtual": "one daily polling window fires before the previous initialization's overnight extension finishes; a hand-set deadline keeps it polling through the newest morning wave",
     "noaa-mrms-conus-analysis-hourly": "fires near the radar-only p95, not at its T, because radar-only latency matters most to users; pod startup carries the first read past the radar-only p99",
+    "ecmwf-ifs-ens-15-day-deprecated-zarr-v3": "deprecated plain-Zarr copy whose constants are frozen until it is removed",
 }
 
 

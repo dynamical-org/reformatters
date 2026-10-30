@@ -268,6 +268,32 @@ def test_mrms_reports_radar_only_and_keeps_constants() -> None:
     assert "| chosen |" not in rendered
 
 
+def test_deprecated_ifs_ens_copy_keeps_its_frozen_constants() -> None:
+    dataset = next(
+        ds
+        for ds in DYNAMICAL_DATASETS
+        if ds.dataset_id == "ecmwf-ifs-ens-15-day-deprecated-zarr-v3"
+    )
+    cron = next(
+        resource
+        for resource in dataset.operational_kubernetes_resources("test")
+        if isinstance(resource, ReformatCronJob)
+    )
+    units = measured_units([(0, (30000,))], copies=300)
+    rendered = render_dataset(
+        dataset,
+        cron,
+        units,
+        runtime(),
+        units[-1].unit.anchor + pd.Timedelta("1D"),
+        None,
+        set(),
+    )
+    assert "keep constants; review manually" in rendered
+    assert "constants are frozen until it is removed" in rendered
+    assert "| Cron |" not in rendered
+
+
 def test_rates_at_recommended_single_cron_exclude_unobserved_units() -> None:
     dataset = next(
         ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-forecast"

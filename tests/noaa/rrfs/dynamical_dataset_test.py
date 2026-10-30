@@ -109,7 +109,7 @@ def test_operational_jobs_are_enabled_and_use_the_source_container(
             timedelta(minutes=4),
             "56 0,6,12,18 * * *",
             timedelta(hours=6, minutes=57, seconds=16),
-            timedelta(minutes=122),
+            timedelta(minutes=127),
         ),
     ],
 )
