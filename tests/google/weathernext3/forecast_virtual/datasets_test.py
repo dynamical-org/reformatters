@@ -73,6 +73,7 @@ def test_terms_licence_and_attribution(
 def test_template_and_operations(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
 ) -> None:
+    assert dataset.region_job_class.operational_update_window == pd.Timedelta("24h")
     config = dataset.template_config
     template = config.get_template(
         config.append_dim_start + config.append_dim_frequency
@@ -106,7 +107,6 @@ def test_template_and_operations(
         assert var.internal_attrs.keep_mantissa_bits == "no-rounding"
     (update,) = dataset.operational_kubernetes_resources("test")
     assert update.suspend
-    assert update.schedule == "10 * * * *"
     assert (
         dataset._validation_monitor_name()
         == update.name.removesuffix("-update") + "-validate"

@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 import typer
 import zarr
+from zarr.storage import MemoryStore
 
 from reformatters.common import kubernetes, validation
 from reformatters.common.storage import StoreFactory
@@ -14,6 +15,7 @@ from reformatters.google.weathernext3.forecast_virtual.dynamical_dataset import 
     GoogleWeathernext3ForecastVirtualDataset,
 )
 from reformatters.google.weathernext3.forecast_virtual.region_job import (
+    OPERATIONAL_SOURCE_LANDING_DELAY,
     GoogleWeathernext3ForecastVirtualRegionJob,
 )
 from tests.google.weathernext3.forecast_virtual.datasets_test import DATASETS
@@ -25,15 +27,41 @@ def test_update_reserves_time_for_inline_validation(
     dataset: GoogleWeathernext3ForecastVirtualDataset,
     minutes_after_fire: int,
 ) -> None:
-    fire = pd.Timestamp("2026-10-05T12:10:00Z").tz_localize(None)
-    now = fire + pd.Timedelta(minutes=minutes_after_fire)
-    assert dataset._virtual_poll_deadline(now) == fire + pd.Timedelta(minutes=40)
     (update,) = dataset.operational_kubernetes_resources("test")
-    assert update.pod_active_deadline == pd.Timedelta(minutes=55)
-    assert update.active_deadline == pd.Timedelta(minutes=55)
+    fire = update.previous_fire_time(pd.Timestamp("2026-10-05T12:59:00"))
+    now = fire + pd.Timedelta(minutes=minutes_after_fire)
+    interval = dataset.region_job_class.init_frequency
+    assert dataset._virtual_poll_deadline(now) == fire + interval + pd.Timedelta(
+        minutes=1, seconds=16
+    )
+    assert (
+        update.schedule
+        == {
+            "google-weathernext3-forecast-48-hour-0-1-degree-virtual": "16 * * * *",
+            "google-weathernext3-forecast-48-hour-0-05-degree-virtual": "16 * * * *",
+            "google-weathernext3-forecast-15-day-0-1-degree-virtual": "33 0,6,12,18 * * *",
+            "google-weathernext3-forecast-15-day-0-05-degree-virtual": "33 0,6,12,18 * * *",
+        }[dataset.dataset_id]
+    )
+    (completeness,) = [
+        check
+        for check in dataset.validators()
+        if isinstance(check, validation.CheckVirtualManifestCompleteness)
+    ]
+    assert completeness.min_present_fraction == (
+        (0.0, 0.0, 1.0) if dataset.template_config.horizon_hours == 48 else (1.0,)
+    )
+    assert update.suspend
+    assert update.concurrency_policy == "Allow"
+    assert update.pod_active_deadline == interval + pd.Timedelta(minutes=4, seconds=23)
+    assert update.active_deadline == update.pod_active_deadline
+    assert dataset.virtual_poll_deadline_grace == pd.Timedelta(minutes=3, seconds=7)
     job = update.as_kubernetes_object()["spec"]["jobTemplate"]["spec"]
-    assert job["activeDeadlineSeconds"] == 55 * 60
-    assert job["template"]["spec"]["activeDeadlineSeconds"] == 55 * 60
+    assert job["activeDeadlineSeconds"] == int(interval.total_seconds()) + 263
+    assert (
+        job["template"]["spec"]["activeDeadlineSeconds"]
+        == int(interval.total_seconds()) + 263
+    )
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda ds: ds.dataset_id)
@@ -46,7 +74,8 @@ def test_inline_validation_does_not_move_tip(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fire = pd.Timestamp("2026-10-05T12:10:00Z").tz_localize(None)
+    (update,) = dataset.operational_kubernetes_resources("test")
+    fire = update.previous_fire_time(pd.Timestamp("2026-10-05T12:59:00"))
     clock = [fire + pd.Timedelta(minutes=1)]
     monkeypatch.setattr(
         pd.Timestamp, "now", classmethod(lambda cls, *args, **kwargs: clock[0])
@@ -96,3 +125,47 @@ def test_inline_validation_does_not_move_tip(
     checked_job = checks.call_args.kwargs["region_job"]
     assert isinstance(checked_job, GoogleWeathernext3ForecastVirtualRegionJob)
     assert snapshot_ids == [repo.lookup_branch("main")]
+
+
+@pytest.mark.parametrize(
+    ("dataset", "hour"),
+    [
+        pytest.param(dataset, hour, id=f"{dataset.dataset_id}-{hour:02}")
+        for dataset in DATASETS
+        for hour in range(24)
+        if dataset.template_config.horizon_hours == 48 or hour % 6 == 0
+    ],
+)
+def test_scheduled_window_selects_arriving_init_and_keeps_overlap(
+    dataset: GoogleWeathernext3ForecastVirtualDataset, hour: int
+) -> None:
+    config = dataset.template_config
+    anchor = pd.Timestamp("2026-10-28") + pd.Timedelta(hours=hour)
+    (cron,) = dataset.operational_kubernetes_resources("test")
+    first_arrival = pd.Timedelta(
+        {
+            "google-weathernext3-forecast-48-hour-0-1-degree-virtual": "6h19m50.616s",
+            "google-weathernext3-forecast-48-hour-0-05-degree-virtual": "6h20m5.028s",
+            "google-weathernext3-forecast-15-day-0-1-degree-virtual": "6h48m17.086s",
+            "google-weathernext3-forecast-15-day-0-05-degree-virtual": "6h48m48.705s",
+        }[dataset.dataset_id]
+    )
+    fire = cron.previous_fire_time(anchor + first_arrival)
+    successor = cron.next_fire_time(fire)
+    assert successor - fire == config.append_dim_frequency
+    for selected_fire in (fire, successor):
+        jobs, template = dataset.region_job_class.operational_update_jobs(
+            MemoryStore(),
+            Path("unused"),
+            config.get_template,
+            "init_time",
+            config.data_vars[:1],
+            "window-test",
+            selected_fire,
+        )
+        (job,) = jobs
+        inits = template.to_dataset().get_index("init_time")[job.region]
+        assert anchor in inits
+        assert anchor - config.append_dim_frequency in inits
+        assert inits[-1] == anchor + (selected_fire - fire)
+    assert fire - anchor >= OPERATIONAL_SOURCE_LANDING_DELAY

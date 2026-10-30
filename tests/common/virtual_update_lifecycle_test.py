@@ -76,12 +76,12 @@ ADOPTED_VIRTUAL_IDS = (
     "noaa-refs-forecast-3-hourly-virtual",
     "ecmwf-aifs-single-forecast-virtual",
     "google-weathernext2-forecast-operational-virtual",
-)
-LEGACY_VIRTUAL_IDS = (
     "google-weathernext3-forecast-48-hour-0-1-degree-virtual",
     "google-weathernext3-forecast-15-day-0-1-degree-virtual",
     "google-weathernext3-forecast-15-day-0-05-degree-virtual",
     "google-weathernext3-forecast-48-hour-0-05-degree-virtual",
+)
+LEGACY_VIRTUAL_IDS = (
     "google-weathernext2-forecast-historical-virtual",
     "noaa-rtma-ru-analysis-virtual",
     "noaa-urma-analysis-virtual",

@@ -138,6 +138,7 @@ Each dataset's code defines the values and boundaries of its exception.
 - **MRMS:** one hourly run times to radar-only arrival, so the newest hour publishes before gauge correction; the gauge passes and FLASH fill in on the following hour's run.
 - **GEFS 35-day virtual:** one daily polling window covers the extension's member waves; intermediate waves can wait until the next fire.
 - **GEFS 35-day materialized:** the extension tier has no completion trigger, because its source window does not normally complete during a producer run; an age gate lets a later init's trigger or backstop reprocess it.
-- **WeatherNext 2 operational virtual:** its unit is all members and levels of one variable and lead, measured from the unit's last object; it uses a hand-set fire and a landing gate that selects the newest init, because its source has no anonymous arrival timestamps.
+- **WeatherNext 2 operational virtual:** its unit is all members and levels of one variable and lead, measured from the unit's last object.
+- **WeatherNext 3 virtual:** its unit is all statistics of one variable and lead, measured from the unit's last object; its six-hour eligibility gate makes init + 6h the earliest fire that can select the init.
 - **IFS ENS 15-day:** its fire balances the source mirrors: leads not yet on GCS fall back to S3, which throttles many concurrent pods.
 - **RRFS sub-hourly virtual:** its window selects from one hour before the fire, so the fire's anchor clamp moves one hour later.
