@@ -36,7 +36,6 @@ from reformatters.common.kubernetes import (
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
-from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.operational import OperationalResources
 from reformatters.common.region_job import (
     RegionJob,
@@ -73,7 +72,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     primary_storage_config: StorageConfig
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     icechunk_virtual_config: IcechunkVirtualConfig | None = None
-    materialized_update_triggers: ClassVar[tuple[MaterializedUpdateTrigger, ...]] = ()
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=30)
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:

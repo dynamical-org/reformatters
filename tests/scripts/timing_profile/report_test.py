@@ -231,7 +231,7 @@ def test_virtual_classes_split_on_visibility_and_polling_uses_all_tiers() -> Non
     assert materialized.offset == 3180
 
 
-def test_mrms_reports_pass_one_and_keeps_constants() -> None:
+def test_mrms_reports_radar_only_and_keeps_constants() -> None:
     dataset = next(
         ds
         for ds in DYNAMICAL_DATASETS
@@ -243,7 +243,7 @@ def test_mrms_reports_pass_one_and_keeps_constants() -> None:
         if isinstance(resource, ReformatCronJob)
     )
     units = measured_units([(0, (3600,))], tier="position") + measured_units(
-        [(0, (900,))], tier="pass 1 (exception)"
+        [(0, (120,))], tier="radar-only (exception)"
     )
     result = recommend(
         units,
@@ -260,7 +260,7 @@ def test_mrms_reports_pass_one_and_keeps_constants() -> None:
     rendered = render_dataset(
         dataset, cron, units, runtime(), pd.Timestamp("2026-10-26"), None, {"S3"}
     )
-    assert "### pass 1 (exception)" in rendered
+    assert "### radar-only (exception)" in rendered
     assert "keep constants; review manually" in rendered
     assert "| Cron |" not in rendered
     assert "S candidate" not in rendered
@@ -712,9 +712,12 @@ def test_virtual_lead_compares_poll_cutoff_with_retained_completion_p99(
         if isinstance(resource, ReformatCronJob)
     )
     rendered = render_dataset(dataset, cron, units, runtime(), end, None, set())
-    assert f"15-minute-lead cutoff 01:25:30 {relation}" in rendered
-    assert "maximum retained-class completion p99" in rendered
-    assert f"Polling lead: 00:{int(lead / 60):02}:00" in rendered
+    assert (
+        f"polls until cutoff 01:25:30, which {relation} maximum retained-class completion p99"
+        in rendered
+    )
+    assert f"so the lead is 00:{int(lead / 60):02}:00" in rendered
+    assert f"lead 00:{int(lead / 60):02}:00, rounded down" in rendered
 
 
 def test_virtual_poll_lead_uses_latest_retained_class_completion_p99() -> None:
@@ -732,3 +735,54 @@ def test_virtual_poll_lead_uses_latest_retained_class_completion_p99() -> None:
     assert result.completion_p99 == 6000
     assert result.poll_lead == 180
     assert result.offset == 2160
+
+
+def test_virtual_report_states_fire_lead_and_cron_without_measured_startup() -> None:
+    units = measured_units([(0, (2400, 4800))], copies=300)
+    end = units[-1].unit.anchor + pd.Timedelta("6h")
+    unmeasured = RuntimeStats(None, None, None, None, 0, 0, 0, 0, None, None)
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-forecast-virtual"
+    )
+    cron = next(
+        resource
+        for resource in dataset.operational_kubernetes_resources("test")
+        if isinstance(resource, ReformatCronJob)
+    )
+    rendered = render_dataset(dataset, cron, units, unmeasured, end, None, set())
+    assert (
+        "Polling lead: the 15-minute-lead fire 00:25:00 polls until cutoff 06:26:00, which is at or after maximum retained-class completion p99 01:20:00, so the lead is 00:15:00."
+        in rendered
+    )
+    assert (
+        "Polling fire: E 00:40:00 - L p95 00:00:00 - lead 00:15:00, rounded down to the minute and clamped after the anchor: 00:25:00; cron `25 0,6,12,18 * * *`"
+        in rendered
+    )
+    assert "L is unmeasured and assumed 0" in rendered
+    assert "| Cron | `13 3,9,15,21 * * *` | `25 0,6,12,18 * * *` |" in rendered
+    assert "| Pod deadline |" in rendered
+    assert "unmeasured; keep constants" in rendered
+
+
+def test_triggered_consumer_reports_its_producer_and_backstop() -> None:
+    dataset = next(
+        ds for ds in DYNAMICAL_DATASETS if ds.dataset_id == "noaa-gfs-forecast"
+    )
+    cron = next(
+        resource
+        for resource in dataset.operational_kubernetes_resources("test")
+        if isinstance(resource, ReformatCronJob)
+    )
+    units = measured_units([(0, (600,))], copies=300)
+    rendered = render_dataset(
+        dataset,
+        cron,
+        units,
+        runtime(),
+        units[-1].unit.anchor + pd.Timedelta("6h"),
+        None,
+        set(),
+        triggered_by=["noaa-gfs-forecast-virtual"],
+    )
+    assert "Triggered by noaa-gfs-forecast-virtual; the cron is a backstop" in rendered
+    assert "Uses latest class and chosen backstop T" in rendered

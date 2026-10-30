@@ -2,6 +2,7 @@ import gzip
 import hashlib
 import json
 import re
+import tempfile
 import time
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
@@ -56,6 +57,14 @@ def listing_prefix(url: str) -> str:
     return canonical_url(url).rsplit("/", 1)[0] + "/"
 
 
+def write_atomic(path: Path, text: str) -> None:
+    with tempfile.NamedTemporaryFile(
+        "w", dir=path.parent, prefix=path.name, suffix=".tmp", delete=False
+    ) as file:
+        file.write(text)
+    Path(file.name).replace(path)
+
+
 def parse_http_listing(url: str, body: str) -> dict[str, pd.Timestamp]:
     objects = {}
     pattern = r'<a\b[^>]*href="([^"]+)"[^>]*>[^<]*</a>([^\n]*)'
@@ -80,6 +89,58 @@ class TimestampSource:
 
     def close(self) -> None:
         self.client.close()
+
+    def get(
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        proxy_page: tuple[str, int] | None = None,
+    ) -> httpx.Response:
+        """GET, retrying throttling, server errors and dropped connections. A proxy
+        page (prefix, page number) is paced and each attempt is logged."""
+
+        def attempt() -> httpx.Response:
+            response = (
+                self.client.get(url, params=params)
+                if proxy_page is None
+                else self._proxy_get(url, params, *proxy_page)
+            )
+            if response.status_code in {408, 429} or response.status_code >= 500:
+                response.raise_for_status()
+            return response
+
+        return retry(
+            attempt,
+            max_attempts=8,
+            retryable_exceptions=(httpx.RequestError, httpx.HTTPStatusError),
+        )
+
+    def _proxy_get(
+        self, url: str, params: dict[str, str] | None, prefix: str, page: int
+    ) -> httpx.Response:
+        waiting = time.monotonic()
+        self._proxy_rate_limiter.wait()
+        pacing_wait = time.monotonic() - waiting
+        self.proxy_requests += 1
+        started = time.monotonic()
+        started_at = pd.Timestamp.now(tz="UTC").isoformat()
+        status = None
+        try:
+            response = self.client.get(url, params=params)
+            status = response.status_code
+        finally:
+            record = {
+                "prefix": prefix,
+                "page": page,
+                "started_at": started_at,
+                "ended_at": pd.Timestamp.now(tz="UTC").isoformat(),
+                "request_seconds": time.monotonic() - started,
+                "pacing_wait_seconds": pacing_wait,
+                "status": status,
+            }
+            with (self.cache_dir / "weathernext-requests.jsonl").open("a") as requests:
+                requests.write(json.dumps(record) + "\n")
+        return response
 
     def list_many(self, prefixes: set[str]) -> dict[str, Listing]:
         with ThreadPoolExecutor(self.workers) as pool:
@@ -107,7 +168,7 @@ class TimestampSource:
         elif parsed.scheme == "gs":
             result = self._gcs(parsed.netloc, unquote(parsed.path.lstrip("/")))
         else:
-            response = self.client.get(prefix)
+            response = self.get(prefix)
             if response.status_code in {403, 404}:
                 result = Listing(
                     {}, f"HTTP {response.status_code}; no anonymous listing"
@@ -118,7 +179,8 @@ class TimestampSource:
                     parse_http_listing(prefix, response.text),
                     "HTTP directory Last modified (UTC; minute/second resolution)",
                 )
-        path.write_text(
+        write_atomic(
+            path,
             json.dumps(
                 {
                     "prefix": prefix,
@@ -129,7 +191,7 @@ class TimestampSource:
                         key: value.isoformat() for key, value in result.objects.items()
                     },
                 }
-            )
+            ),
         )
         return result
 
@@ -149,42 +211,7 @@ class TimestampSource:
             while True:
                 page += 1
 
-                def get_page(page: int = page) -> httpx.Response:
-                    waiting = time.monotonic()
-                    self._proxy_rate_limiter.wait()
-                    pacing_wait = time.monotonic() - waiting
-                    self.proxy_requests += 1
-                    started = time.monotonic()
-                    started_at = pd.Timestamp.now(tz="UTC").isoformat()
-                    status = None
-                    try:
-                        response = self.client.get(OBJECTS_LOCATION, params=params)
-                        status = response.status_code
-                    finally:
-                        record = {
-                            "prefix": prefix,
-                            "page": page,
-                            "started_at": started_at,
-                            "ended_at": pd.Timestamp.now(tz="UTC").isoformat(),
-                            "request_seconds": time.monotonic() - started,
-                            "pacing_wait_seconds": pacing_wait,
-                            "status": status,
-                        }
-                        with (self.cache_dir / "weathernext-requests.jsonl").open(
-                            "a"
-                        ) as requests:
-                            requests.write(json.dumps(record) + "\n")
-                    if (
-                        response.status_code in {408, 429}
-                        or response.status_code >= 500
-                    ):
-                        response.raise_for_status()
-                    return response
-
-                response = retry(
-                    get_page,
-                    retryable_exceptions=(httpx.RequestError, httpx.HTTPStatusError),
-                )
+                response = self.get(OBJECTS_LOCATION, params, (prefix, page))
                 response.raise_for_status()
                 payload = response.json()
                 for entry in payload.get("items", []):
@@ -214,7 +241,7 @@ class TimestampSource:
             else f"https://{bucket}.s3.amazonaws.com/"
         )
         while True:
-            response = self.client.get(endpoint, params=params)
+            response = self.get(endpoint, params=params)
             if response.status_code in {403, 404}:
                 return Listing(
                     {}, f"S3 HTTP {response.status_code}; no anonymous listing"
@@ -246,7 +273,7 @@ class TimestampSource:
             "fields": "items(name,updated,size),nextPageToken",
         }
         while True:
-            response = self.client.get(
+            response = self.get(
                 f"https://storage.googleapis.com/storage/v1/b/{bucket}/o", params=params
             )
             if response.status_code in {401, 403, 404}:

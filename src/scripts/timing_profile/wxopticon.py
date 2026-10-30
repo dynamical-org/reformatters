@@ -10,7 +10,7 @@ import pandas as pd
 from reformatters.common.logging import get_logger
 
 from .datasets import Unit
-from .sources import TimestampSource, canonical_url
+from .sources import TimestampSource, canonical_url, write_atomic
 
 BASE_URL = "https://assets.dynamical.org/wxopticon"
 log = get_logger(__name__)
@@ -104,7 +104,7 @@ class WxopticonSource:
             payload = json.loads(path.read_text())
             assert payload["url"] == url
         else:
-            response = self.source.client.get(url)
+            response = self.source.get(url)
             if response.status_code != 404:
                 response.raise_for_status()
             payload = {
@@ -113,7 +113,7 @@ class WxopticonSource:
                 "status": response.status_code,
                 "body": response.text if response.status_code == 200 else "",
             }
-            path.write_text(json.dumps(payload))
+            write_atomic(path, json.dumps(payload))
         body = payload["body"]
         assert isinstance(body, str)
         return parse_events(body, product)

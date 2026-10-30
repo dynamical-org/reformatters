@@ -13,7 +13,12 @@ from reformatters.common.kubernetes import ReformatCronJob
 from reformatters.common.template_config import TemplateConfig
 from reformatters.google.weathernext3.forecast_virtual.template_config import STATISTICS
 from scripts.timing_profile import __main__ as cli
-from scripts.timing_profile.__main__ import main, parse_args
+from scripts.timing_profile.__main__ import (
+    main,
+    parse_args,
+    select_datasets,
+    trigger_producers,
+)
 from scripts.timing_profile.datasets import Unit
 from scripts.timing_profile.sources import Listing, TimestampSource
 
@@ -171,3 +176,35 @@ def test_weathernext3_measures_proxy_finalization_with_compact_summaries(
         unit.expected_files == len(config.data_vars) * 2 for unit in measurements
     )
     assert any(unit.complete == 6 * 3600 + 4 * 60 for unit in measurements)
+
+
+def test_default_selection_skips_suspended_cronjobs_unless_requested() -> None:
+    selected, suspended = select_datasets(None)
+    assert suspended
+    assert all(not cron.suspend for _, cron in selected)
+    assert {dataset.dataset_id for dataset, _ in selected}.isdisjoint(suspended)
+    requested, skipped = select_datasets([suspended[0]])
+    assert [dataset.dataset_id for dataset, _ in requested] == [suspended[0]]
+    assert skipped == []
+
+
+def test_unknown_dataset_is_rejected() -> None:
+    with pytest.raises(AssertionError, match="Unknown dataset ID"):
+        select_datasets(["not-a-dataset"])
+
+
+def test_trigger_producers_include_archivers() -> None:
+    producers = trigger_producers()
+    assert producers["ecmwf-ifs-ens-46-day-daily-update"] == [
+        "ecmwf-ifs-ens-46-day-gribs"
+    ]
+    assert producers["noaa-gfs-forecast-update"] == ["noaa-gfs-forecast-virtual"]
+    assert all(
+        name.endswith("-update")
+        and any(
+            cron.name == name
+            for dataset in DYNAMICAL_DATASETS
+            for cron in dataset.operational_kubernetes_resources("test")
+        )
+        for name in producers
+    )

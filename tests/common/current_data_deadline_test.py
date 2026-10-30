@@ -42,7 +42,7 @@ _FRESHNESS_DEADLINES = [
     ("ecmwf-ifs-ens-forecast-46-day-daily-1-5-degree", "2026-09-23 00:00", "58h05m"),
     ("ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree", "2026-09-23 00:00", "58h05m"),
     ("ecmwf-aifs-single-forecast", "2026-09-26 18:00", "5h39m"),
-    ("ecmwf-aifs-single-forecast-virtual", "2026-09-27 00:00", "6h06m"),
+    ("ecmwf-aifs-single-forecast-virtual", "2026-09-27 00:00", "6h14m"),
     ("ecmwf-aifs-ens-forecast", "2026-09-26 18:00", "5h59m"),
     ("dwd-icon-eu-forecast-5-day", "2026-09-27 00:00", "3h52m"),
     ("eccc-hrdps-forecast", "2026-09-27 00:00", "4h30m"),
@@ -153,7 +153,7 @@ def test_current_data_cases_cover_registered_datasets() -> None:
     ("dataset_id", "validation_delay"),
     [
         ("ecmwf-aifs-single-forecast", "8h15m"),
-        ("ecmwf-aifs-single-forecast-virtual", "6h06m"),
+        ("ecmwf-aifs-single-forecast-virtual", "6h14m"),
         ("ecmwf-aifs-single-forecast-virtual", "7h35m"),
         ("ecmwf-aifs-single-forecast-virtual", "8h38m"),
         ("ecmwf-aifs-ens-forecast", "8h"),
