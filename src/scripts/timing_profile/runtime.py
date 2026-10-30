@@ -11,6 +11,7 @@ import pandas as pd
 from reformatters.common.kubernetes import CronJob
 from reformatters.common.logging import get_logger
 
+from .sources import write_atomic
 from .statistics import arrival_stats
 
 log = get_logger(__name__)
@@ -161,7 +162,7 @@ def fetch_checkins(
             next_link = response.links.get("next", {})
             url = next_link.get("url", "") if next_link.get("results") == "true" else ""
     directory.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(checkins))
+    write_atomic(path, json.dumps(checkins))
 
 
 def checkins_page(client: httpx.Client, url: str) -> httpx.Response:

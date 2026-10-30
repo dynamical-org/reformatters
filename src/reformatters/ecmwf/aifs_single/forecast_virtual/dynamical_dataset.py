@@ -80,7 +80,7 @@ class EcmwfAifsSingleForecastVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=6)),
+            validation.CheckCurrentData(max_delay=timedelta(hours=6, minutes=14)),
             # Polling waits for all 61 leads before validating a complete run.
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(),

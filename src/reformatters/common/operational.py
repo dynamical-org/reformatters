@@ -1,11 +1,12 @@
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, ExitStack, contextmanager
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 import typer
 
 from reformatters.common.iterating import item
 from reformatters.common.kubernetes import CronJob
+from reformatters.common.materialized_update_trigger import MaterializedUpdateTrigger
 from reformatters.common.pydantic import FrozenBaseModel
 
 
@@ -16,6 +17,8 @@ class OperationalResources(FrozenBaseModel):
     but have no store of their own. `dataset_id` is the CLI path segment a cron pod
     invokes, so a subclass's typer app must be registered under it.
     """
+
+    materialized_update_triggers: ClassVar[tuple[MaterializedUpdateTrigger, ...]] = ()
 
     @property
     def dataset_id(self) -> str:

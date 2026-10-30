@@ -17,12 +17,21 @@ Tail-dominated and small-sample classes need hand values for p99-derived constan
 virtual polling fires from first-visibility E remain available. Short episodes flag review.
 Re-pass/page rates are estimates from p50 L/R/V, not observed validation outcomes.
 
-For runtimes, set SENTRY_AUTH_TOKEN to a read-only Sentry token, or pass
---checkins-dir with offline monitor exports. Export GET /api/0/organizations/<org>/
+Runtimes (startup L, processing R, validation V) come only from Sentry check-ins:
+set SENTRY_AUTH_TOKEN to a read-only Sentry token, or pass --checkins-dir with
+offline monitor exports. An operator exports GET /api/0/organizations/<org>/
 monitors/<slug>/checkins/, following Link's next cursor through the window, and
-save concatenated JSON arrays as <slug>.json. Slugs are ReformatCronJob.name and
-its -validate counterpart, not necessarily the dataset ID. Tokens are not saved.
-This advisory tool changes no dataset code and deploys nothing.
+saves the concatenated JSON arrays as <slug>.json. Slugs are ReformatCronJob.name
+and its -validate counterpart, not necessarily the dataset ID. Tokens are not saved.
+An empty --checkins-dir leaves L/R/V unmeasured: virtual deadlines, validation grace
+and runtime-based re-pass/page rates are not recommended, and virtual polling fires
+assume L = 0.
+
+Default selection is every registered dataset whose update CronJob is not suspended;
+suspended ones are listed and skipped. One run pins one --as-of (default: run start);
+pass the same --as-of to every process of a multi-process capture. Concurrent runs
+may share one --cache-dir. This advisory tool changes no dataset code and deploys
+nothing.
 """
 
 import argparse
@@ -73,22 +82,23 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--as-of",
         type=pd.Timestamp,
         default=pd.Timestamp.now(tz="UTC").tz_convert(None),
+        help="End of the window for every dataset in this run; default: run start.",
     )
     parser.add_argument(
         "--dataset",
         action="append",
-        help="Dataset ID; repeat to select several. Default: every registered dataset with an update CronJob, including suspended datasets.",
+        help="Dataset ID; repeat to select several. Default: every registered dataset whose update CronJob is not suspended.",
     )
     parser.add_argument(
         "--checkins-dir",
         type=Path,
-        help="Offline check-in JSON exports. Omit to fetch live with SENTRY_AUTH_TOKEN.",
+        help="Offline Sentry check-in exports, <monitor slug>.json each; needed for L/R/V. Omit to fetch live with SENTRY_AUTH_TOKEN.",
     )
     parser.add_argument("--sentry-org", default="dynamical")
     parser.add_argument(
         "--cache-dir",
         type=Path,
-        help="Frozen capture of wxopticon events and anonymous listings; reuse for the same window.",
+        help="Frozen capture of wxopticon events and anonymous listings; reuse for the same window. Concurrent runs may share it.",
     )
     parser.add_argument(
         "--workers",
@@ -121,6 +131,7 @@ def measure_source(
     excluded: set[pd.Timestamp],
     *,
     source_mode: Literal["auto", "listings"] = "auto",
+    triggered_by: Sequence[str] = (),
 ) -> str:
     gap = source_gap(dataset.dataset_id)
     weather_next = "weathernext" in dataset.dataset_id
@@ -226,7 +237,60 @@ def measure_source(
         gap,
         source_notes,
         excluded=excluded,
+        triggered_by=triggered_by,
     )
+
+
+def parse_exclusions(entries: Sequence[str]) -> dict[str, set[pd.Timestamp]]:
+    excluded: dict[str, set[pd.Timestamp]] = {}
+    for entry in entries:
+        dataset_id, timestamp = entry.split("=", 1)
+        anchor = pd.Timestamp(timestamp)
+        excluded.setdefault(dataset_id, set()).add(
+            anchor.tz_convert(None) if anchor.tzinfo else anchor
+        )
+    return excluded
+
+
+def select_datasets(
+    requested: Sequence[str] | None,
+) -> tuple[list[tuple[DynamicalDataset[Any, Any], ReformatCronJob]], list[str]]:
+    """Datasets to profile with their update CronJobs, and the suspended ones skipped.
+
+    An explicit request profiles the named datasets even when suspended."""
+    selected = []
+    suspended = []
+    for dataset in DYNAMICAL_DATASETS:
+        if requested and dataset.dataset_id not in requested:
+            continue
+        cron = next(
+            (
+                resource
+                for resource in dataset.operational_kubernetes_resources(
+                    "timing-profile"
+                )
+                if isinstance(resource, ReformatCronJob)
+            ),
+            None,
+        )
+        if cron is None:
+            continue
+        if cron.suspend and not requested:
+            suspended.append(dataset.dataset_id)
+        else:
+            selected.append((dataset, cron))
+    assert not requested or set(requested) <= {
+        dataset.dataset_id for dataset in DYNAMICAL_DATASETS
+    }, "Unknown dataset ID"
+    return selected, suspended
+
+
+def trigger_producers() -> dict[str, list[str]]:
+    producers: dict[str, list[str]] = {}
+    for resource in (*DYNAMICAL_DATASETS, *OPERATIONAL_ARCHIVERS):
+        for trigger in resource.materialized_update_triggers:
+            producers.setdefault(trigger.target_cronjob, []).append(resource.dataset_id)
+    return producers
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -244,21 +308,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             "Set SENTRY_AUTH_TOKEN or pass --checkins-dir"
         )
         checkins_dir = capture / "checkins"
-    excluded: dict[str, set[pd.Timestamp]] = {}
-    for entry in args.exclude_anchor:
-        dataset_id, timestamp = entry.split("=", 1)
-        anchor = pd.Timestamp(timestamp)
-        excluded.setdefault(dataset_id, set()).add(
-            anchor.tz_convert(None) if anchor.tzinfo else anchor
-        )
-    selected = [
-        dataset
-        for dataset in DYNAMICAL_DATASETS
-        if not args.dataset or dataset.dataset_id in args.dataset
-    ]
-    assert not args.dataset or set(args.dataset) <= {
-        ds.dataset_id for ds in selected
-    }, "Unknown dataset ID"
+    excluded = parse_exclusions(args.exclude_anchor)
+    selected, suspended = select_datasets(args.dataset)
     output = args.output.open("w") if args.output else sys.stdout
     output.write(
         f"# Operational timing measurements\n\nGenerated {datetime.now(UTC).isoformat()}. Requested window: {start} .. {end} UTC ({args.days} days). Anonymous capture: `{capture}`. Source selection: {args.source}. Check-ins: {'offline exports at ' + str(checkins_dir) if args.checkins_dir else 'live read-only Sentry GET, captured at ' + str(checkins_dir)}. Verified outlier anchors excluded from quantiles/rates (never E): {args.exclude_anchor or 'none'}.\n\n"
@@ -267,21 +318,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         "Re-pass/page estimates use measured p50 L/R/V: first read S + L; first re-pass read S + L + R + V + 5 min back-off + L. A first validation failure is quiet when a re-pass is queued. Recent incomplete units are censored. Unresolved units with an observed file are counted as incomplete; units with no observed files are excluded from rate denominators and counted separately. These complete-unit estimates can overstate validation failures for multi-position units; trigger rescue is unmeasured. L p95 remains the startup estimate for virtual polling, R p95 covers scheduled-ok materialized processing, and V max bounds validation. Historical check-in schedules classify scheduled runs approximately; starts ≥5 min after fire are excluded, and check-ins do not establish which source init was processed. Missing runtime components leave rates unmeasured. Datasets marked for manual review keep hand constants. No production constants are changed.\n\n"
     )
     output.flush()
+    producers = trigger_producers()
     source = TimestampSource(capture / "sources", args.workers)
     try:
-        for dataset in selected:
-            cron = next(
-                (
-                    resource
-                    for resource in dataset.operational_kubernetes_resources(
-                        "timing-profile"
-                    )
-                    if isinstance(resource, ReformatCronJob)
-                ),
-                None,
-            )
-            if cron is None:
-                continue
+        for dataset, cron in selected:
             log.info("Measuring %s", dataset.dataset_id)
             if args.checkins_dir is None:
                 for monitor in (
@@ -302,10 +342,17 @@ def main(argv: Sequence[str] | None = None) -> None:
                     end,
                     excluded.get(dataset.dataset_id, set()),
                     source_mode=args.source,
+                    triggered_by=producers.get(cron.name, []),
                 )
                 + "\n"
             )
             output.flush()
+        if suspended:
+            output.write(
+                "## Suspended, not profiled\n\n"
+                + "".join(f"- {dataset_id}\n" for dataset_id in suspended)
+                + "\n"
+            )
         if not args.dataset:
             output.write("## Operational archivers\n\n")
             for archiver in OPERATIONAL_ARCHIVERS:

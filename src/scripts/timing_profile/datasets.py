@@ -310,13 +310,23 @@ def readiness_units(
             tuple(tuple(files) for files in positions.values()),
         )
         if dataset_id == "noaa-mrms-conus-analysis-hourly":
+            # Validation requires these products, not the gauge passes, at the newest hour.
             yield Unit(
                 anchor,
-                "pass 1 (exception)",
+                "radar-only (exception)",
                 tuple(
-                    file
-                    for file in files
-                    if any("MultiSensor_QPE_01H_Pass1" in url for url in file)
+                    sorted(
+                        (
+                            file
+                            for file in files
+                            if any(
+                                f"/MRMS_{product}_" in url
+                                for url in file
+                                for product in ("RadarOnly_QPE_01H", "PrecipFlag")
+                            )
+                        ),
+                        key=sorted,
+                    )
                 ),
                 label_offset.total_seconds(),
             )

@@ -1,5 +1,7 @@
 import gzip
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -244,3 +246,97 @@ def test_weathernext_retry_records_each_http_and_transport_attempt(
     assert [r["page"] for r in records] == [1, 1, 1]
     assert all(r["request_seconds"] >= 0 for r in records)
     source.close()
+
+
+def test_throttling_and_disconnects_are_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("reformatters.common.retry.time.sleep", lambda _: None)
+    responses = iter(
+        [
+            httpx.Response(503, text="Slow Down"),
+            httpx.RemoteProtocolError("Server disconnected"),
+            httpx.Response(
+                200,
+                text='<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Contents><Key>a/file</Key><Size>10</Size><LastModified>2026-10-26T01:00:00Z</LastModified></Contents></ListBucketResult>',
+            ),
+        ]
+    )
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        response = next(responses)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    source = TimestampSource(tmp_path, 1)
+    source.client.close()
+    source.client = httpx.Client(transport=httpx.MockTransport(respond))
+    assert source.list("s3://bucket/a/").objects == {
+        "s3://bucket/a/file": pd.Timestamp("2026-10-26T01")
+    }
+    assert [path.suffix for path in tmp_path.iterdir()] == [".json"]
+    source.close()
+
+
+def test_concurrent_captures_of_one_weathernext_prefix_share_a_cache_dir(
+    tmp_path: Path,
+) -> None:
+    prefix = "https://wn.dynamical.org/chunks/weathernext_3_0_0_statistics/zarr/2026_to_present/20261029_06hr_01_preds/predictions.zarr/temperature_2m_"
+    both_capturing = threading.Barrier(2)
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        both_capturing.wait(timeout=10)
+        return httpx.Response(
+            200,
+            json={
+                "items": [
+                    {
+                        "name": prefix.removeprefix("https://wn.dynamical.org/chunks/")
+                        + "mean/c/0/0/0",
+                        "size": "10",
+                        "timeFinalized": "2026-10-29T12:00:01Z",
+                    }
+                ]
+            },
+        )
+
+    sources = [TimestampSource(tmp_path, 1) for _ in range(2)]
+    for source in sources:
+        source.client.close()
+        source.client = httpx.Client(transport=httpx.MockTransport(respond))
+    with ThreadPoolExecutor(2) as pool:
+        listings = list(pool.map(lambda source: source.list(prefix), sources))
+    assert listings[0] == listings[1]
+    assert len(listings[0].objects) == 1
+    (raw,) = tmp_path.glob("*.jsonl.gz")
+    with gzip.open(raw, "rt") as stream:
+        assert [json.loads(line)["size"] for line in stream] == ["10"]
+    assert not list(tmp_path.glob("*.tmp"))
+    for source in sources:
+        source.close()
+
+
+def test_concurrent_listings_of_one_s3_prefix_share_a_cache_dir(
+    tmp_path: Path,
+) -> None:
+    both_listing = threading.Barrier(2)
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        both_listing.wait(timeout=10)
+        return httpx.Response(
+            200,
+            text='<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Contents><Key>a/file</Key><Size>10</Size><LastModified>2026-10-26T01:00:00Z</LastModified></Contents></ListBucketResult>',
+        )
+
+    sources = [TimestampSource(tmp_path, 1) for _ in range(2)]
+    for source in sources:
+        source.client.close()
+        source.client = httpx.Client(transport=httpx.MockTransport(respond))
+    with ThreadPoolExecutor(2) as pool:
+        listings = list(pool.map(lambda source: source.list("s3://bucket/a/"), sources))
+    assert listings[0] == listings[1]
+    assert [path.suffix for path in tmp_path.iterdir()] == [".json"]
+    assert TimestampSource(tmp_path, 1).list("s3://bucket/a/") == listings[0]
+    for source in sources:
+        source.close()

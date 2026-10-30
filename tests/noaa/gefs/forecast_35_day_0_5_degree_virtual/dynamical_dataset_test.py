@@ -382,7 +382,7 @@ def test_validators(
     current_data = next(
         v for v in validators if isinstance(v, validation.CheckCurrentData)
     )
-    assert current_data.max_delay == timedelta(hours=3, minutes=50)
+    assert current_data.max_delay == timedelta(hours=3, minutes=56)
 
     completeness = next(
         v

@@ -28,6 +28,7 @@ class EcmwfAifsSingleForecastDataset(
         operational_update_cron_job = ReformatCronJob(
             name=f"{self.dataset_id}-update",
             # Backstop schedule. Also triggered ASAP by ecmwf-aifs-single-forecast-virtual.
+            # Hand value from the source regime starting 2026-10-27T12Z, a provider-confirmed change; measure with --days after it.
             schedule="39 5,11,17,23 * * *",
             concurrency_policy="Allow",
             pod_active_deadline=timedelta(hours=6),

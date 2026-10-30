@@ -215,7 +215,7 @@ def test_current_data_validator_uses_first_visibility_threshold(
     (current_data,) = [
         v for v in dataset.validators() if isinstance(v, validation.CheckCurrentData)
     ]
-    assert current_data.max_delay == timedelta(hours=6, minutes=6)
+    assert current_data.max_delay == timedelta(hours=6, minutes=14)
 
 
 @pytest.mark.parametrize("hour", [0, 6, 12, 18])

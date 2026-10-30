@@ -42,7 +42,7 @@ VALUES = (
     (GefsAnalysisDataset, "3 4,10,16,22 * * *", "4h03m", 6),
     (GefsForecast35DayDataset, "15 7 * * *", "7h15m", 24),
     (NoaaHrrrAnalysisDataset, "10 1,4,7,10,13,16,19,22 * * *", "3h10m", 3),
-    (NoaaMrmsConusAnalysisHourlyDataset, "3 * * * *", "5m", 1),
+    (NoaaMrmsConusAnalysisHourlyDataset, "3 * * * *", "3m", 1),
 )
 
 

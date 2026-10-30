@@ -37,12 +37,12 @@ from .statistics import (
 )
 from .wxopticon import Evidence
 
-MANUAL_REVIEW_DATASETS = frozenset(
-    {
-        "noaa-gefs-forecast-35-day-0-5-degree-virtual",
-        "noaa-mrms-conus-analysis-hourly",
-    }
-)
+# Dataset exceptions whose hand constants the rule must not replace, with the reason.
+MANUAL_REVIEW_DATASETS = {
+    "noaa-gefs-forecast-35-day-0-5-degree-virtual": "one daily polling window fires before the previous initialization's overnight extension finishes; a hand-set deadline keeps it polling through the newest morning wave",
+    "noaa-mrms-conus-analysis-hourly": "fires near the radar-only p95, not at its T, because radar-only latency matters most to users; pod startup carries the first read past the radar-only p99",
+    "ecmwf-ifs-ens-15-day-deprecated-zarr-v3": "deprecated plain-Zarr copy whose constants are frozen until it is removed",
+}
 
 
 @dataclass(frozen=True)
@@ -274,6 +274,10 @@ def cron_interval(
     return max(intervals) if maximum else min(intervals)
 
 
+def fires_at(cron: ReformatCronJob, time: pd.Timestamp) -> bool:
+    return cron.previous_fire_time(time) == time
+
+
 def recommended_cron(offset: float, interval: float, cron: ReformatCronJob) -> str:
     rounded_minutes = round(offset / 60)
     minute = rounded_minutes % 60
@@ -346,6 +350,10 @@ class Recommendation:
     classes: tuple[ClassRecommendation, ...]
     poll_lead: float | None = None
     completion_p99: float | None = None
+
+
+def polling_startup(runtime: RuntimeStats) -> float:
+    return runtime.startup_estimate if runtime.startup_estimate is not None else 0
 
 
 def recommend(
@@ -424,11 +432,10 @@ def recommend(
     completion_p99 = max(completion_p99s, default=None)
     poll_lead = None
     virtual_offset = None
-    if virtual and first and runtime.startup_estimate is not None:
-        poll_lead = virtual_poll_lead(
-            min(first), runtime.startup_estimate, interval, completion_p99
-        )
-        virtual_offset = virtual_fire(min(first), runtime.startup_estimate, poll_lead)
+    if virtual and first:
+        startup = polling_startup(runtime)
+        poll_lead = virtual_poll_lead(min(first), startup, interval, completion_p99)
+        virtual_offset = virtual_fire(min(first), startup, poll_lead)
         classes = [replace(value, offset=virtual_offset) for value in classes]
     first_tier = [value for value in classes if value.tier == tiers[0]]
     offsets = [value.offset for value in first_tier if value.offset is not None]
@@ -486,6 +493,7 @@ def render_dataset(
     source_notes: set[str],
     *,
     excluded: set[pd.Timestamp] | None = None,
+    triggered_by: Sequence[str] = (),
 ) -> str:
     interval = cron_interval(cron, end)
     currency_interval = cron_interval(cron, end, maximum=True)
@@ -503,6 +511,14 @@ def render_dataset(
         "",
         f"Current cron: `{cron.schedule}`; suspended: `{cron.suspend}`; max_delay: {duration(current_delay)}; pod deadline: {duration(cron.pod_active_deadline.total_seconds())}; Job deadline: {duration(cron.active_deadline.total_seconds()) if cron.active_deadline else 'unset'}. Fire interval min/max: {duration(interval)} / {duration(currency_interval)} (calendar-varying schedules use the minimum for deadlines, maximum for scalar currency).",
         "",
+        *(
+            [
+                f"Triggered by {', '.join(triggered_by)}; the cron is a backstop at the first readiness tier's T, and max_delay {'matches' if current_delay is not None and fires_at(cron, pd.Timestamp(dataset.template_config.append_dim_start) + pd.Timedelta(seconds=current_delay)) else 'differs from'} its offset.",
+                "",
+            ]
+            if triggered_by
+            else []
+        ),
         f"Runtime p50 (re-pass/page model): L {duration(runtime.startup_p50)}; R {duration(runtime.processing_p50)}; V {duration(runtime.validation_p50)}. L estimate p95 {duration(runtime.startup_estimate)}; R p95 {duration(runtime.processing)}; V p95/max {duration(runtime.validation_p95)} / {duration(runtime.validation_max)}. Scheduled-ok n={runtime.scheduled_count}; matched inline validation n={runtime.validation_count}; non-ok update n={runtime.non_ok_count}; off-schedule ok n={runtime.off_schedule_count}. Check-ins: {runtime.first} .. {runtime.last} UTC.",
         "",
     ]
@@ -562,7 +578,9 @@ def render_dataset(
     )
     if virtual:
         lines.extend(
-            render_polling_evidence(polling_units, runtime, recommendation, interval)
+            render_polling_evidence(
+                polling_units, runtime, recommendation, interval, cron
+            )
         )
     for tier, tier_units in tiers.items():
         lines.extend(
@@ -679,7 +697,11 @@ def render_dataset(
         f"| {value.tier} / {value.cycle_class}{' (hand value needed)' if value.hand_value else ''} | {duration(value.offset) if virtual or not value.hand_value else 'hand value needed'} | {duration(ceil_minute(value.delay)) if not value.hand_value else 'hand value needed'} | {duration(value.threshold) if not value.hand_value else 'hand value needed'} |"
         for value in recommendation.classes
     )
-    lines.extend(render_single_cron(dataset, cron, recommendation, units, interval))
+    lines.extend(
+        render_single_cron(
+            dataset, cron, recommendation, units, interval, triggered=bool(triggered_by)
+        )
+    )
     return "\n".join(lines)
 
 
@@ -688,6 +710,7 @@ def render_polling_evidence(
     runtime: RuntimeStats,
     recommendation: Recommendation,
     interval: float,
+    cron: ReformatCronJob,
 ) -> list[str]:
     first = [unit.first for unit in units if unit.first is not None]
     if not first:
@@ -696,36 +719,31 @@ def render_polling_evidence(
         f"Polling E over the full requested window, all tiers/classes, without exclusions: {duration(min(first))}.",
         "",
     ]
-    if recommendation.poll_lead is not None:
-        assert runtime.startup_estimate is not None
-        assert recommendation.offset is not None
-        fire = (virtual_fire(min(first), runtime.startup_estimate) // 60) * 60
-        cutoff = virtual_poll_cutoff(fire, interval, runtime.startup_estimate)
-        chosen_cutoff = virtual_poll_cutoff(
-            recommendation.offset, interval, runtime.startup_estimate
-        )
-        relation = (
-            "precedes"
-            if recommendation.completion_p99 is not None
-            and cutoff < recommendation.completion_p99
-            else "is at or after"
-        )
-        reason = (
-            f"15-minute-lead cutoff {duration(cutoff)} {relation} maximum retained-class completion p99 {duration(recommendation.completion_p99)}"
-            if recommendation.completion_p99 is not None
-            else f"completion p99 is unmeasured; 15-minute-lead cutoff is {duration(cutoff)}"
-        )
-        lines.extend(
-            [
-                f"Polling lead: {duration(recommendation.poll_lead)}; {reason}. Chosen cutoff: {duration(chosen_cutoff)}.",
-                "",
-            ]
-        )
-    if (
-        runtime.startup_estimate is not None
-        and recommendation.poll_lead is not None
-        and min(first) - runtime.startup_estimate - recommendation.poll_lead < 60
-    ):
+    if recommendation.poll_lead is None or recommendation.offset is None:
+        return lines
+    startup = polling_startup(runtime)
+    fifteen_minute_fire = (virtual_fire(min(first), startup) // 60) * 60
+    cutoff = virtual_poll_cutoff(fifteen_minute_fire, interval, startup)
+    completion_p99 = recommendation.completion_p99
+    if completion_p99 is None:
+        comparison = "has no completion p99 to compare"
+    else:
+        relation = "precedes" if cutoff < completion_p99 else "is at or after"
+        comparison = f"{relation} maximum retained-class completion p99 {duration(completion_p99)}"
+    startup_note = (
+        ""
+        if runtime.startup_estimate is not None
+        else " L is unmeasured and assumed 0, so this is the latest acceptable fire."
+    )
+    lines.extend(
+        [
+            f"Polling lead: the 15-minute-lead fire {duration(fifteen_minute_fire)} polls until cutoff {duration(cutoff)}, which {comparison}, so the lead is {duration(recommendation.poll_lead)}.",
+            "",
+            f"Polling fire: E {duration(min(first))} - L p95 {duration(startup)} - lead {duration(recommendation.poll_lead)}, rounded down to the minute and clamped after the anchor: {duration(recommendation.offset)}; cron `{recommended_cron(recommendation.offset, interval, cron)}`; chosen cutoff {duration(virtual_poll_cutoff(recommendation.offset, interval, startup))}.{startup_note}",
+            "",
+        ]
+    )
+    if min(first) - startup - recommendation.poll_lead < 60:
         lines.extend(
             [
                 "**Anchor guard:** polling fire clamped to the first minute after the source anchor: the template end is exclusive.",
@@ -769,6 +787,8 @@ def render_single_cron(
     recommendation: Recommendation,
     units: Sequence[MeasuredUnit],
     interval: float,
+    *,
+    triggered: bool = False,
 ) -> list[str]:
     lines: list[str] = []
     virtual = is_virtual(dataset)
@@ -799,7 +819,7 @@ def render_single_cron(
         lines.extend(
             [
                 "",
-                f"One-cron offset: {duration(chosen)}. {f'Uses first-visibility E across the full requested window, minus L and the {duration(recommendation.poll_lead)} polling lead, clamped after the anchor.' if virtual else 'Uses latest class and chosen S; adoption remains manual.'}",
+                f"One-cron offset: {duration(chosen)}. {f'Uses first-visibility E across the full requested window, minus L and the {duration(recommendation.poll_lead)} polling lead, clamped after the anchor.' if virtual else f'Uses latest class and chosen {"backstop T" if triggered else "S"}; adoption remains manual.'}",
                 "",
             ]
         )
@@ -823,7 +843,7 @@ def render_single_cron(
         lines.extend(
             [
                 "",
-                "One-cron recommendation: **keep constants; review manually** (manual review).",
+                f"One-cron recommendation: **keep constants; review manually** (dataset exception: {MANUAL_REVIEW_DATASETS[dataset.dataset_id]}).",
                 "",
             ]
         )

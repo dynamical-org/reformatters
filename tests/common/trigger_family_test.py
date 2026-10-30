@@ -51,7 +51,7 @@ def test_trigger_targets_and_virtual_producers_use_allow_with_job_deadlines() ->
     targets = {
         trigger.target_cronjob
         for producer in [*DYNAMICAL_DATASETS, *OPERATIONAL_ARCHIVERS]
-        for trigger in getattr(producer, "materialized_update_triggers", ())
+        for trigger in producer.materialized_update_triggers
     }
     assert targets
     for name in targets:

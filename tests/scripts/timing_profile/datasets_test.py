@@ -350,7 +350,9 @@ def test_chirps_keeps_unavailable_positions_without_calling_live_discovery(
     assert any("2026.10.19.tif" in url for file in units[0].files for url in file)
 
 
-def test_mrms_pass_one_uses_only_its_own_product(tmp_path: Path) -> None:
+def test_mrms_exception_measures_radar_only_and_precipitation_type(
+    tmp_path: Path,
+) -> None:
     dataset = next(
         ds
         for ds in DYNAMICAL_DATASETS
@@ -363,11 +365,11 @@ def test_mrms_pass_one_uses_only_its_own_product(tmp_path: Path) -> None:
         )
     )
     source.close()
-    assert [unit.tier for unit in units] == ["position", "pass 1 (exception)"]
-    assert len(units[1].files) == 1
-    assert all(
-        "MultiSensor_QPE_01H_Pass1" in url for file in units[1].files for url in file
-    )
+    assert [unit.tier for unit in units] == ["position", "radar-only (exception)"]
+    assert [url.split("/")[4] for (url,) in units[1].files] == [
+        "PrecipFlag_00.00",
+        "RadarOnly_QPE_01H_00.00",
+    ]
 
 
 def test_hrrr_generated_visibility_does_not_require_next_hour_before_its_gate(

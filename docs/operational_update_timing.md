@@ -27,15 +27,24 @@ Run the advisory profiler locally:
 uv run python -m scripts.timing_profile --days 365 --checkins-dir /path/to/checkins --output /tmp/values-table.md
 ```
 
-Omit `--checkins-dir` to fetch fresh check-ins using a read-only `SENTRY_AUTH_TOKEN` supplied in the environment. See `--help` for the export format and measurement limitations. The tool changes no dataset code and has no recurring schedule.
+Startup (`L`), processing (`R`), and validation (`V`) come only from Sentry check-ins. An operator exports each dataset's update monitor and its `-validate` monitor as `<monitor slug>.json` into one directory and passes it as `--checkins-dir`; alternatively, omit `--checkins-dir` to fetch fresh check-ins using a read-only `SENTRY_AUTH_TOKEN` supplied in the environment. See `--help` for the export format and measurement limitations. Without check-ins, virtual deadlines, validation grace, and runtime-based re-pass/page rates stay unmeasured and keep their constants, and virtual polling fires assume `L = 0`, the latest acceptable fire. The tool changes no dataset code and has no recurring schedule.
 
-The profiler prefers wxopticon’s anonymous per-artifact history for each readiness unit whose entire expected file/index set maps. Otherwise that whole unit uses anonymous listings. An unavailable day leaves other units usable; in-flight units stay censored. It reports the unit counts by source, timestamp provenance, active history, quantiles, and dated outliers. Use `--source listings` to cross-check, and a fresh `--cache-dir` for each frozen capture. Mirrors and representative batches do not replace exact file evidence.
+By default the profiler measures every registered dataset whose update CronJob is not suspended and lists the suspended ones it skipped. One run uses one `--as-of` for every dataset, defaulting to its start; give every process of a multi-process capture the same `--as-of`. Source requests retry throttling and disconnects.
+
+The profiler prefers wxopticon’s anonymous per-artifact history for each readiness unit whose entire expected file/index set maps. Otherwise that whole unit uses anonymous listings. An unavailable day leaves other units usable; in-flight units stay censored. It reports the unit counts by source, timestamp provenance, active history, quantiles, and dated outliers. Use `--source listings` to cross-check, and a fresh `--cache-dir` for each frozen capture; concurrent runs of one capture may share it. Mirrors and representative batches do not replace exact file evidence.
 
 For proxy-listed sources, size `--days` to the logged request estimate and pacing budget. Short histories still need hand values for p99-derived constants.
 
 Use the longest single-regime history available, at least 180 days (`--days`, default 365). Source-reported timestamps keep observed versus reconstructed provenance; overwritten listing timestamps need not represent first publication. Anonymous proxies can expose upstream finalization timestamps even when the underlying bucket requires credentials; these reconstruct source availability, separately from first observed proxy visibility. A source without anonymous evidence keeps its hand-set constants. Cycle classes split at fifteen-minute median differences, using first visibility for virtuals and complete-unit arrival for materialized datasets. `E` is the earliest first visibility across all tiers and cycle classes in the full requested window, without exclusions or regime trimming. `--exclude-anchor` applies only to quantiles and re-pass/page estimates.
 
 Both the untriggered schedule offset `S` and a triggered consumer’s backstop `T` use `ceil_minute(p99 + 3 min)` per class. For virtual currency, apply that same rule to first visibility. Choose the latest first-tier class for a single materialized cron. The provisional max-normal cut walks upward from the median to the first adjacent gap larger than `g = max(3 min, p90 − p50)`. Compare rounded `p99 + 3 min` with rounded `max normal + 3 min`. A class needs hand values if the former exceeds the latter by more than fifteen minutes, more than 1% of its units exceed max normal, or it has fewer than 100 samples (300 for daily classes). Hand values replace only the p99-derived constants (materialized S/T and virtual `max_delay`); virtual polling fires derive from first-visibility `E`. Flag histories shorter than 180 sampled days.
+
+Choose a hand value for `S` or `T` by the following procedure; virtual `max_delay` and a triggered consumer's backstop derive from it as from a measured `T`. First compute a candidate:
+
+- Where the source changed regime, use only its current-regime units: those after the profiler's regime restart, or, for a source change the provider confirms, a `--days` window that starts after it; use `--exclude-anchor` for verified anomalies. The candidate is `ceil_minute(p99 + 3 min)` of those units.
+- Otherwise the candidate is `ceil_minute(max normal + 3 min)`.
+
+Keep the existing constant unless observations contradict it. A constant earlier than the max normal of the units the candidate uses is contradicted. An untriggered `S` later than the candidate is also contradicted, because the wait costs latency; a later backstop `T` or virtual `T` is not, because it only delays an alert. If it is contradicted, use the candidate. A class with fewer than 30 complete units, outside a provider-confirmed source change, is unmeasured: keep its existing constants and flag it for a timing decision. A class whose history cannot reach 180 sampled days is flagged in the change and uses this procedure.
 
 Search the whole sorted history for the two-segment split minimizing absolute deviations around the segment medians, with at least five samples on each side. Restart the class’s history there when the medians differ by at least fifteen minutes. A trailing cluster of at least two units and at least 1% of observations above the earlier max normal can also restart history. A retained segment must span more than 24 hours; otherwise keep the history and flag a suspected change for review. Repeat the fit on each retained segment until no further qualifying restart is found. Report the final retained history and recheck its sample count. Outliers within the retained regime stay in quantiles; a gap alone does not establish an outage.
 
@@ -47,7 +56,7 @@ Use one cron per dataset, with one minute offset across all its cycles:
 
 - Virtual schedules use the lead defined under [virtual polling](#virtual-polling), using earliest first visibility across all tiers and cycle classes. Later classes spend the difference polling.
 - Untriggered materialized schedules use the latest class's `S` for the first readiness tier. Earlier classes accept that wait as latency.
-- Where a materialized dataset has a completion trigger, its cron is a backstop at the first readiness tier's `T`. Change a consumer's cron and `max_delay` together with activation of its trigger.
+- Where a materialized dataset has a completion trigger, its cron is a backstop at the first readiness tier's `T`; where that `T` needs a hand value, the backstop cron and `max_delay` both come from the hand value. Change a consumer's cron and `max_delay` together with activation of its trigger.
 
 Check every cycle class against the resulting single cron; the profiler flags a fire whose dataset-specific window override omits its anchor. Configure deadlines using measured startup, processing, and validation, leaving room for validation after polling. See [virtual operational updates](virtual_datasets.md#operational-updates) and [parallel processing](parallel_processing.md) for the mechanisms in use.
 
@@ -67,7 +76,7 @@ Validate once after polling ends. Validation failure exits 20 and fails the Job;
 
 `CheckCurrentData.max_delay` is measured from an append position's label. It must never require a position before the fire intended to publish it:
 
-- For virtual datasets, `max_delay = T_first_file + 4 min + (a − label)`. Here first file means the file that makes a new position visible. Where discovery gates each position on its own-cycle files, measure the maximum of those files per position, then the minimum across positions. Forecast virtuals use the earliest usable file. Polling start `E` uses this same first visibility across the full requested window.
+- For virtual datasets, `max_delay = T + 4 min + (a − label)`, where `T = ceil_minute(p99 + 3 min)` of first visibility for the latest class, or its hand value. First visibility is the arrival of the file that makes a new position visible. Where discovery gates each position on its own-cycle files, measure the maximum of those files per position, then the minimum across positions. Forecast virtuals use the earliest usable file. Polling start `E` uses this same first visibility across the full requested window.
 - For materialized datasets, `max_delay = F + (a − earliest label) + max(0, Δf − anchor spacing)`, where `F` is the intended fire's offset (`S` for an untriggered run, `T` for a backstop), and `Δf` is the fire interval. The last term accounts for a fire covering several anchors.
 
 Use one scalar per dataset. Later positions in a multi-position unit are detected later. Compute it against the final single cron, including minute rounding and every cycle class, rather than against processing completion. Use the profiler's recommendations to review the cron, deadlines, and `max_delay` together.
@@ -137,10 +146,11 @@ If an untriggered materialized dataset with a high-variance source alerts more o
 
 Each dataset's code defines the values and boundaries of its exception.
 
-- **MRMS:** one hourly run times to radar-only arrival, so the newest hour publishes before gauge correction; the gauge passes and FLASH fill in on the following hour's run.
-- **GEFS 35-day virtual:** one daily polling window covers the extension's member waves; intermediate waves can wait until the next fire.
+- **MRMS:** the hourly run fires at :03, near the radar-only p95 (radar-only QPE arrives at p50 2:50, p99 3:17), not at its `T`, because radar-only latency matters most to users; pod startup carries the first read past the radar-only p99. `max_delay` is the rule value for that fire. The newest hour's gauge passes and FLASH fill in on the following hour's run.
+- **GEFS 35-day virtual:** one daily polling window covers the extension's member waves. It fires before the previous initialization's overnight extension finishes, and a hand-set deadline keeps it polling through the newest morning wave; intermediate waves can wait until the next fire.
 - **GEFS 35-day materialized:** the extension tier has no completion trigger, because its source window does not normally complete during a producer run; an age gate lets a later init's trigger or backstop reprocess it.
 - **WeatherNext 2 operational virtual:** its unit is all members and levels of one variable and lead, measured from the unit's last object; its window ends at the fire's six-hour floor, so an init is first eligible at init + 6h.
 - **WeatherNext 3 virtual:** its unit is all statistics of one variable and lead, measured from the unit's last object; its six-hour eligibility gate makes init + 6h the earliest fire that can select the init.
-- **IFS ENS 15-day:** its fire balances the source mirrors: leads not yet on GCS fall back to S3, which throttles many concurrent pods.
+- **IFS ENS 15-day:** its fire balances the source mirrors: leads not yet on GCS fall back to S3, which throttles many concurrent pods. Its deprecated plain-Zarr copy's constants are frozen until it is removed.
+- **HRDPS:** fires later than the hand-value procedure gives, keeping late-unit pages acceptable while its arrival tail is long.
 - **RRFS sub-hourly virtual:** its window selects from one hour before the fire, so the fire's anchor clamp moves one hour later.
