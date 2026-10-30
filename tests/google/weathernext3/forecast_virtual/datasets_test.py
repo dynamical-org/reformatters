@@ -106,7 +106,7 @@ def test_template_and_operations(
         ]
         assert var.internal_attrs.keep_mantissa_bits == "no-rounding"
     (update,) = dataset.operational_kubernetes_resources("test")
-    assert update.suspend
+    assert not update.suspend
     assert (
         dataset._validation_monitor_name()
         == update.name.removesuffix("-update") + "-validate"
