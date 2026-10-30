@@ -54,7 +54,7 @@ class GoogleWeathernext3ForecastVirtualDataset(
                 cpu="1.7",
                 memory="7G",
                 secret_names=self.store_factory.k8s_secret_names(),
-                suspend=False,
+                suspend=self.region_job_class.init_frequency == pd.Timedelta("1h"),
             ),
         ]
 
