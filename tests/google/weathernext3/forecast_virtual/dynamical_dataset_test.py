@@ -51,7 +51,7 @@ def test_update_reserves_time_for_inline_validation(
     assert completeness.min_present_fraction == (
         (0.0, 0.0, 1.0) if dataset.template_config.horizon_hours == 48 else (1.0,)
     )
-    assert not update.suspend
+    assert update.suspend == (dataset.template_config.horizon_hours == 48)
     assert update.concurrency_policy == "Allow"
     assert update.pod_active_deadline == interval + pd.Timedelta(minutes=4, seconds=23)
     assert update.active_deadline == update.pod_active_deadline
