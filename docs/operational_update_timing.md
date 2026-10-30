@@ -89,7 +89,7 @@ Materialized pod and Job active deadlines equal `min(Δf, 6h)`, where `Δf` is t
 
 The update check-in covers the start decision, queue wait, processing, and finalization. A skipping Job closes it successfully without validation. Validation has its own check-in after publication. End-of-run backoff is outside both check-ins.
 
-A queued materialized run's first validation sends only a terminal check-in (`ok`, or `error` when no re-pass is submitted); re-passes send `in_progress` too. With no first-pass timeout check-in, an established monitor covers a lost first validation or re-pass, including off-schedule triggers, through a missed scheduled slot at the fire plus the pod deadline plus 10 minutes, unless another run's validation check-in arrives first. A triggered consumer may give its validate monitor its own schedule and margin, so the window starts before the expected trigger and ends after the backstop's run, since a validation check-in before the slot does not count toward it.
+A queued materialized run's first validation sends only a terminal check-in (`ok`, or `error` when no re-pass is submitted); re-passes send `in_progress` too. With no first-pass timeout check-in, an established monitor covers a lost first validation or re-pass, including off-schedule triggers, through a missed scheduled slot at the fire plus the pod deadline plus 10 minutes, unless another run's validation check-in arrives first. A triggered consumer may give its validate monitor its own schedule and margin, so the window starts before the expected trigger and ends after the backstop's run and one re-pass, since a validation check-in before the slot does not count toward it.
 
 ## Materialized queue and re-passes
 

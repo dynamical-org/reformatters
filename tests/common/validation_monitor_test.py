@@ -73,8 +73,9 @@ def test_validation_monitor_config(
     assert config["max_runtime"] == 360
 
 
-# Earliest trigger validation observed for the GEFS 35-day 00Z init.
-_GEFS_35_DAY_EARLIEST_TRIGGER_VALIDATION = _DAY + pd.Timedelta("6h38m")
+# Earliest observed GEFS 00Z tier-1 (a/b <= f384) source completion; a trigger
+# cannot validate before its source is ready.
+_GEFS_35_DAY_SOURCE_READY_LOWER_BOUND = _DAY + pd.Timedelta("6h29m")
 _IFS_46_DAY_ARCHIVER_FIRE = next(
     cron.next_fire_time(_DAY)
     for archiver in OPERATIONAL_ARCHIVERS
@@ -84,11 +85,11 @@ _IFS_46_DAY_ARCHIVER_FIRE = next(
 
 
 @pytest.mark.parametrize(
-    ("dataset_id", "earliest_trigger", "backstop_run"),
+    ("dataset_id", "trigger_lower_bound", "typical_fire_to_validation"),
     [
         (
             "noaa-gefs-forecast-35-day",
-            _GEFS_35_DAY_EARLIEST_TRIGGER_VALIDATION,
+            _GEFS_35_DAY_SOURCE_READY_LOWER_BOUND,
             timedelta(minutes=8),
         ),
         (
@@ -105,8 +106,8 @@ _IFS_46_DAY_ARCHIVER_FIRE = next(
 )
 def test_validation_monitor_window_spans_trigger_through_backstop_run(
     dataset_id: str,
-    earliest_trigger: pd.Timestamp,
-    backstop_run: timedelta,
+    trigger_lower_bound: pd.Timestamp,
+    typical_fire_to_validation: timedelta,
 ) -> None:
     dataset = _dataset(dataset_id)
     assert dataset.validation_monitor_schedule is not None
@@ -117,8 +118,8 @@ def test_validation_monitor_window_spans_trigger_through_backstop_run(
     ).next_fire_time(_DAY)
     backstop = update_cron.next_fire_time(slot)
 
-    assert slot <= earliest_trigger
+    assert slot <= trigger_lower_bound
     assert backstop - slot < timedelta(days=1)
     assert slot + dataset.validation_monitor_margin >= (
-        backstop + 2 * backstop_run + _FIRST_REPASS_BACKOFF + _SLACK
+        backstop + 2 * typical_fire_to_validation + _FIRST_REPASS_BACKOFF + _SLACK
     )
