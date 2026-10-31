@@ -5,18 +5,19 @@ import functools
 import threading
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from datetime import timedelta
 from http import HTTPStatus
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import httpx
 import obstore
 import requests
-from obstore.exceptions import GenericError, PermissionDeniedError
+from obstore.exceptions import GenericError, PermissionDeniedError, UnauthenticatedError
 
+from reformatters.common import kubernetes
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import exponential_backoff_time
 
@@ -37,6 +38,42 @@ The main functions which have (effectively) interchangeable interfaces are
 `http_download_to_disk` which uses obstore and
 `httpx_download_to_disk` which uses httpx and supports redirects and cookies.
 """
+
+
+class SourceAccessError(RuntimeError):
+    pass
+
+
+@contextlib.contextmanager
+def source_access() -> Iterator[None]:
+    try:
+        yield
+    except (PermissionDeniedError, UnauthenticatedError) as exc:
+        raise SourceAccessError("Private source authentication failed") from exc
+
+
+def validate_s3_credentials(options: Mapping[str, Any]) -> dict[str, str]:
+    if not isinstance(options, Mapping):
+        raise ValueError("Invalid static S3 credentials")
+    credentials: dict[str, str] = {}
+    for key in ("access_key_id", "secret_access_key"):
+        value = options.get(key)
+        if not isinstance(value, str) or not value:
+            raise ValueError("Invalid static S3 credentials")
+        credentials[key] = value
+    if "session_token" in options:
+        token = options["session_token"]
+        if not isinstance(token, str) or not token:
+            raise ValueError("Invalid static S3 credentials")
+        credentials["session_token"] = token
+    return credentials
+
+
+def load_s3_credentials(secret_name: str) -> dict[str, str]:
+    try:
+        return validate_s3_credentials(kubernetes.load_secret(secret_name))
+    except ValueError as exc:
+        raise SourceAccessError("Invalid static S3 credentials") from exc
 
 
 def download_to_disk(
@@ -116,6 +153,7 @@ def s3_store(
     access_key_id: str | None = None,
     secret_access_key: str | None = None,
     virtual_hosted_style_request: bool | None = None,
+    session_token: str | None = None,
 ) -> obstore.store.S3Store:
     """An S3 store, anonymous by default. Pass credentials and `endpoint` for a signed
     store on an S3-compatible service such as R2."""
@@ -126,18 +164,46 @@ def s3_store(
         config["access_key_id"] = access_key_id
     if secret_access_key is not None:
         config["secret_access_key"] = secret_access_key
+    if session_token is not None:
+        config["session_token"] = session_token
     if virtual_hosted_style_request is not None:
         config["virtual_hosted_style_request"] = virtual_hosted_style_request
-    store = obstore.store.from_url(
-        bucket_url,
+    parsed_url = urlparse(bucket_url)
+    assert parsed_url.scheme == "s3"
+    return obstore.store.S3Store(
+        parsed_url.netloc,
+        prefix=parsed_url.path.lstrip("/") or None,
         config=config,
         region=region,
         skip_signature=skip_signature,
-        client_options=_CLIENT_OPTIONS,
+        client_options={
+            **_CLIENT_OPTIONS,
+            **(
+                {"allow_http": True}
+                if endpoint and endpoint.startswith("http://")
+                else {}
+            ),
+        },
         retry_config=_RETRY_CONFIG,
     )
-    assert isinstance(store, obstore.store.S3Store)
-    return store
+
+
+@functools.cache
+def s3_store_from_secret(
+    bucket_url: str,
+    *,
+    region: str,
+    k8s_secret_name: str,
+    endpoint: str | None = None,
+) -> obstore.store.S3Store:
+    return s3_store(
+        bucket_url,
+        region=region,
+        skip_signature=False,
+        endpoint=endpoint,
+        virtual_hosted_style_request=False if endpoint is not None else None,
+        **load_s3_credentials(k8s_secret_name),
+    )
 
 
 @functools.cache
