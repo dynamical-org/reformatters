@@ -25,6 +25,7 @@ from reformatters.common import (
     storage,
 )
 from reformatters.common.materialized_region_job import MaterializedRegionJob
+from reformatters.ecmwf.ifs_ens.profiling.verify import verify_evidence
 from tests.common.failure_injection_test import (
     FailRegionJob,
     _backfill_through,
@@ -413,6 +414,7 @@ def test_run_profiled_persists_evidence_without_secrets(
     assert any(n.startswith("resource-") for n in names)
     initial = json.loads((remote / "manifest-initial.json").read_text())
     assert initial["selftest_samples"] == 2
+    assert initial["selftest_profile_quality"]["profile_decode"] == "strict"
     assert initial["sampler_overhead_warning"] is False
     assert initial["metadata"] == {"run": "test"}
     assert initial["sampler_overhead_warning_ratio"] == profiling.OVERHEAD_WARNING_RATIO
@@ -929,6 +931,277 @@ def test_empty_selftest_profile_stops_before_workload(
     with pytest.raises(AssertionError, match="self-test recorded no samples"):
         _run_passing_workload(tmp_path, fake_py_spy)
     assert not (tmp_path / "out" / profiling.WORKLOAD_RECEIPT).exists()
+
+
+INVALID_FRAME = b"\xf0\x80\x80\x80\\u0000\xf8garbled\xff"
+INVALID_PROFILE = (
+    b'{"profiles": ['
+    b'{"name": "Process PARENT Thread 1", "samples": [[0], [0, 1], [0]]}, '
+    b'{"name": "Process 999999 Thread 2", "samples": [[1], [0], [1, 0], [2]]}], '
+    b'"shared": {"frames": ['
+    b'{"name": "busy", "file": "x.py", "line": 1, "col": null}, '
+    b'{"name": "' + INVALID_FRAME + b'", "file": "x.py", "line": 0, "col": null}, '
+    b'{"name": "idle", "file": "' + INVALID_FRAME + b'", "line": 0, "col": null}'
+    b"]}}"
+)
+
+
+def _with_profile(fake_py_spy: Path, profile: bytes) -> None:
+    _fake_with(
+        fake_py_spy,
+        "sys.exit(rc)",
+        "if out.name == 'py-spy.speedscope.json':\n"
+        f"    out.write_bytes({profile!r}.replace(b'PARENT', b'%d' % child.pid))\n"
+        "sys.exit(rc)",
+    )
+
+
+def test_invalid_utf8_frames_keep_the_workload_and_are_visible_as_evidence(
+    tmp_path: Path, fake_py_spy: Path
+) -> None:
+    _with_profile(fake_py_spy, INVALID_PROFILE)
+    metadata = {"job_name": "test", "workers": 1, "worker_index": 0}
+    fs, remote = _remote(tmp_path)
+
+    rc = profiling.run_profiled(
+        [sys.executable, "-c", "pass"],
+        str(remote),
+        fs,
+        metadata,
+        tmp_path / "out",
+        py_spy=fake_py_spy,
+    )
+
+    assert rc == 0
+    raw = (remote / profiling.PY_SPY_OUTPUT).read_bytes()
+    assert raw == (tmp_path / "out" / profiling.PY_SPY_OUTPUT).read_bytes()
+    assert INVALID_FRAME in raw
+    manifest_bytes = (remote / "manifest-final.json").read_bytes()
+    assert b"garbled" not in manifest_bytes
+    final = json.loads(manifest_bytes)
+    assert final["returncode"] == 0
+    assert final["profile_samples"] == 7
+    assert final["profile_process_samples"]["999999"] == 4
+    assert final["profile_child_samples"] == 4
+    assert final["profile_parent_only"] is False
+    quality = {
+        "profile_decode": "replacement",
+        "profile_error": None,
+        "profile_replacement_chars": 12,
+        "profile_affected_frames": 2,
+        "profile_affected_samples": 4,
+    }
+    assert {key: final[key] for key in quality} == quality
+    assert final["py_spy_error_fraction"] == 0.25
+    assert final["py_spy_low_confidence"] is True
+
+    summary = verify_evidence(remote)
+    assert summary["complete"] == 1
+    assert summary["files_verified"] == len(final["sha256"])
+    assert summary["invalid_utf8_attempts"] == [
+        {"metadata": metadata, "profile_samples": 7, **quality}
+    ]
+
+
+def test_valid_profile_reports_no_invalid_utf8(
+    tmp_path: Path, fake_py_spy: Path
+) -> None:
+    _, final = _run_passing_workload(tmp_path, fake_py_spy)
+
+    assert final["profile_decode"] == "strict"
+    assert final["profile_error"] is None
+    assert final["profile_replacement_chars"] == 0
+    assert final["profile_affected_frames"] == 0
+    assert final["profile_affected_samples"] == 0
+    assert final["py_spy_low_confidence"] is False
+
+
+def test_valid_non_ascii_frame_is_not_invalid_utf8(tmp_path: Path) -> None:
+    path = tmp_path / "profile.json"
+    path.write_bytes(
+        json.dumps(
+            {
+                "profiles": [{"name": "Process 1 Thread 1", "samples": [[0]]}],
+                "shared": {"frames": [{"name": "caf\u00e9\ufffd", "file": "x.py"}]},
+            },
+            ensure_ascii=False,
+        ).encode()
+    )
+
+    samples, quality = profiling.speedscope_evidence(path)
+
+    assert samples == {"1": 1}
+    assert quality["profile_decode"] == "strict"
+    assert quality["profile_replacement_chars"] == 0
+    assert quality["profile_affected_frames"] == 0
+
+
+@pytest.mark.parametrize(
+    ("profile", "error"),
+    [
+        pytest.param(INVALID_PROFILE[:-4], "invalid_json", id="truncated"),
+        pytest.param(
+            INVALID_PROFILE.replace(b"[[0], [0, 1], [0]]", b"[[0], \xff]"),
+            "invalid_json",
+            id="invalid-byte-in-samples",
+        ),
+        pytest.param(
+            INVALID_PROFILE.replace(b"Process PARENT", b"Process \xff"),
+            "replacement_outside_frames",
+            id="invalid-byte-in-process-name",
+        ),
+        pytest.param(
+            INVALID_PROFILE.replace(b'"profiles"', b'"profile\xff"'),
+            "replacement_outside_frames",
+            id="invalid-byte-in-profiles-key",
+        ),
+        pytest.param(
+            b'{"profiles": [{"name": "Process 1 \xff", "samples": [[0]]}]}',
+            "invalid_structure",
+            id="invalid-byte-without-frames",
+        ),
+    ],
+)
+def test_invalid_utf8_outside_frame_strings_is_fatal(
+    tmp_path: Path, fake_py_spy: Path, profile: bytes, error: str
+) -> None:
+    _with_profile(fake_py_spy, profile)
+
+    rc, final = _run_passing_workload(tmp_path, fake_py_spy)
+
+    assert rc == 1
+    assert final["returncode"] == 0
+    assert final["profile_samples"] == 0
+    assert final["profile_error"] == error
+    assert final["profile_decode"] == "replacement"
+    assert final["profile_affected_frames"] is None
+    assert final["sha256"][profiling.PY_SPY_OUTPUT]
+
+
+def test_malformed_valid_utf8_profile_is_fatal(
+    tmp_path: Path, fake_py_spy: Path
+) -> None:
+    _with_profile(fake_py_spy, b'{"profiles": [')
+
+    rc, final = _run_passing_workload(tmp_path, fake_py_spy)
+
+    assert rc == 1
+    assert final["profile_error"] == "invalid_json"
+    assert final["profile_decode"] == "strict"
+
+
+def test_zero_samples_with_invalid_frame_is_fatal(
+    tmp_path: Path, fake_py_spy: Path
+) -> None:
+    _with_profile(
+        fake_py_spy,
+        b'{"profiles": [{"name": "Process PARENT Thread 1", "samples": []}], '
+        b'"shared": {"frames": [{"name": "' + INVALID_FRAME + b'", "file": "x.py"}]}}',
+    )
+
+    rc, final = _run_passing_workload(tmp_path, fake_py_spy)
+
+    assert rc == 1
+    assert final["profile_error"] is None
+    assert final["profile_samples"] == 0
+    assert final["profile_decode"] == "replacement"
+
+
+def _one_profile(samples: bytes, shared: bytes = b"") -> bytes:
+    return (
+        b'{"profiles": [{"name": "Process PARENT Thread 1", "samples": '
+        + samples
+        + b"}]"
+        + shared
+        + b"}"
+    )
+
+
+ONE_FRAME = b', "shared": {"frames": [{"name": "busy", "file": "x.py"}]}'
+
+
+@pytest.mark.parametrize(
+    "profiles",
+    [
+        pytest.param(b'{"shared": {}}', id="no-profiles"),
+        pytest.param(b'{"profiles": 3}', id="profiles-number"),
+        pytest.param(b'{"profiles": {}}', id="profiles-object"),
+        pytest.param(b'{"profiles": "abc"}', id="profiles-string"),
+        pytest.param(b"[]", id="top-level-list"),
+        pytest.param(
+            b'{"profiles": [{"name": "Process 1 Thread 1"}]}', id="no-samples"
+        ),
+        pytest.param(_one_profile(b'"abc"'), id="samples-string"),
+        pytest.param(_one_profile(b'{"0": [0]}'), id="samples-object"),
+        pytest.param(_one_profile(b'["abc"]'), id="stack-string"),
+        pytest.param(_one_profile(b"[0]"), id="stack-number"),
+        pytest.param(_one_profile(b'[["0"]]'), id="index-string"),
+        pytest.param(_one_profile(b"[[-1]]"), id="index-negative"),
+        pytest.param(_one_profile(b"[[1.0]]"), id="index-float"),
+        pytest.param(_one_profile(b"[[true]]"), id="index-bool"),
+        pytest.param(_one_profile(b"[[1]]", ONE_FRAME), id="index-past-frames"),
+    ],
+)
+def test_invalid_profile_structure_is_fatal(
+    tmp_path: Path, fake_py_spy: Path, profiles: bytes
+) -> None:
+    _with_profile(fake_py_spy, profiles)
+
+    rc, final = _run_passing_workload(tmp_path, fake_py_spy)
+
+    assert rc == 1
+    assert final["profile_error"] == "invalid_structure"
+
+
+def test_replacement_decoded_selftest_is_recorded_and_runs_work(
+    tmp_path: Path, fake_py_spy: Path
+) -> None:
+    _fake_with(
+        fake_py_spy,
+        "sys.exit(rc)",
+        "if out.name == 'py-spy-selftest.json':\n"
+        f"    out.write_bytes({INVALID_PROFILE!r})\n"
+        "sys.exit(rc)",
+    )
+
+    rc, final = _run_passing_workload(tmp_path, fake_py_spy)
+
+    assert rc == 0
+    assert final["profile_decode"] == "strict"
+    initial = json.loads((tmp_path / "remote" / "manifest-initial.json").read_text())
+    assert initial["selftest_samples"] == 7
+    assert initial["selftest_profile_quality"] == {
+        "profile_decode": "replacement",
+        "profile_error": None,
+        "profile_replacement_chars": 12,
+        "profile_affected_frames": 2,
+        "profile_affected_samples": 4,
+    }
+
+
+def test_frame_bounds_need_shared_frames(tmp_path: Path, fake_py_spy: Path) -> None:
+    _with_profile(fake_py_spy, _one_profile(b"[[7]]"))
+
+    rc, final = _run_passing_workload(tmp_path, fake_py_spy)
+
+    assert rc == 0
+    assert final["profile_error"] is None
+    assert final["profile_samples"] == 1
+
+
+def test_missing_profile_is_fatal(tmp_path: Path, fake_py_spy: Path) -> None:
+    _fake_with(
+        fake_py_spy,
+        "sys.exit(rc)",
+        "if out.name == 'py-spy.speedscope.json':\n    out.unlink()\nsys.exit(rc)",
+    )
+
+    rc, final = _run_passing_workload(tmp_path, fake_py_spy)
+
+    assert rc == 1
+    assert final["profile_error"] == "missing"
+    assert final["profile_decode"] is None
+    assert profiling.PY_SPY_OUTPUT not in final["sha256"]
 
 
 def test_sampler_stats_keep_only_py_spy_numbers() -> None:

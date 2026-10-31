@@ -45,6 +45,7 @@ def test_evidence_verification_rejects_corruption(tmp_path: Path) -> None:
         "incomplete": 0,
         "files_verified": 3,
         "overhead_warning_attempts": [],
+        "invalid_utf8_attempts": [],
         "jobs": {
             "test": {"workers": 2, "complete_workers": [0], "missing_workers": [1]}
         },
@@ -101,6 +102,83 @@ def test_rejects_out_of_range_worker_index(tmp_path: Path) -> None:
         json.dumps({"metadata": {**METADATA, "worker_index": 2}})
     )
     with pytest.raises(AssertionError):
+        verify_evidence(tmp_path)
+
+
+def _invalid_profile() -> bytes:
+    return (
+        b'{"profiles": [{"name": "Process 1 Thread 1", "samples": [[0], [0, 1]]}],'
+        b' "shared": {"frames": [{"name": "busy", "file": "x.py"},'
+        b' {"name": "bad\xff", "file": "x.py"}]}}'
+    )
+
+
+def _write_invalid_attempt(directory: Path, **final_overrides: Any) -> None:  # noqa: ANN401
+    _write_attempt(directory)
+    profile = directory / "py-spy.speedscope.json"
+    profile.write_bytes(_invalid_profile())
+    final = json.loads((directory / "manifest-final.json").read_text())
+    final["sha256"][profile.name] = hashlib.sha256(_invalid_profile()).hexdigest()
+    (directory / "manifest-final.json").write_text(
+        json.dumps({**final, **final_overrides})
+    )
+
+
+def test_invalid_utf8_is_listed_from_raw_bytes_for_manifest_without_quality_fields(
+    tmp_path: Path,
+) -> None:
+    _write_invalid_attempt(tmp_path, profile_samples=0)
+    summary = verify_evidence(tmp_path)
+    assert summary["complete"] == 0
+    assert summary["invalid_utf8_attempts"] == [
+        {
+            "metadata": METADATA,
+            "profile_samples": 2,
+            "profile_decode": "replacement",
+            "profile_error": None,
+            "profile_replacement_chars": 1,
+            "profile_affected_frames": 1,
+            "profile_affected_samples": 1,
+        }
+    ]
+
+
+def test_invalid_utf8_attempt_stays_complete_but_visible(tmp_path: Path) -> None:
+    _write_invalid_attempt(tmp_path)
+    summary = verify_evidence(tmp_path)
+    assert summary["complete"] == 1
+    assert len(summary["invalid_utf8_attempts"]) == 1
+
+
+def test_changed_invalid_profile_fails_its_raw_hash(tmp_path: Path) -> None:
+    _write_invalid_attempt(tmp_path)
+    (tmp_path / "py-spy.speedscope.json").write_bytes(
+        _invalid_profile().replace(b"\xff", b"\xfe")
+    )
+    with pytest.raises(AssertionError, match="checksum mismatch"):
+        verify_evidence(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"profile_decode": "strict"}, "quality differs"),
+        ({"profile_samples": 1}, "sample count differs"),
+    ],
+)
+def test_rejects_manifest_that_disagrees_with_raw_profile(
+    tmp_path: Path, overrides: dict[str, Any], message: str
+) -> None:
+    quality = {
+        "profile_samples": 2,
+        "profile_decode": "replacement",
+        "profile_error": None,
+        "profile_replacement_chars": 1,
+        "profile_affected_frames": 1,
+        "profile_affected_samples": 1,
+    }
+    _write_invalid_attempt(tmp_path, **{**quality, **overrides})
+    with pytest.raises(AssertionError, match=message):
         verify_evidence(tmp_path)
 
 

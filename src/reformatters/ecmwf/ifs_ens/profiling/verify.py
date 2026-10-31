@@ -5,17 +5,23 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from reformatters.common.profiling import PY_SPY_OUTPUT, WORKLOAD_RECEIPT
+from reformatters.common.profiling import (
+    PY_SPY_OUTPUT,
+    WORKLOAD_RECEIPT,
+    speedscope_evidence,
+)
 
 
 def verify_evidence(directory: Path) -> dict[str, Any]:
     """Check every downloaded evidence attempt under ``directory`` and summarize
     worker coverage per job. Raises ``AssertionError`` on corrupt or inconsistent
-    evidence."""
+    evidence. Attempts whose raw profile is not valid UTF-8 are listed even when
+    complete, because their sample counts do not establish frame attribution."""
     initial = list(directory.rglob("manifest-initial.json"))
     assert initial, "No initial manifests found"
     complete = checked = 0
     overhead_warning_attempts = []
+    invalid_utf8_attempts = []
     jobs: dict[str, dict[str, Any]] = {}
     for path in initial:
         initial_manifest = json.loads(path.read_text())
@@ -42,6 +48,25 @@ def verify_evidence(directory: Path) -> dict[str, Any]:
             actual = hashlib.sha256((path.parent / file_name).read_bytes()).hexdigest()
             assert actual == expected, f"Evidence checksum mismatch: {file_name}"
             checked += 1
+        if PY_SPY_OUTPUT in final["sha256"]:
+            process_samples, quality = speedscope_evidence(
+                path.with_name(PY_SPY_OUTPUT)
+            )
+            if "profile_decode" in final:
+                assert {key: final[key] for key in quality} == quality, (
+                    "Profile quality differs from the raw profile"
+                )
+                assert final["profile_samples"] == sum(process_samples.values()), (
+                    "Profile sample count differs from the raw profile"
+                )
+            if quality["profile_decode"] == "replacement":
+                invalid_utf8_attempts.append(
+                    {
+                        "metadata": metadata,
+                        "profile_samples": sum(process_samples.values()),
+                        **quality,
+                    }
+                )
         if (
             final["returncode"] == 0
             and final["evidence_error"] is None
@@ -66,6 +91,7 @@ def verify_evidence(directory: Path) -> dict[str, Any]:
         "incomplete": len(initial) - complete,
         "files_verified": checked,
         "overhead_warning_attempts": overhead_warning_attempts,
+        "invalid_utf8_attempts": invalid_utf8_attempts,
         "jobs": jobs,
     }
 

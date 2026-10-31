@@ -37,14 +37,28 @@ metrics for timing and treat stacks as approximate attribution. Short-lived
 children can finish before discovery, so missing child stacks are not evidence
 that write-side child work is cheap. Compare phase totals with stack coverage.
 Sampler process failure, upload failure, missing exit receipt or source failure fails the
-attempt. CPU is requested, not limited; parent/child CPU and overlapping phase
-wall times are not additive. Network deltas include index/profile traffic;
+attempt; so does failed profiling, defined below. CPU is requested, not limited;
+parent/child CPU and overlapping phase wall times are not additive. Network deltas include index/profile traffic;
 filesystem use includes concurrent downloads, chunk output and profile files.
 Sampler CPU/RSS is recorded separately within the process-tree counters; cgroup
 totals include it. Final manifests record numeric sample/error counts, error
 fraction, lag warnings and per-process coverage. Error fractions above 0.25 or
 missing totals mark stacks low-confidence without failing phase/resource evidence.
 Parent-only coverage is explicit; it does not prove the absence of child work.
+Failed profiling means any of: sampler failure, kill, signal, flush failure, or a
+profile that is missing, is invalid JSON, lacks valid `profiles`, or has zero samples;
+each fails the attempt, and `profile_error` names a profile failure. Non-UTF-8 output is
+the one exception to the profile gate, because nonblocking sampling can write it into
+frame strings. The profile is decoded strictly first (`profile_decode: strict`). On a
+UTF-8 decode error only, a replacement decode in memory counts the samples
+(`profile_decode: replacement`); the raw profile is uploaded and hashed unchanged. If
+every replacement character is inside `shared.frames` strings, the attempt can
+complete, `py_spy_low_confidence` is forced true, and the manifest records
+`profile_replacement_chars`, `profile_affected_frames` and `profile_affected_samples`
+(samples referencing an affected frame). Replacement characters elsewhere are
+`replacement_outside_frames`, a failed attempt. Do not rank frames from a
+replacement-decoded profile: its other frames are not proven correct either. The
+initial manifest's `selftest_profile_quality` records the same fields for the self-test.
 The private sampler log is copied to pod stderr after recording and is not
 uploaded. Retain pod logs when interpreting missing or weak stack evidence.
 
@@ -125,9 +139,9 @@ limits. Include node boot/idle time and PVC lifetime. Source inventory implies
 Observe at least every minute; download fresh evidence every 30 seconds. Sum
 per-pod network deltas across completed/failed/active attempts, and record node
 instance type/price, pod start/finish, PVC creation/deletion and imageID. Stop on
-any cap, 401/403, source error, OOM, wrong destination/image, failed profiling or
-upload, terminal worker failure, or no advancing evidence for two upload
-intervals while work continues. If counters/cost cannot be tracked, stop rather
+any cap, 401/403, source error, OOM, wrong destination/image, failed profiling as
+defined above (a replacement-decoded profile with samples is not one) or upload,
+terminal worker failure, or no advancing evidence for two upload intervals while work continues. If counters/cost cannot be tracked, stop rather
 than assume headroom. A partial leg remains useful with verified evidence.
 
 ```bash
@@ -157,7 +171,7 @@ From the matching main checkout, verify the downloaded evidence locally:
 ```bash
 export KUBECONFIG=<read-only-kubeconfig>
 uv run python -m reformatters.ecmwf.ifs_ens.profiling.verify --output-dir "$PILOT_EVIDENCE/profiles" > "$PILOT_EVIDENCE/verification.json"
-find "$PILOT_EVIDENCE/profiles" -name manifest-final.json -exec jq -c '{job: .metadata.job_name, worker: .metadata.worker_index, overhead_warning: .sampler_overhead_warning, child_hits: .profile_child_samples, parent_only: .profile_parent_only, low_confidence: .py_spy_low_confidence, error_fraction: .py_spy_error_fraction, lag_warnings: .py_spy_lag_warnings, samples_per_second: ((.py_spy_samples // 0) / .sampler_elapsed_seconds)}' {} + > "$PILOT_EVIDENCE/stack-quality.jsonl"
+find "$PILOT_EVIDENCE/profiles" -name manifest-final.json -exec jq -c '{job: .metadata.job_name, worker: .metadata.worker_index, overhead_warning: .sampler_overhead_warning, child_hits: .profile_child_samples, parent_only: .profile_parent_only, low_confidence: .py_spy_low_confidence, profile_decode: .profile_decode, profile_error: .profile_error, error_fraction: .py_spy_error_fraction, lag_warnings: .py_spy_lag_warnings, samples_per_second: ((.py_spy_samples // 0) / .sampler_elapsed_seconds)}' {} + > "$PILOT_EVIDENCE/stack-quality.jsonl"
 jq -e --arg job "$PILOT_JOB" '.jobs[$job].missing_workers == [] and .incomplete == 0' "$PILOT_EVIDENCE/verification.json"
 ```
 
@@ -169,6 +183,10 @@ Zero lag warnings means no recognized warning lines. Include stack-quality.jsonl
 in the report even when the checksum/worker completeness check passes.
 Inspect `overhead_warning_attempts` in verification.json and label their runtime
 estimates as potentially biased; a warning does not invalidate phase evidence.
+Inspect `invalid_utf8_attempts` there too. The verifier derives it from the raw
+profile bytes, also for older manifests without quality fields, and rejects a manifest
+that disagrees. Those attempts can count as complete and pass the jq gate, never as
+strict: exclude their stacks from frame attribution, keeping phase/resource evidence.
 Reconcile coverage with observed pods and the exact run/image/assignment. A
 successful primary has 38 covered worker indexes and 38 distinct variable-day
 units. Retain partial segments and pod termination records for failed attempts.

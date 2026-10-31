@@ -45,6 +45,7 @@ _OVERHEAD_PROBES = {
 _PY_SPY_TOTALS = re.compile(r"^py-spy> .*Samples: (\d+) Errors: (\d+)\s*$")
 _PY_SPY_LAG = re.compile(r"^(?:py-spy> )?(\d+(?:\.\d+)?)s behind in sampling")
 _PROFILE_PROCESS = re.compile(r"Process (\d+) ")
+_REPLACEMENT_CHAR = "\ufffd"
 
 _JOB_METHOD_PHASES = {
     "process": "unit",
@@ -392,12 +393,14 @@ def py_spy_selftest(py_spy: Path, work_dir: Path) -> dict[str, Any]:
         capture_output=True,
         timeout=60,
     )
-    samples = sum(_speedscope_process_samples(output).values())
+    process_samples, profile_quality = speedscope_evidence(output)
+    samples = sum(process_samples.values())
     assert samples > 0, "py-spy self-test recorded no samples"
     overhead = _sampler_overhead(py_spy, work_dir / "py-spy-overhead.raw")
     return {
         "py_spy_version": version,
         "selftest_samples": samples,
+        "selftest_profile_quality": profile_quality,
         "sampler_overhead": overhead,
         "sampler_overhead_warning_ratio": OVERHEAD_WARNING_RATIO,
         "sampler_overhead_warning": any(
@@ -407,16 +410,88 @@ def py_spy_selftest(py_spy: Path, work_dir: Path) -> dict[str, Any]:
     }
 
 
-def _speedscope_process_samples(path: Path) -> dict[str, int]:
-    samples: dict[str, int] = {}
+def _decode_profile(raw: bytes) -> tuple[str, str]:
     try:
-        for profile in json.loads(path.read_text())["profiles"]:
+        return raw.decode("utf-8"), "strict"
+    except UnicodeDecodeError:
+        return raw.decode("utf-8", errors="replace"), "replacement"
+
+
+def _valid_profiles(profiles: object, frame_count: int | None) -> bool:
+    return isinstance(profiles, list) and all(
+        isinstance(profile["samples"], list)
+        and all(
+            isinstance(stack, list)
+            and all(
+                type(index) is int
+                and index >= 0
+                and (frame_count is None or index < frame_count)
+                for index in stack
+            )
+            for stack in profile["samples"]
+        )
+        for profile in profiles
+    )
+
+
+def speedscope_evidence(  # noqa: PLR0911
+    path: Path,
+) -> tuple[dict[str, int], dict[str, Any]]:
+    """Return a speedscope file's samples per process and its quality fields.
+
+    The file is never changed. Decoding is strict; only a non-UTF-8 file falls back to
+    replacement decoding, for counting, and its replacement characters must all be in
+    ``shared.frames`` strings. Any other failure yields no samples and sets
+    ``profile_error``.
+    """
+    quality: dict[str, Any] = {
+        "profile_decode": None,
+        "profile_error": None,
+        "profile_replacement_chars": None,
+        "profile_affected_frames": None,
+        "profile_affected_samples": None,
+    }
+    try:
+        text, decode = _decode_profile(path.read_bytes())
+    except FileNotFoundError:
+        return {}, {**quality, "profile_error": "missing"}
+    except OSError:
+        return {}, {**quality, "profile_error": "unreadable"}
+    replacement_chars = text.count(_REPLACEMENT_CHAR) if decode == "replacement" else 0
+    quality["profile_decode"] = decode
+    quality["profile_replacement_chars"] = replacement_chars
+    try:
+        speedscope = json.loads(text)
+    except ValueError:
+        return {}, {**quality, "profile_error": "invalid_json"}
+    samples: dict[str, int] = {}
+    affected_samples = 0
+    try:
+        frames = speedscope.get("shared", {}).get("frames")
+        frame_chars = [
+            sum(
+                v.count(_REPLACEMENT_CHAR) for v in frame.values() if isinstance(v, str)
+            )
+            for frame in (frames if replacement_chars else [])
+        ]
+        if sum(frame_chars) != replacement_chars:
+            return {}, {**quality, "profile_error": "replacement_outside_frames"}
+        if not _valid_profiles(
+            speedscope["profiles"], None if frames is None else len(frames)
+        ):
+            return {}, {**quality, "profile_error": "invalid_structure"}
+        affected_frames = {i for i, count in enumerate(frame_chars) if count}
+        for profile in speedscope["profiles"]:
             process = _PROFILE_PROCESS.match(profile.get("name", ""))
             key = process.group(1) if process else "unattributed"
-            samples[key] = samples.get(key, 0) + len(profile.get("samples", []))
-    except OSError, ValueError, KeyError, TypeError, AttributeError:
-        return {}
-    return samples
+            stacks = profile["samples"]
+            samples[key] = samples.get(key, 0) + len(stacks)
+            affected_samples += sum(not affected_frames.isdisjoint(s) for s in stacks)
+    except KeyError, TypeError, AttributeError:
+        return {}, {**quality, "profile_error": "invalid_structure"}
+    quality["profile_affected_frames"] = len(affected_frames)
+    quality["profile_affected_samples"] = affected_samples
+    return samples, quality
 
 
 def _process_coverage(
@@ -541,8 +616,9 @@ def run_profiled(  # noqa: PLR0915
     """Run ``command`` under py-spy in its own process group, persisting resource
     metrics, phase segments and manifests to ``artifact_url``. Remote evidence is
     never deleted. Returns the workload's exit code from its receipt; a missing
-    receipt, failed evidence, a failed sampler or an empty profile turns success into
-    1. Sampling errors alone do not: they mark the stacks ``py_spy_low_confidence``.
+    receipt, failed evidence, a failed sampler or an empty or unreadable profile turns
+    success into 1. Sampling errors and a replacement-decoded profile do not: they mark
+    the stacks ``py_spy_low_confidence``.
 
     Raises before starting ``command`` if the sampler self-test fails. Paired
     median slowdown above ``OVERHEAD_WARNING_RATIO`` is recorded as a warning
@@ -651,13 +727,17 @@ def run_profiled(  # noqa: PLR0915
         samples.append(sample_metrics(cgroup_root, proc_root, pgid, disk_paths))
     close_resource_segment()
     py_spy_file = output_dir / PY_SPY_OUTPUT
-    process_samples = _speedscope_process_samples(py_spy_file)
+    process_samples, profile_quality = speedscope_evidence(py_spy_file)
+    replacement_decoded = profile_quality["profile_decode"] == "replacement"
+    if replacement_decoded:
+        log.warning("Profile is not valid UTF-8: %s", profile_quality)
     profile_samples = sum(process_samples.values())
     receipt_path = output_dir / WORKLOAD_RECEIPT
     receipt = json.loads(receipt_path.read_text()) if receipt_path.exists() else None
     returncode = receipt["returncode"] if receipt else None
     py_spy_output = py_spy_log.read_text(errors="replace")
     sys.stderr.write(py_spy_output)
+    sampler_stats = _sampler_stats(py_spy_output)
     final = {
         "sampler_overhead_warning": selftest["sampler_overhead_warning"],
         "sampler_rate_hz": SAMPLE_RATE_HZ,
@@ -666,7 +746,10 @@ def run_profiled(  # noqa: PLR0915
         "py_spy_returncode": py_spy_returncode,
         "profile_samples": profile_samples,
         **_process_coverage(process_samples, receipt),
-        **_sampler_stats(py_spy_output),
+        **sampler_stats,
+        **profile_quality,
+        "py_spy_low_confidence": sampler_stats["py_spy_low_confidence"]
+        or replacement_decoded,
         "metadata": metadata,
         "started_utc": started_utc,
         "ended_utc": _now()[0],
