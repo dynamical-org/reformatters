@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from reformatters.common import retry as retry_module
 from reformatters.common import storage
 from reformatters.common.config import Config, Env
+from reformatters.common.download import SourceAccessError
 from reformatters.common.storage import (
     JOB_STATE_RETENTION,
     DatasetFormat,
@@ -26,9 +27,9 @@ from reformatters.common.storage import (
     _get_store_path,
     _icechunk_to_s3fs_storage_options,
     _repository_config_and_credentials,
-    anonymous_virtual_chunk_credentials,
     commit_if_icechunk,
     manifest_append_dim_split,
+    virtual_chunk_credentials,
 )
 
 
@@ -625,7 +626,7 @@ class TestIcechunkVirtualConfig:
         s3_container = icechunk.VirtualChunkContainer(
             "s3://bucket/", icechunk.s3_store(region="us-east-1")
         )
-        credentials = anonymous_virtual_chunk_credentials([gcs_container, s3_container])
+        credentials = virtual_chunk_credentials([gcs_container, s3_container])
         assert isinstance(credentials["gs://bucket/"], icechunk.Credentials.Gcs)
         assert isinstance(credentials["s3://bucket/"], icechunk.Credentials.S3)
 
@@ -1197,3 +1198,222 @@ class TestAllStoresExistWithIcechunk:
         store.session.commit(message="init")
 
         assert factory.all_stores_exist() is True
+
+
+@pytest.mark.parametrize("prefix", ["s3://unknown/", "s3://noaa-gfs-bdp-pds"])
+def test_virtual_credentials_reject_unknown_exact_prefix(prefix: str) -> None:
+    with pytest.raises(AssertionError, match="Unknown source container prefix"):
+        storage.virtual_chunk_credentials(
+            _example_virtual_config().containers, {prefix: "source-ref"}
+        )
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        icechunk.VirtualChunkContainer(
+            "https://source.example/", icechunk.http_store()
+        ),
+        icechunk.VirtualChunkContainer("gs://source/", icechunk.gcs_store()),
+        icechunk.VirtualChunkContainer(
+            "file:///source/", icechunk.local_filesystem_store("/source/")
+        ),
+    ],
+)
+def test_virtual_credentials_reject_non_s3_secret_mapping(
+    container: icechunk.VirtualChunkContainer,
+) -> None:
+    with pytest.raises(AssertionError, match="S3-compatible"):
+        storage.virtual_chunk_credentials(
+            [container], {container.url_prefix: "source-ref"}
+        )
+
+
+def test_virtual_credentials_reject_empty_secret_name() -> None:
+    config = _example_virtual_config()
+    with pytest.raises(AssertionError, match="nonempty"):
+        storage.virtual_chunk_credentials(
+            config.containers, {config.containers[0].url_prefix: ""}
+        )
+
+
+def test_repository_authorizer_uses_source_credentials_with_native_public_types(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = _example_virtual_config()
+    prefix = base.containers[0].url_prefix
+    config = IcechunkVirtualConfig(
+        containers=(
+            *base.containers,
+            icechunk.VirtualChunkContainer("gs://source/", icechunk.gcs_store()),
+        ),
+        manifest_split=base.manifest_split,
+        source_secret_names={prefix: "source-ref"},
+    )
+    loader = Mock(
+        return_value={
+            "access_key_id": "source-key",
+            "secret_access_key": "source-value",
+            "session_token": "source-token",
+        }
+    )
+    monkeypatch.setattr(storage.kubernetes, "load_secret", loader)
+    static = Mock(wraps=icechunk.s3_static_credentials)
+    monkeypatch.setattr(icechunk, "s3_static_credentials", static)
+    _, credentials = _repository_config_and_credentials(config)
+    assert credentials is not None
+    assert isinstance(credentials[prefix], icechunk.Credentials.S3)
+    assert isinstance(credentials["gs://source/"], icechunk.Credentials.Gcs)
+    static.assert_called_once_with(
+        access_key_id="source-key",
+        secret_access_key="source-value",  # noqa: S106
+        session_token="source-token",  # noqa: S106
+    )
+    loader.assert_called_once_with("source-ref")
+
+
+def test_virtual_credentials_missing_static_pair_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(storage.kubernetes, "load_secret", Mock(return_value={}))
+    base = _example_virtual_config()
+    with pytest.raises(SourceAccessError, match="Invalid static S3 credentials"):
+        storage.virtual_chunk_credentials(
+            base.containers, {base.containers[0].url_prefix: "source-ref"}
+        )
+
+
+def test_factory_secret_names_union_preserves_order_and_sentinel() -> None:
+    base = _example_virtual_config()
+    factory = StoreFactory(
+        primary_storage_config=StorageConfig(
+            base_path="s3://output/", format=DatasetFormat.ICECHUNK
+        ),
+        replica_storage_configs=[
+            StorageConfig(
+                base_path="s3://replica/",
+                format=DatasetFormat.ICECHUNK,
+                k8s_secret_name="shared-ref",  # noqa: S106
+            )
+        ],
+        dataset_id="test",
+        template_config_version="1",
+        icechunk_virtual_config=IcechunkVirtualConfig(
+            containers=base.containers,
+            manifest_split=base.manifest_split,
+            source_secret_names={
+                "s3://one/": "shared-ref",
+                "s3://two/": "source-ref",
+                "s3://three/": "source-ref",
+            },
+        ),
+    )
+    assert factory.k8s_secret_names() == ["no-secret", "shared-ref", "source-ref"]
+
+
+def test_icechunk_access_exact_url_and_independent_references(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("REFORMATTERS_ICECHUNK_ACCESS", raising=False)
+    assert (
+        storage.icechunk_access_for_url("s3://output/repo") == storage.IcechunkAccess()
+    )
+    monkeypatch.setenv(
+        "REFORMATTERS_ICECHUNK_ACCESS",
+        json.dumps(
+            {
+                "s3://output/repo/": {
+                    "output_secret_name": "writer-ref",
+                    "source_secret_names": {"s3://source/": "reader-ref"},
+                },
+                "https://public.example/repo": {
+                    "source_secret_names": {"s3://source/": "other-ref"}
+                },
+            }
+        ),
+    )
+    access = storage.icechunk_access_for_url("s3://output/repo///")
+    assert access.output_secret_name == "writer-ref"  # noqa: S105
+    assert access.source_secret_names == {"s3://source/": "reader-ref"}
+    assert (
+        storage.icechunk_access_for_url("s3://output/repo/child")
+        == storage.IcechunkAccess()
+    )
+    public = storage.icechunk_access_for_url("https://public.example/repo")
+    assert public.output_secret_name is None
+    assert public.source_secret_names == {"s3://source/": "other-ref"}
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "not-json",
+        "[]",
+        '{"s3://output/repo": null}',
+        '{"s3://output/repo": {"access_key_id": "forbidden"}}',
+        '{"s3://output/repo": {"output_secret_name": ""}}',
+        '{"s3://output/repo": {"source_secret_names": {"s3://source/": ""}}}',
+        '{"s3://output/repo": {"source_secret_names": []}}',
+    ],
+)
+def test_icechunk_access_rejects_malformed_schema(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    monkeypatch.setenv("REFORMATTERS_ICECHUNK_ACCESS", raw)
+    with pytest.raises((json.JSONDecodeError, ValidationError)):
+        storage.icechunk_access_for_url("s3://output/repo")
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"s3://output/repo": {}, "s3://output/repo/": {}}',
+        '{"s3://output/repo": {}, "s3://output/repo": {}}',
+        '{"https://output/repo": {"output_secret_name": "writer-ref"}}',
+    ],
+)
+def test_icechunk_access_rejects_ambiguous_or_non_s3_output(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    monkeypatch.setenv("REFORMATTERS_ICECHUNK_ACCESS", raw)
+    with pytest.raises(AssertionError):
+        storage.icechunk_access_for_url("s3://output/repo")
+
+
+def test_private_storage_options_preserves_transport_loads_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    options = {
+        "access_key_id": "writer-key",
+        "secret_access_key": "writer-value",
+        "session_token": "writer-token",
+        "endpoint_url": "https://output.example",
+        "region": "auto",
+        "force_path_style": True,
+    }
+    loader = Mock(return_value=options)
+    monkeypatch.setattr(storage.kubernetes, "load_secret", loader)
+    assert storage.load_private_storage_options("writer-ref") == options
+    loader.assert_called_once_with("writer-ref")
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {},
+        {"access_key_id": "writer-key"},
+        {
+            "access_key_id": "writer-key",
+            "secret_access_key": "writer-value",
+            "anonymous": True,
+        },
+    ],
+)
+def test_private_storage_options_guards_explicit_private_binding(
+    monkeypatch: pytest.MonkeyPatch, options: dict[str, Any]
+) -> None:
+    loader = Mock(return_value=options)
+    monkeypatch.setattr(storage.kubernetes, "load_secret", loader)
+    with pytest.raises((ValueError, AssertionError)):
+        storage.load_private_storage_options("writer-ref")
+    loader.assert_called_once_with("writer-ref")

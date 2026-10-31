@@ -158,7 +158,7 @@ Tuning (completeness's `min_present_fraction`; decode health's `positions`, `sam
 
 ## Storage and reading
 
-A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` (`IcechunkVirtualConfig` on the `DynamicalDataset`, validated at construction). It holds the real icechunk objects directly — the `VirtualChunkContainer`s registering each source bucket and a `ManifestSplittingConfig` — rather than plain fields, because plain fields would be a lossy subset (no Source Coop S3-compatible endpoint, no GCS mirror, no per-array / multi-dim manifest splits). Nothing serializes the config: workers rebuild the whole dataset from the in-code registry by `dataset_id`, and `StoreFactory` consumes the config directly to register containers and build the (anonymous) `authorize_virtual_chunk_access` map.
+A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` (`IcechunkVirtualConfig` on the `DynamicalDataset`, validated at construction). It holds the real icechunk objects directly — the `VirtualChunkContainer`s registering each source bucket and a `ManifestSplittingConfig` — rather than plain fields, because plain fields would be a lossy subset (no Source Coop S3-compatible endpoint, no GCS mirror, no per-array / multi-dim manifest splits). Nothing serializes the config: workers rebuild the whole dataset from the in-code registry by `dataset_id`, and `StoreFactory` consumes the config directly to register containers and build the `authorize_virtual_chunk_access` map.
 
 ### Containers as indirection
 
@@ -167,6 +167,76 @@ A virtual chunk container is more than anonymous credentials — refs are stored
 - **Dedup.** The repeated `s3://bucket/prefix` is not copied into every ref; on an all-virtual store this is most of the on-disk footprint.
 - **En-masse repoint.** Swapping a container registration (e.g. NODD-on-AWS → a GCS mirror, or a Source Coop move) repoints every ref at once, with no manifest rewrite.
 
-Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
+Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
 
 How manifests are split, and how to size the splits, is covered in [Manifest splitting](#manifest-splitting).
+
+### Private sources
+
+Set `IcechunkVirtualConfig.source_secret_names` to a mapping from each private
+container's exact `url_prefix` to its Kubernetes Secret name. Unmapped containers
+retain anonymous access. Source Secrets contain `access_key_id`,
+`secret_access_key`, and optionally `session_token`. Keep endpoint, region and
+addressing settings in the native container. `StorageConfig.k8s_secret_name`
+continues to supply the independent output credential and output transport options.
+Secret references and credentials are not persisted in Icechunk.
+
+`StoreFactory.k8s_secret_names()` includes the source Secrets for pod mounts.
+Materialized integrations using private sources add their source Secret names to
+their operational job's `secret_names`. Secret creation and source read-only IAM
+permissions are operator responsibilities. Include list permission on the source
+prefix: without it, S3 can return 403 for a missing object instead of 404.
+
+Direct source reads use the same source Secret with `s3_store_from_secret`.
+Share region and endpoint constants with the native container and use
+`force_path_style=True` on custom-endpoint containers to match the client's path
+addressing. Use bucket-rooted clients with bucket-relative object keys:
+
+```python
+from reformatters.common.download import (
+    download_to_disk,
+    s3_store_from_secret,
+    source_access,
+)
+
+source_store = s3_store_from_secret(
+    source_bucket_url,
+    region=source_region,
+    k8s_secret_name=source_secret_name,
+    endpoint=source_endpoint,
+)
+with source_access():
+    download_to_disk(source_store, object_key, local_path)
+```
+
+Use `source_access()` around signed listing and range reads too, including
+iteration of lazy listings and response streams. It makes rejected credentials
+fatal to workers while preserving ordinary missing-file and transient-error
+handling. Resolve the source client before entering per-file processing.
+Clients are cached per process; restart jobs after rotating Secrets. Session
+tokens must remain valid for the full job duration; they are not refreshed.
+
+URL-based validation and decode tools read `REFORMATTERS_ICECHUNK_ACCESS`, a JSON
+mapping from exact repository URLs to Secret references:
+
+```json
+{
+  "s3://example-output/dataset/v1.icechunk": {
+    "output_secret_name": "example-output-secret",
+    "source_secret_names": {
+      "s3://example-source/": "example-source-secret"
+    }
+  }
+}
+```
+
+Either entry field may be omitted. An output-only entry opens a private
+materialized Icechunk repository; a source-only entry can read a public repository
+with private virtual chunks. Trailing slashes are ignored; other URL aliases must
+be listed separately. Unlisted comparison URLs keep their public defaults.
+The binding applies to Icechunk validation readers; maintenance commands retain
+their existing output-authentication options, and plain-Zarr readers are unchanged.
+
+Private access uses existing production-mode Secret loading: mounted files in
+pods, or Kubernetes API access for local runs with `DYNAMICAL_ENV=prod`. Explicit
+source credentials cannot be loaded from development mode's empty Secret result.

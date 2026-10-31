@@ -8,7 +8,6 @@ import xarray as xr
 
 from scripts.validation.utils import (
     RunContext,
-    _anonymous_virtual_credentials,
     _icechunk_storage,
     choose_level,
     choose_statistic,
@@ -18,6 +17,7 @@ from scripts.validation.utils import (
     level_label,
     load_zarr_dataset,
     nearest_point_index,
+    open_icechunk_readonly,
     parse_lead_time,
     parse_point_options,
     report_mean,
@@ -279,7 +279,9 @@ def test_icechunk_storage_routes_by_url_scheme() -> None:
     assert _icechunk_storage("https://example.com/report.html") is None
 
 
-def test_anonymous_virtual_credentials_authorize_http_container(tmp_path: Path) -> None:
+def test_readonly_open_authorizes_http_container(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """An HTTP virtual chunk container needs HttpAccess; icechunk rejects an S3
     credential handed to one, so a wrong credential kind fails the store open."""
     container = icechunk.VirtualChunkContainer(
@@ -297,9 +299,11 @@ def test_anonymous_virtual_credentials_authorize_http_container(tmp_path: Path) 
     )
     repo.save_config()
 
-    credentials = _anonymous_virtual_credentials(storage)
-    assert credentials is not None
-    icechunk.Repository.open(storage, authorize_virtual_chunk_access=credentials)
+    monkeypatch.setattr("scripts.validation.utils._icechunk_storage", lambda _: storage)
+    assert isinstance(
+        open_icechunk_readonly("https://example.com/repo.icechunk"),
+        icechunk.IcechunkStore,
+    )
 
 
 @pytest.mark.parametrize("standard_name", ["wind_from_direction", "wind_to_direction"])
