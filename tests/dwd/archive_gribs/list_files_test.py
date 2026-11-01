@@ -41,5 +41,29 @@ def test_list_grib_files_on_dwd_https(mock_list_files: MagicMock) -> None:
 
     mock_list_files.assert_called_once()
     kwargs = mock_list_files.call_args[1]
-    assert kwargs["path"] == ":http:/path"
+    assert kwargs["path"] == ":http:/path/"
     assert "--http-url=https://opendata.dwd.de" in kwargs["rclone_args"]
+
+
+@patch("reformatters.dwd.archive_gribs.list_files.list_files")
+def test_list_grib_files_on_dwd_https_adds_trailing_slash(
+    mock_list_files: MagicMock,
+) -> None:
+    # PurePosixPath strips trailing slashes; without one rclone may treat the
+    # directory as a single file and fail when filters are used.
+    list_grib_files_on_dwd_https(
+        http_url="https://opendata.dwd.de",
+        path=PurePosixPath("/weather/nwp/icon-eu/grib/06/"),
+        checkers=4,
+    )
+    assert mock_list_files.call_args[1]["path"] == ":http:/weather/nwp/icon-eu/grib/06/"
+
+
+@patch("reformatters.dwd.archive_gribs.list_files.list_files")
+def test_list_grib_files_on_dwd_https_keeps_existing_trailing_slash(
+    mock_list_files: MagicMock,
+) -> None:
+    list_grib_files_on_dwd_https(
+        http_url="https://opendata.dwd.de", path="/path/", checkers=4
+    )
+    assert mock_list_files.call_args[1]["path"] == ":http:/path/"

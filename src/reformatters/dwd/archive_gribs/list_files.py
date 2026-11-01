@@ -28,8 +28,16 @@ def list_grib_files_on_dwd_https(
         "--filter=+ *.grib2.bz2",
         "--filter=- *",
     )
+    # Always end the path with a slash so that rclone's HTTP backend treats it as a directory.
+    # Without a trailing slash, rclone first sends a HEAD request to check whether the path is a
+    # file. If the server's response makes it look like a file, rclone aborts with
+    # "can't limit to single files when using filters". Note that `PurePosixPath` strips
+    # trailing slashes, so callers passing a `PurePosixPath` can never include one themselves.
+    path_str = str(path)
+    if not path_str.endswith("/"):
+        path_str += "/"
     return list_files(
-        path=f":http:{path}",
+        path=f":http:{path_str}",
         checkers=checkers,
         rclone_args=rclone_args,
         env_vars=env_vars,
