@@ -46,10 +46,11 @@ class EcmwfIfsEnsForecast15Day025DegreeTemplateConfig(TemplateConfig[EcmwfDataVa
         )
     }
     append_dim: AppendDim = "init_time"
-    # While this dataset has a longer history, April 2024 is when we have enough 0.25 degree resolution data to start processing, with
-    # the correct number of longitude values (1440), and the majority of the variables we are interested in are available.
-    append_dim_start: Timestamp = pd.Timestamp("2024-04-01T00:00")
+    append_dim_start: Timestamp = pd.Timestamp("2020-10-15T00:00")
     append_dim_frequency: Timedelta = pd.Timedelta("24h")
+
+    def append_dim_coordinate_chunk_size(self) -> int:
+        return 5840
 
     @computed_field
     @property

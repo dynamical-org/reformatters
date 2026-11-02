@@ -48,7 +48,9 @@ def test_backfill_local_and_operational_update(
             {
                 "/": shrink_chunks_and_shards(
                     orig_get_template(end_time).sel(
-                        lead_time=slice("0h", "6h"), ensemble_member=slice(0, 1)
+                        init_time=slice("2024-04-01", None),
+                        lead_time=slice("0h", "6h"),
+                        ensemble_member=slice(0, 1),
                     )
                 ).to_dataset()[variables_to_check]
             }
