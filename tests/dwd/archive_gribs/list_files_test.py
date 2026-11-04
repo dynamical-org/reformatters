@@ -47,5 +47,5 @@ def test_list_grib_files_on_dwd_https(
     mock_list_files.assert_called_once()
     kwargs = mock_list_files.call_args[1]
     assert kwargs["path"] == ":http:/path/"
-    assert kwargs["timeout_seconds"] == 600
+    assert kwargs["timeout_seconds"] == 300
     assert "--http-url=https://opendata.dwd.de" in kwargs["rclone_args"]

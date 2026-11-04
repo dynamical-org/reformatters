@@ -13,7 +13,7 @@ from .path_conversion import (
 
 log = get_logger(__name__)
 
-LIST_TIMEOUT_SECONDS: Final[float] = 10 * 60
+LIST_TIMEOUT_SECONDS: Final[float] = 5 * 60
 
 
 def list_grib_files_on_dwd_https(
