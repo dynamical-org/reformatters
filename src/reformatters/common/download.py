@@ -457,17 +457,12 @@ def source_access() -> Iterator[None]:
 def validate_s3_credentials(options: Mapping[str, Any]) -> dict[str, str]:
     if not isinstance(options, Mapping):
         raise ValueError("Invalid static S3 credentials")
-    credentials: dict[str, str] = {}
-    for key in ("access_key_id", "secret_access_key"):
-        value = options.get(key)
-        if not isinstance(value, str) or not value:
-            raise ValueError("Invalid static S3 credentials")
-        credentials[key] = value
+    keys = ["access_key_id", "secret_access_key"]
     if "session_token" in options:
-        token = options["session_token"]
-        if not isinstance(token, str) or not token:
-            raise ValueError("Invalid static S3 credentials")
-        credentials["session_token"] = token
+        keys.append("session_token")
+    credentials = {key: options.get(key, "") for key in keys}
+    if not all(isinstance(value, str) and value for value in credentials.values()):
+        raise ValueError("Invalid static S3 credentials")
     return credentials
 
 
