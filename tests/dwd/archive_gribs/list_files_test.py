@@ -1,6 +1,8 @@
 from pathlib import PurePosixPath
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from reformatters.dwd.archive_gribs.list_files import (
     list_files_on_dst_for_all_nwp_runs_available_from_dwd,
     list_grib_files_on_dwd_https,
@@ -33,13 +35,17 @@ def test_list_files_on_dst_for_all_nwp_runs(mock_list_files: MagicMock) -> None:
     )
 
 
+@pytest.mark.parametrize("path", ["/path", "/path/", PurePosixPath("/path/")])
 @patch("reformatters.dwd.archive_gribs.list_files.list_files")
-def test_list_grib_files_on_dwd_https(mock_list_files: MagicMock) -> None:
+def test_list_grib_files_on_dwd_https(
+    mock_list_files: MagicMock, path: str | PurePosixPath
+) -> None:
     list_grib_files_on_dwd_https(
-        http_url="https://opendata.dwd.de", path="/path", checkers=4
+        http_url="https://opendata.dwd.de", path=path, checkers=4
     )
 
     mock_list_files.assert_called_once()
     kwargs = mock_list_files.call_args[1]
-    assert kwargs["path"] == ":http:/path"
+    assert kwargs["path"] == ":http:/path/"
+    assert kwargs["timeout_seconds"] == 300
     assert "--http-url=https://opendata.dwd.de" in kwargs["rclone_args"]
