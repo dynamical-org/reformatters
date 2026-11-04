@@ -3,9 +3,10 @@ from typing import NamedTuple
 
 import pandas as pd
 
+from reformatters.common.time_utils import whole_hours
+
 from .source import EcmwfFastSourceFileCoord
 
-PARAMS = frozenset({"2t", "10u", "10v", "100u", "100v", "tp", "ssrd"})
 _GRIB1_PARAMS = {
     (128, 167): "2t",
     (128, 165): "10u",
@@ -42,7 +43,6 @@ class StreamReader:
         self.chunks = chunks
         self.buffer = memoryview(b"")
         self.position = 0
-        self.max_buffer_bytes = 0
 
     def _available(self) -> bool:
         while not self.buffer:
@@ -50,7 +50,6 @@ class StreamReader:
             if chunk is None:
                 return False
             self.buffer = memoryview(chunk)
-            self.max_buffer_bytes = max(self.max_buffer_bytes, len(chunk))
         return True
 
     def read(self, size: int) -> bytes:
@@ -146,7 +145,7 @@ def _grib1(
     hours = _uint(pds[18:20]) if pds[20] == 10 else pds[18]
     _require_source(pds[20] == 10 or pds[19] == 0, "Unexpected GRIB1 time range")
     _require_source(
-        hours == int(coord.lead_time.total_seconds() / 3600),
+        hours == whole_hours(coord.lead_time),
         "GRIB1 forecast time differs from filename",
     )
     identity = (pds[3], pds[8])
@@ -285,7 +284,7 @@ def _grib2_product(
             param = f"{height}{('u' if product[10] == 2 else 'v')}"
         _require_source(template == 1, "Expected instantaneous field")
         _require_source(
-            _uint(product[18:22]) == int(coord.lead_time.total_seconds() / 3600),
+            _uint(product[18:22]) == whole_hours(coord.lead_time),
             "GRIB2 forecast time differs from filename",
         )
     else:
@@ -303,7 +302,7 @@ def _grib2_product(
             product[49:52] == bytes((1, 2, 1)), "Unexpected accumulation interval"
         )
         _require_source(
-            _uint(product[52:56]) == int(coord.lead_time.total_seconds() / 3600),
+            _uint(product[52:56]) == whole_hours(coord.lead_time),
             "Accumulation length differs from filename",
         )
         _require_source(

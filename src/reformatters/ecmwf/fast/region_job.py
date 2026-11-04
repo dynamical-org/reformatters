@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from functools import partial
 from typing import ClassVar
 
@@ -7,6 +8,7 @@ import obstore
 import pandas as pd
 import xarray as xr
 from obstore.exceptions import GenericError
+from pydantic import PrivateAttr
 
 from reformatters.common.download import s3_store_from_secret, source_access
 from reformatters.common.logging import get_logger
@@ -34,13 +36,11 @@ from .template_config import FastModel, lead_hours
 log = get_logger(__name__)
 
 
-class TransientSourceReadError(ConnectionError):
-    pass
-
-
 class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord]):
     model: ClassVar[FastModel]
+    retain_failed_files: ClassVar[bool] = True
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
+    _last_modified: dict[str, datetime] = PrivateAttr(default_factory=dict)
 
     def generate_source_file_coords(
         self,
@@ -71,15 +71,22 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
         prefixes = sorted({coord.prefix for coord in pending})
         if not prefixes:
             return []
-        client = listing_client(len(prefixes))
+        client = listing_client()
         available: dict[str, tuple[EcmwfFastSourceFileCoord, int]] = {}
+        # A model_copy shares this dict with its source job.
+        self._last_modified = self._last_modified.copy()
         with ThreadPoolExecutor(max_workers=len(prefixes)) as pool:
             for rows in pool.map(
                 partial(list_prefix_or_defer, client=client), prefixes
             ):
-                for key, size in rows:
-                    if size > 0 and (coord := by_key.get(key)) is not None:
+                for key, size, last_modified in rows:
+                    if (
+                        size > 0
+                        and (coord := by_key.get(key)) is not None
+                        and self._last_modified.get(key) != last_modified
+                    ):
                         available[key] = (coord, size)
+                        self._last_modified[key] = last_modified
         return list(available.values())
 
     def file_refs(
@@ -87,8 +94,8 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
     ) -> list[VirtualRef]:
         return retry(
             partial(self._stream_file_refs, coord, file_size),
-            max_attempts=3,
-            retryable_exceptions=(InterruptedGribStreamError, TransientSourceReadError),
+            max_attempts=2,
+            retryable_exceptions=(InterruptedGribStreamError, GenericError),
         )
 
     def _stream_file_refs(
@@ -100,43 +107,18 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
             k8s_secret_name=SOURCE_SECRET,
             endpoint=ENDPOINT,
         )
-        try:
-            with source_access():
-                response = obstore.get(store, coord.key)
-                if response.meta["size"] != file_size:
-                    raise SourceContractError("Source size differs from listing")
-                reader = StreamReader(iter(response.stream(min_chunk_size=64 * 1024)))
-                messages = inventory(reader, file_size, coord)
-        except GenericError as exc:
-            error = str(exc).lower()
-            if any(
-                marker in error
-                for marker in (
-                    "timed out",
-                    "timeout",
-                    "connection reset",
-                    "connection closed",
-                    "connection refused",
-                    "error sending request",
-                    "error decoding response body",
-                    "incomplete message",
-                    "500 internal",
-                    "502 bad gateway",
-                    "503 service unavailable",
-                    "504 gateway timeout",
-                    "429 too many",
-                )
-            ):
-                raise TransientSourceReadError(
-                    "Transient source streaming failure"
-                ) from exc
-            raise
+        with source_access():
+            response = obstore.get(store, coord.key)
+            if response.meta["size"] != file_size:
+                raise SourceContractError("Source size differs from listing")
+            reader = StreamReader(iter(response.stream(min_chunk_size=64 * 1024)))
+            messages = inventory(reader, file_size, coord)
         variables = {
             var.internal_attrs.grib_index_param: var for var in coord.data_vars
         }
         members = set(self.template_ds.ensemble_member.values)
         log.info(
-            f"Scanned {coord.key}: {len(messages)} fields, {reader.position} bytes, peak stream chunk {reader.max_buffer_bytes} bytes"
+            f"Scanned {coord.key}: {len(messages)} fields, {reader.position} bytes"
         )
         return [
             VirtualRef(

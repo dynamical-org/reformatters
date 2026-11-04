@@ -126,7 +126,7 @@ Materialized datasets with a plain-Zarr primary store use `Replace`, because the
 
 ## Completion triggers
 
-A virtual producer dispatches its configured materialized consumers when its window becomes complete: it started with pending files, all pending files became present before poll end, and no file was skipped as unreadable. Completion counts regardless of which overlapping pod committed the last file. A window complete at startup or incomplete at poll end produces no trigger; the consumer's backstop cron covers those cases. An archive producer dispatches once per complete initialization.
+A virtual producer dispatches its configured materialized consumers when its window becomes complete: it started with pending files and every initially pending file was ingested before poll end. With `retain_failed_files` enabled, a file can fail on an earlier sweep and still count toward completion after recovery. Completion counts regardless of which overlapping pod committed the last file. A window complete at startup or incomplete at poll end produces no trigger; the consumer's backstop cron covers those cases. An archive producer dispatches once per complete initialization.
 
 The write loop returns the completion flag. Dispatch happens after polling and before validation, outside the commit path. Producers list their consumers in `materialized_update_triggers`; each consumer accepts only units it publishes. Only consumers whose scheduled fire publishes one append position are eligible. A multi-producer consumer takes its trigger from the source that usually completes last; the backstop covers the others.
 

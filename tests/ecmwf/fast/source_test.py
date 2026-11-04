@@ -1,9 +1,12 @@
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
-from botocore.exceptions import ClientError, EndpointConnectionError
+from botocore.exceptions import ClientError, EndpointConnectionError, PaginationError
+from botocore.paginate import Paginator
+from botocore.session import get_session
 
 from reformatters.common.download import SourceAccessError
 from reformatters.ecmwf.fast import source
@@ -17,6 +20,18 @@ def clear_client_cache() -> Iterator[None]:
     client_factory.cache_clear()
     yield
     client_factory.cache_clear()
+
+
+@pytest.fixture
+def client() -> MagicMock:
+    session = get_session()
+    client = MagicMock()
+    client.get_paginator.return_value = Paginator(
+        client.list_objects_v2,
+        session.get_paginator_model("s3").get_paginator("ListObjectsV2"),
+        session.get_service_model("s3").operation_model("ListObjectsV2"),
+    )
+    return client
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
@@ -40,21 +55,41 @@ def test_filename_supplies_long_lead_and_family_member(
 
 def test_literal_prefix_pagination_revisits_earlier_keys(
     monkeypatch: pytest.MonkeyPatch,
+    client: MagicMock,
 ) -> None:
-    client = MagicMock()
     prefix = "dyn_a2_ifs-ens_od_enfo_pf_20261103T000000Z_"
-    page = [{"Key": f"{prefix}{i}", "Size": 100} for i in range(1000)]
+    modified = datetime(2026, 11, 4, tzinfo=UTC)
+    page = [
+        {"Key": f"{prefix}{i}", "Size": 100, "LastModified": modified}
+        for i in range(1000)
+    ]
     client.list_objects_v2.side_effect = [
         {"Contents": page, "IsTruncated": True, "NextContinuationToken": "page-two"},
         {
-            "Contents": [{"Key": prefix + "older-arrival", "Size": 42}],
+            "Contents": [
+                {"Key": prefix + "older-arrival", "Size": 42, "LastModified": modified}
+            ],
             "IsTruncated": False,
         },
-        {"Contents": [{"Key": prefix + "earlier-than-previous", "Size": 43}]},
+        {
+            "Contents": [
+                {
+                    "Key": prefix + "earlier-than-previous",
+                    "Size": 43,
+                    "LastModified": modified,
+                }
+            ]
+        },
     ]
     monkeypatch.setattr(source, "listing_client", lambda: client)
     assert len(list(source.list_prefix(prefix))) == 1001
-    assert list(source.list_prefix(prefix)) == [(prefix + "earlier-than-previous", 43)]
+    assert list(source.list_prefix(prefix)) == [
+        (prefix + "earlier-than-previous", 43, modified)
+    ]
+    assert all(
+        call.args == ("list_objects_v2",)
+        for call in client.get_paginator.call_args_list
+    )
     calls = client.list_objects_v2.call_args_list
     assert (
         calls[0].kwargs
@@ -75,14 +110,20 @@ def test_literal_prefix_pagination_revisits_earlier_keys(
         ("AccessDenied", 403),
         ("InvalidAccessKeyId", 400),
         ("ExpiredToken", 400),
+        ("InvalidToken", 400),
+        ("SignatureDoesNotMatch", 400),
         ("Unauthorized", 401),
     ],
 )
+@pytest.mark.parametrize("later_page", [False, True])
 def test_authentication_failures_are_fatal(
-    monkeypatch: pytest.MonkeyPatch, code: str, status: int
+    monkeypatch: pytest.MonkeyPatch,
+    client: MagicMock,
+    code: str,
+    status: int,
+    later_page: bool,
 ) -> None:
-    client = MagicMock()
-    client.list_objects_v2.side_effect = ClientError(
+    failure = ClientError(
         {
             "Error": {"Code": code},
             "ResponseMetadata": {
@@ -95,41 +136,55 @@ def test_authentication_failures_are_fatal(
         },
         "ListObjectsV2",
     )
+    client.list_objects_v2.side_effect = [
+        *(
+            [{"IsTruncated": True, "NextContinuationToken": "next"}]
+            if later_page
+            else []
+        ),
+        failure,
+    ]
     monkeypatch.setattr(source, "listing_client", lambda: client)
     with pytest.raises(SourceAccessError):
         list(source.list_prefix("literal-prefix"))
 
 
+@pytest.mark.parametrize(
+    "failure",
+    [
+        ClientError({"Error": {"Code": "SlowDown"}}, "ListObjectsV2"),
+        EndpointConnectionError(endpoint_url="https://synthetic.invalid"),
+    ],
+)
 def test_pagination_failure_is_not_partial_success(
-    monkeypatch: pytest.MonkeyPatch,
+    client: MagicMock,
+    failure: Exception,
 ) -> None:
-    client = MagicMock()
     client.list_objects_v2.side_effect = [
         {
-            "Contents": [{"Key": "prefix-a", "Size": 1}],
+            "Contents": [
+                {
+                    "Key": "prefix-a",
+                    "Size": 1,
+                    "LastModified": datetime(2026, 11, 4, tzinfo=UTC),
+                }
+            ],
             "IsTruncated": True,
             "NextContinuationToken": "next",
         },
-        ClientError({"Error": {"Code": "SlowDown"}}, "ListObjectsV2"),
+        failure,
     ]
-    monkeypatch.setattr(source, "listing_client", lambda: client)
-    with pytest.raises(ClientError):
-        list(source.list_prefix("prefix-"))
+    assert source.list_prefix_or_defer("prefix-", client) == []
 
 
-@pytest.mark.parametrize("token", [None, "repeated"])
-def test_invalid_continuation_fails_closed(
-    monkeypatch: pytest.MonkeyPatch, token: str | None
-) -> None:
-    client = MagicMock()
+def test_repeated_continuation_fails_closed(client: MagicMock) -> None:
     client.list_objects_v2.return_value = {
         "IsTruncated": True,
-        "NextContinuationToken": token,
+        "NextContinuationToken": "repeated",
     }
-    monkeypatch.setattr(source, "listing_client", lambda: client)
-    with pytest.raises(AssertionError, match="continuation token"):
-        list(source.list_prefix("prefix"))
-    assert client.list_objects_v2.call_count <= 2
+    with pytest.raises(PaginationError, match="same next token"):
+        list(source.list_prefix("prefix", client))
+    assert client.list_objects_v2.call_count == 2
 
 
 @pytest.mark.parametrize("session_token", [None, "synthetic-session"])
@@ -157,21 +212,24 @@ def test_listing_uses_only_explicit_source_credentials(
     assert kwargs["region_name"] == "auto"
     assert kwargs["config"].s3 == {"addressing_style": "path"}
     assert kwargs["config"].retries["total_max_attempts"] == 1
+    assert kwargs["config"].max_pool_connections == 64
     assert kwargs["config"].connect_timeout == kwargs["config"].read_timeout == 2
     factory.assert_called_once()
 
 
 @pytest.mark.parametrize("code", ["SlowDown", "InternalError", "RequestTimeout"])
-def test_known_transient_listing_failure_defers_prefix(code: str) -> None:
-    client = MagicMock()
+def test_known_transient_listing_failure_defers_prefix(
+    code: str, client: MagicMock
+) -> None:
     client.list_objects_v2.side_effect = ClientError(
         {"Error": {"Code": code}}, "ListObjectsV2"
     )
     assert source.list_prefix_or_defer("prefix", client) == []
 
 
-def test_transport_failure_defers_prefix_but_unexpected_errors_propagate() -> None:
-    client = MagicMock()
+def test_transport_failure_defers_prefix_but_unexpected_errors_propagate(
+    client: MagicMock,
+) -> None:
     client.list_objects_v2.side_effect = EndpointConnectionError(
         endpoint_url="https://synthetic.invalid"
     )

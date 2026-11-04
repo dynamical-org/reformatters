@@ -6,7 +6,6 @@ import pytest
 
 from reformatters.ecmwf.fast import grib
 from reformatters.ecmwf.fast.grib import (
-    PARAMS,
     InterruptedGribStreamError,
     SourceContractError,
     StreamReader,
@@ -14,6 +13,8 @@ from reformatters.ecmwf.fast.grib import (
 )
 from reformatters.ecmwf.fast.source import EcmwfFastSourceFileCoord, Family
 from reformatters.ecmwf.fast.template_config import FastModel
+
+PARAMS = frozenset({"2t", "10u", "10v", "100u", "100v", "tp", "ssrd"})
 
 INIT = pd.Timestamp("2026-11-04")
 
@@ -166,7 +167,6 @@ def test_complete_shuffled_inventory_and_chunk_boundaries(
     }
     assert sum(m.length for m in messages) == len(data)
     assert reader.position == len(data)
-    assert reader.max_buffer_bytes <= chunk_size
     assert [m.offset for m in messages] == [
         sum(x.length for x in messages[:i]) for i in range(len(messages))
     ]

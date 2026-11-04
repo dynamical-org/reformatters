@@ -8,7 +8,9 @@ from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat
 from reformatters.ecmwf.fast.dynamical_dataset import EcmwfFastDataset
-from reformatters.ecmwf.fast.source import OUTPUT_SECRET, SOURCE_PREFIX, SOURCE_SECRET
+from reformatters.ecmwf.fast.source import SOURCE_PREFIX, SOURCE_SECRET
+
+OUTPUT_SECRET = "dynamical-ecmwf-output-r2-storage-options-key"  # noqa: S105
 
 DATASETS = [d for d in DYNAMICAL_DATASETS if isinstance(d, EcmwfFastDataset)]
 

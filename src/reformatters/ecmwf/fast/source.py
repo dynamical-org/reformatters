@@ -1,6 +1,7 @@
 from collections.abc import Iterator, Mapping, Sequence
+from datetime import datetime
 from functools import cache
-from typing import Any, Literal, Protocol
+from typing import Literal, Protocol
 
 import boto3
 import icechunk
@@ -12,6 +13,7 @@ from botocore.exceptions import (
     EndpointConnectionError,
     ReadTimeoutError,
 )
+from botocore.paginate import Paginator
 
 from reformatters.common import download
 from reformatters.common.logging import get_logger
@@ -25,7 +27,6 @@ from .template_config import FastModel
 SOURCE_PREFIX = "s3://dynamical-ecmwf/"
 SOURCE_BUCKET = "dynamical-ecmwf"
 SOURCE_SECRET = "dynamical-ecmwf-r2-storage-options-key"  # noqa: S105
-OUTPUT_SECRET = "dynamical-ecmwf-output-r2-storage-options-key"  # noqa: S105
 ENDPOINT = "https://a037e2d3d5f9c6ecfc95350360f2ab8d.r2.cloudflarestorage.com"
 log = get_logger(__name__)
 
@@ -40,7 +41,7 @@ type Family = Literal["cf", "pf"]
 
 
 class ListingClient(Protocol):
-    def list_objects_v2(self, **kwargs: str | int) -> dict[str, Any]: ...
+    def get_paginator(self, operation_name: str) -> Paginator: ...
 
 
 FAMILY_PREFIXES: dict[tuple[FastModel, Family], str] = {
@@ -100,7 +101,7 @@ class EcmwfFastSourceFileCoord(InitLeadSourceFileCoord):
 
 
 @cache
-def listing_client(max_connections: int = 2) -> ListingClient:
+def listing_client() -> ListingClient:
     credentials = download.load_s3_credentials(SOURCE_SECRET)
     return boto3.client(
         "s3",
@@ -113,7 +114,7 @@ def listing_client(max_connections: int = 2) -> ListingClient:
             connect_timeout=2,
             read_timeout=2,
             retries={"mode": "standard", "total_max_attempts": 1},
-            max_pool_connections=max_connections,
+            max_pool_connections=64,
             s3={"addressing_style": "path"},
         ),
     )
@@ -121,51 +122,40 @@ def listing_client(max_connections: int = 2) -> ListingClient:
 
 def list_prefix(
     prefix: str, client: ListingClient | None = None
-) -> Iterator[tuple[str, int]]:
+) -> Iterator[tuple[str, int, datetime]]:
     client = client if client is not None else listing_client()
-    token: str | None = None
-    seen: set[str] = set()
-    while True:
-        args: dict[str, str | int] = {
-            "Bucket": SOURCE_BUCKET,
-            "Prefix": prefix,
-            "MaxKeys": 1000,
-        }
-        if token is not None:
-            args["ContinuationToken"] = token
-        try:
-            page = client.list_objects_v2(**args)
-        except ClientError as exc:
-            response = exc.response
-            if response.get("ResponseMetadata", {}).get("HTTPStatusCode") in (
-                401,
-                403,
-            ) or response.get("Error", {}).get("Code") in {
-                "AccessDenied",
-                "InvalidAccessKeyId",
-                "SignatureDoesNotMatch",
-                "ExpiredToken",
-                "InvalidToken",
-            }:
-                raise download.SourceAccessError(
-                    "Private source authentication failed"
-                ) from exc
-            raise
-        for obj in page.get("Contents", []):
-            key, size = obj["Key"], obj["Size"]
-            assert key.startswith(prefix), (
-                "S3 returned a key outside the requested prefix"
-            )
-            yield key, size
-        if not page.get("IsTruncated", False):
-            return
-        token = page.get("NextContinuationToken")
-        assert token, "Invalid S3 continuation token"
-        assert token not in seen, "Repeated S3 continuation token"
-        seen.add(token)
+    try:
+        pages = client.get_paginator("list_objects_v2").paginate(
+            Bucket=SOURCE_BUCKET, Prefix=prefix, PaginationConfig={"PageSize": 1000}
+        )
+        for page in pages:
+            for obj in page.get("Contents", []):
+                key, size = obj["Key"], obj["Size"]
+                assert key.startswith(prefix), (
+                    "S3 returned a key outside the requested prefix"
+                )
+                yield key, size, obj["LastModified"]
+    except ClientError as exc:
+        response = exc.response
+        if response.get("ResponseMetadata", {}).get("HTTPStatusCode") in (
+            401,
+            403,
+        ) or response.get("Error", {}).get("Code") in {
+            "AccessDenied",
+            "InvalidAccessKeyId",
+            "SignatureDoesNotMatch",
+            "ExpiredToken",
+            "InvalidToken",
+        }:
+            raise download.SourceAccessError(
+                "Private source authentication failed"
+            ) from exc
+        raise
 
 
-def list_prefix_or_defer(prefix: str, client: ListingClient) -> list[tuple[str, int]]:
+def list_prefix_or_defer(
+    prefix: str, client: ListingClient
+) -> list[tuple[str, int, datetime]]:
     try:
         return list(list_prefix(prefix, client))
     except _LIST_TRANSPORT_ERRORS:

@@ -91,6 +91,9 @@ class VirtualRegionJob(
     # Concurrent file downloads while building refs; small .idx files, so IO-bound.
     download_concurrency: ClassVar[int] = 64
 
+    # Pending-dependent discovery gates must allow retained files after siblings commit.
+    retain_failed_files: ClassVar[bool] = False
+
     # The recent span of the append dim each operational update fire re-sweeps.
     operational_update_window: ClassVar[Timedelta]
 
@@ -142,8 +145,9 @@ class VirtualRegionJob(
         index (`coord.get_index_url()`), scan the data file, or (one message per file)
         point at the whole file — and return a VirtualRef per (out cell, variable) in
         coordinate-label space; the chunk index is resolved centrally later (see
-        _emit_refs). Return [] to drop an unreadable or stale file. `file_size` is
-        whatever discover_available reported (a listed size, a Content-Length), e.g.
+        _emit_refs). Return [] to skip an unreadable or stale file; retain_failed_files
+        keeps it pending for later sweeps. `file_size` is whatever discover_available
+        reported (a listed size, a Content-Length), e.g.
         to supply the missing final end byte of an index that omits it.
         """
         raise NotImplementedError(
@@ -279,14 +283,18 @@ class VirtualRegionJob(
                     coords, sizes = zip(*available, strict=True)
                     build_start = time.monotonic()
                     refs_per_file = pool.map(self._file_refs_or_skip, coords, sizes)
-                    # Drop files that yielded no refs (skipped as unreadable).
+                    # Exclude files that yielded no refs from this tick's batch.
                     batch = [
                         (coord, refs)
                         for coord, refs in zip(coords, refs_per_file, strict=True)
                         if refs
                     ]
                     build_s = time.monotonic() - build_start
-                    ready = {id(coord) for coord in coords}
+                    ready = (
+                        {id(coord) for coord, _ in batch}
+                        if self.retain_failed_files
+                        else {id(coord) for coord in coords}
+                    )
                     pending = [coord for coord in pending if id(coord) not in ready]
                     skipped = len(coords) - len(batch)
                     log.info(
@@ -301,7 +309,7 @@ class VirtualRegionJob(
                 if self.processing_mode == "backfill":
                     if pending:
                         log.info(
-                            f"{len(pending)} source files not present, skipping "
+                            f"{len(pending)} source files not ingested, skipping "
                             f"(first: {pending[0].get_url()})"
                         )
                     return
@@ -309,7 +317,7 @@ class VirtualRegionJob(
                     if pd.Timestamp.now() >= self.poll_deadline:
                         log.info(
                             f"Poll deadline reached with {len(pending)} source files "
-                            f"not yet published, leaving them to the next update "
+                            f"not yet ingested, leaving them to the next update "
                             f"(first: {pending[0].get_url()})"
                         )
                         return
@@ -431,8 +439,8 @@ class VirtualRegionJob(
         `overwrite_chunks` requests a rewrite. The same loop serves backfill
         (temp branch, one batch -> one commit) and operational updates
         ("main", per-tick commits); see "The write loop" in
-        docs/virtual_datasets.md. Return whether every pending file became present
-        before the poll deadline, without skipping an unreadable file.
+        docs/virtual_datasets.md. Return whether every initially pending file was
+        ingested before the poll deadline.
         """
         processed: set[int] = set()
         for file_refs_batch in self.process_virtual_refs(remaining):

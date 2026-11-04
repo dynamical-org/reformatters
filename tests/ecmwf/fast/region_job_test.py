@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
 from threading import Barrier
 from unittest.mock import MagicMock
@@ -11,6 +12,7 @@ from obstore.exceptions import GenericError, PermissionDeniedError
 
 from reformatters.common import template_utils
 from reformatters.common.download import SourceAccessError
+from reformatters.common.storage import StoreFactory
 from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.ecmwf.aifs_ens.forecast_fast.region_job import (
     EcmwfAifsEnsForecastFastRegionJob,
@@ -20,13 +22,11 @@ from reformatters.ecmwf.aifs_ens.forecast_fast.template_config import (
 )
 from reformatters.ecmwf.fast import region_job
 from reformatters.ecmwf.fast.grib import (
-    PARAMS,
     InterruptedGribStreamError,
     SourceContractError,
 )
 from reformatters.ecmwf.fast.region_job import (
     EcmwfFastRegionJob,
-    TransientSourceReadError,
 )
 from reformatters.ecmwf.fast.source import EcmwfFastSourceFileCoord
 from reformatters.ecmwf.fast.template_config import EcmwfFastTemplateConfig
@@ -36,7 +36,9 @@ from reformatters.ecmwf.ifs_ens.forecast_0_25_degree_fast.region_job import (
 from reformatters.ecmwf.ifs_ens.forecast_0_25_degree_fast.template_config import (
     EcmwfIfsEnsForecast025DegreeFastTemplateConfig,
 )
-from tests.ecmwf.fast.grib_test import chunks, grib1, grib2, source_bytes
+from tests.ecmwf.fast.grib_test import PARAMS, chunks, grib1, grib2, source_bytes
+
+LAST_MODIFIED = pd.Timestamp("2026-11-04T00:00Z")
 
 
 def make_job(
@@ -102,21 +104,28 @@ def test_discovery_publishes_out_of_order_partial_families(
         c for c in coords if c.family == "cf" and c.lead_time == pd.Timedelta("7h")
     )
     rows = {
-        cf7.prefix: [(cf7.key, 100), (cf7.prefix + "unrequested", 50)],
-        pf6.prefix: [(pf6.key, 200)],
+        cf7.prefix: [
+            (cf7.key, 100, LAST_MODIFIED),
+            (cf7.prefix + "unrequested", 50, LAST_MODIFIED),
+        ],
+        pf6.prefix: [(pf6.key, 200, LAST_MODIFIED)],
     }
-    monkeypatch.setattr(region_job, "listing_client", lambda _: object())
+    monkeypatch.setattr(region_job, "listing_client", object)
     monkeypatch.setattr(
         region_job, "list_prefix_or_defer", lambda prefix, client: rows[prefix]
     )
     discovered = job.discover_available([pf6, cf7])
     assert [(id(c), size) for c, size in discovered] == [(id(cf7), 100), (id(pf6), 200)]
     rows[pf6.prefix] = []
-    assert job.discover_available([pf6, cf7]) == [(cf7, 100)]
-    rows[pf6.prefix] = [(pf6.key, 200)]
+    assert job.discover_available([pf6, cf7]) == []
+    rows[pf6.prefix] = [(pf6.key, 200, LAST_MODIFIED)]
+    assert job.discover_available([pf6]) == []
+    rows[pf6.prefix] = [(pf6.key, 200, LAST_MODIFIED + pd.Timedelta("1s"))]
     assert job.discover_available([pf6]) == [(pf6, 200)]
-    rows[cf7.prefix] = [(cf7.key, 0)]
+    rows[cf7.prefix] = [(cf7.key, 0, LAST_MODIFIED + pd.Timedelta("1s"))]
     assert job.discover_available([cf7]) == []
+    rows[cf7.prefix] = [(cf7.key, 100, LAST_MODIFIED + pd.Timedelta("1s"))]
+    assert job.discover_available([cf7]) == [(cf7, 100)]
 
 
 def test_all_nonempty_prefixes_list_concurrently_and_deduplicate(
@@ -136,17 +145,17 @@ def test_all_nonempty_prefixes_list_concurrently_and_deduplicate(
     client = object()
     factory = MagicMock(return_value=client)
 
-    def listed(prefix: str, client: object) -> list[tuple[str, int]]:
+    def listed(prefix: str, client: object) -> list[tuple[str, int, datetime]]:
         calls.append(prefix)
         gate.wait()
         coord = next(c for c in pending if c.prefix == prefix)
-        return [(coord.key, 100), (coord.key, 100)]
+        return [(coord.key, 100, LAST_MODIFIED), (coord.key, 100, LAST_MODIFIED)]
 
     monkeypatch.setattr(region_job, "listing_client", factory)
     monkeypatch.setattr(region_job, "list_prefix_or_defer", listed)
     assert len(job.discover_available(pending)) == 4
     assert set(calls) == {c.prefix for c in pending}
-    factory.assert_called_once_with(4)
+    factory.assert_called_once_with()
     calls.clear()
     assert job.discover_available([]) == []
     assert calls == []
@@ -180,10 +189,10 @@ def test_stream_attempts_restart_after_interruption_and_never_retry_source_contr
     assert getter.call_count == 2
     assert sum(r.length for r in refs) == len(data)
     getter.reset_mock(side_effect=True)
-    getter.side_effect = [response(data[:-1]) for _ in range(3)]
+    getter.side_effect = [response(data[:-1]) for _ in range(2)]
     with pytest.raises(InterruptedGribStreamError):
         job.file_refs(coord, len(data))
-    assert getter.call_count == 3
+    assert getter.call_count == 2
     getter.reset_mock(side_effect=True)
     getter.side_effect = [response(b"bad!" + data[4:])]
     with pytest.raises(SourceContractError, match="magic"):
@@ -217,25 +226,10 @@ def source_response(payload: bytes) -> MagicMock:
 
 
 @pytest.mark.parametrize(
-    "message",
-    [
-        "request timed out",
-        "request timeout",
-        "connection reset by peer",
-        "connection closed",
-        "connection refused",
-        "error sending request",
-        "error decoding response body",
-        "incomplete message",
-        "500 Internal Server Error",
-        "502 Bad Gateway",
-        "503 Service Unavailable",
-        "504 Gateway Timeout",
-        "429 Too Many Requests",
-    ],
+    "message", ["503 Service Unavailable", "broken pipe", "Unsupported response format"]
 )
 @pytest.mark.parametrize("during_stream", [False, True])
-def test_generic_transient_errors_restart_the_whole_file(
+def test_generic_errors_restart_the_whole_file(
     tmp_path: Path, source_getter: MagicMock, message: str, during_stream: bool
 ) -> None:
     job = make_job(tmp_path, EcmwfIfsEnsForecast025DegreeFastRegionJob)
@@ -261,24 +255,25 @@ def test_generic_transient_errors_restart_the_whole_file(
     assert source_getter.call_count == 2
 
 
-def test_generic_errors_retry_only_known_transients(
-    tmp_path: Path, source_getter: MagicMock
+@pytest.mark.parametrize("during_stream", [False, True])
+def test_generic_errors_exhaust_exactly_two_attempts(
+    tmp_path: Path, source_getter: MagicMock, during_stream: bool
 ) -> None:
     job = make_job(tmp_path, EcmwfIfsEnsForecast025DegreeFastRegionJob)
     coord = job.source_file_coords()[0]
-    unexpected = GenericError("Unsupported response format")
-    source_getter.side_effect = unexpected
+    error = GenericError("Unsupported response format")
+
+    def broken_stream(**kwargs: object) -> Iterator[bytes]:
+        yield b"GRIB"
+        raise error
+
+    response = source_response(b"GRIB")
+    response.stream.side_effect = broken_stream
+    source_getter.side_effect = [response, response] if during_stream else error
     with pytest.raises(GenericError) as caught:
-        job.file_refs(coord, 100)
-    assert caught.value is unexpected
-    assert source_getter.call_count == 1
-    source_getter.reset_mock()
-    transient = GenericError("503 Service Unavailable")
-    source_getter.side_effect = transient
-    with pytest.raises(TransientSourceReadError) as exhausted:
-        job.file_refs(coord, 100)
-    assert exhausted.value.__cause__ is transient
-    assert source_getter.call_count == 3
+        job.file_refs(coord, 4)
+    assert caught.value is error
+    assert source_getter.call_count == 2
 
 
 @pytest.mark.parametrize("failure", ["auth", "programming"])
@@ -399,3 +394,167 @@ def test_common_loop_commits_healthy_file_and_leaves_incomplete_file_absent(
     assert source_getter.call_count == 2
     refs = list(final.all_virtual_chunk_locations())
     assert refs == [healthy.get_url()] * len(config.data_vars)
+
+
+@pytest.fixture(
+    params=[
+        EcmwfIfsEnsForecast025DegreeFastRegionJob,
+        EcmwfAifsEnsForecastFastRegionJob,
+    ]
+)
+def polling_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> tuple[EcmwfFastRegionJob, icechunk.Repository]:
+    cls = request.param
+    config = (
+        EcmwfIfsEnsForecast025DegreeFastTemplateConfig()
+        if cls.model == "ifs"
+        else EcmwfAifsEnsForecastFastTemplateConfig()
+    )
+    template = config.get_template(pd.Timestamp("2026-11-04T01:00")).sel(
+        init_time=[pd.Timestamp("2026-11-04")],
+        lead_time=pd.to_timedelta([6, 12], unit="h"),
+        ensemble_member=[0],
+    )
+    job = cls(
+        tmp_store=tmp_path,
+        template_ds=template,
+        data_vars=config.data_vars,
+        append_dim="init_time",
+        region=slice(0, 1),
+        reformat_job_name="test-poll-retry",
+        processing_mode="update",
+    )
+    monkeypatch.setattr(
+        EcmwfFastSourceFileCoord, "get_url", lambda self: (tmp_path / self.key).as_uri()
+    )
+    monkeypatch.setattr(region_job, "listing_client", object)
+    monkeypatch.setattr(
+        "reformatters.common.virtual_region_job.time.sleep", lambda _: None
+    )
+    repo_config = icechunk.RepositoryConfig.default()
+    repo_config.set_virtual_chunk_container(
+        icechunk.VirtualChunkContainer(
+            tmp_path.as_uri() + "/", icechunk.local_filesystem_store(str(tmp_path))
+        )
+    )
+    repo = icechunk.Repository.create(icechunk.in_memory_storage(), config=repo_config)
+    template_utils.write_metadata(
+        template, repo.writable_session("main").store, mode="w-", consolidated=False
+    )
+    return job, repo
+
+
+def test_changed_last_modified_retries_same_size_file_during_update(
+    polling_job: tuple[EcmwfFastRegionJob, icechunk.Repository],
+    monkeypatch: pytest.MonkeyPatch,
+    source_getter: MagicMock,
+) -> None:
+    job, repo = polling_job
+    bad, healthy = job.source_file_coords()
+    repaired = source_bytes(job.model)
+    files = {
+        bad.key: b"bad!" + repaired[4:],
+        healthy.key: source_bytes(job.model, hours=12),
+    }
+    source_getter.side_effect = lambda store, key: source_response(files[key])
+    ticks = 0
+
+    def listed(prefix: str, client: object) -> list[tuple[str, int, datetime]]:
+        nonlocal ticks
+        ticks += 1
+        if ticks == 2:
+            assert job.filter_already_present(
+                [bad, healthy], repo.readonly_session("main").store
+            ) == [bad]
+            assert source_getter.call_count == 2
+        if ticks == 3:
+            assert source_getter.call_count == 2
+            assert len(files[bad.key]) == len(repaired)
+            files[bad.key] = repaired
+        return [
+            (
+                coord.key,
+                len(files[coord.key]),
+                LAST_MODIFIED + pd.Timedelta(seconds=int(ticks >= 3 and coord is bad)),
+            )
+            for coord in (bad, healthy)
+        ]
+
+    monkeypatch.setattr(region_job, "list_prefix_or_defer", listed)
+    assert job.process_virtual(repo, [], "main", [bad, healthy]) is True
+    assert ticks == 3
+    assert [call.args[1] for call in source_getter.call_args_list].count(bad.key) == 2
+    assert [call.args[1] for call in source_getter.call_args_list].count(
+        healthy.key
+    ) == 1
+    final = repo.readonly_session("main")
+    assert job.filter_already_present([bad, healthy], final.store) == []
+    assert len(list(final.all_virtual_chunk_locations())) == 2 * len(job.data_vars)
+
+
+@pytest.mark.parametrize("failure", ["contract", "transient"])
+def test_unchanged_failures_wait_for_deadline_and_fresh_instance_retries(
+    polling_job: tuple[EcmwfFastRegionJob, icechunk.Repository],
+    monkeypatch: pytest.MonkeyPatch,
+    source_getter: MagicMock,
+    failure: str,
+) -> None:
+    job, repo = polling_job
+    coord = job.source_file_coords()[0]
+    now = LAST_MODIFIED.tz_localize(None)
+    deadline = now + pd.Timedelta("3s")
+    job = job.model_copy(update={"poll_deadline": deadline})
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls, *a, **kw: now))
+    ticks = 0
+
+    def listed(prefix: str, client: object) -> list[tuple[str, int, datetime]]:
+        nonlocal ticks, now
+        ticks += 1
+        now += pd.Timedelta("1s")
+        return [(coord.key, 100, LAST_MODIFIED)]
+
+    monkeypatch.setattr(region_job, "list_prefix_or_defer", listed)
+    if failure == "contract":
+        source_getter.return_value = source_response(b"bad!")
+    else:
+        source_getter.side_effect = GenericError("503 Service Unavailable")
+    before = repo.readonly_session("main").snapshot_id
+    assert job.process_virtual(repo, [], "main", [coord]) is False
+    assert ticks == 3
+    expected_attempts = 1 if failure == "contract" else 2
+    assert source_getter.call_count == expected_attempts
+    assert repo.readonly_session("main").snapshot_id == before
+
+    fresh = type(job).model_validate(job.model_dump())
+    assert fresh.discover_available([coord]) == [(coord, 100)]
+    assert fresh._file_refs_or_skip(coord, 100) == []
+    assert source_getter.call_count == 2 * expected_attempts
+
+
+def test_worker_driver_version_state_does_not_leak_to_independent_runs(
+    polling_job: tuple[EcmwfFastRegionJob, icechunk.Repository],
+    monkeypatch: pytest.MonkeyPatch,
+    source_getter: MagicMock,
+) -> None:
+    job, repo = polling_job
+    job = job.model_copy(update={"processing_mode": "backfill"})
+    coords = list(job.source_file_coords())
+    monkeypatch.setattr(
+        region_job,
+        "list_prefix_or_defer",
+        lambda prefix, client: [(coord.key, 100, LAST_MODIFIED) for coord in coords],
+    )
+    source_getter.return_value = source_response(b"bad!")
+    factory = MagicMock(spec=StoreFactory)
+    factory.icechunk_primary_and_replica_repos.return_value = (repo, [])
+
+    for _ in range(2):
+        assert (
+            type(job).process_virtual_worker_jobs(
+                [job], factory, "main", overwrite_chunks=False
+            )
+            is False
+        )
+    assert source_getter.call_count == 2 * len(coords)
+    assert job.discover_available(coords) == [(coord, 100) for coord in coords]
