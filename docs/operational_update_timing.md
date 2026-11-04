@@ -19,6 +19,8 @@ Measure the source inputs the dataset actually consumes:
 
 With the source on schedule, the latency targets are less than ten seconds for virtual files and less than ten minutes from the unit's last file for a materialized dataset with a completion trigger. An untriggered materialized dataset publishes within startup plus processing time of its scheduled fire, so it can miss the ten-minute target at typical source timing. Source lateness, failures, and dataset exceptions can miss targets and alert; report those misses.
 
+Report an analysis dataset's latency as its mean step delay. A position's delay runs from when the last source file it needs, including any accumulated boundary input, is available on the earliest public mirror, to when every variable at that position has its final value in the primary store. Average these per-position delays over every position in a window, and report beside the mean its p95: the 95th percentile of the same per-position delays over the same window. Compare analysis timing before and after a change by this mean, not by the first or last position alone.
+
 ## Measure before setting constants
 
 Run the advisory profiler locally:
