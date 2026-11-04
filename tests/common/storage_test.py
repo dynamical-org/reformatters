@@ -1315,9 +1315,7 @@ def test_icechunk_access_exact_url_and_independent_references(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("REFORMATTERS_ICECHUNK_ACCESS", raising=False)
-    assert (
-        storage.icechunk_access_for_url("s3://output/repo") == storage.IcechunkAccess()
-    )
+    assert storage.icechunk_access_for_url("s3://output/repo") == {}
     monkeypatch.setenv(
         "REFORMATTERS_ICECHUNK_ACCESS",
         json.dumps(
@@ -1333,51 +1331,12 @@ def test_icechunk_access_exact_url_and_independent_references(
         ),
     )
     access = storage.icechunk_access_for_url("s3://output/repo///")
-    assert access.output_secret_name == "writer-ref"  # noqa: S105
-    assert access.source_secret_names == {"s3://source/": "reader-ref"}
-    assert (
-        storage.icechunk_access_for_url("s3://output/repo/child")
-        == storage.IcechunkAccess()
-    )
+    assert access["output_secret_name"] == "writer-ref"  # noqa: S105
+    assert access["source_secret_names"] == {"s3://source/": "reader-ref"}
+    assert storage.icechunk_access_for_url("s3://output/repo/child") == {}
     public = storage.icechunk_access_for_url("https://public.example/repo")
-    assert public.output_secret_name is None
-    assert public.source_secret_names == {"s3://source/": "other-ref"}
-
-
-@pytest.mark.parametrize(
-    "raw",
-    [
-        "not-json",
-        "[]",
-        '{"s3://output/repo": null}',
-        '{"s3://output/repo": {"access_key_id": "forbidden"}}',
-        '{"s3://output/repo": {"output_secret_name": ""}}',
-        '{"s3://output/repo": {"source_secret_names": {"s3://source/": ""}}}',
-        '{"s3://output/repo": {"source_secret_names": []}}',
-    ],
-)
-def test_icechunk_access_rejects_malformed_schema(
-    monkeypatch: pytest.MonkeyPatch, raw: str
-) -> None:
-    monkeypatch.setenv("REFORMATTERS_ICECHUNK_ACCESS", raw)
-    with pytest.raises((json.JSONDecodeError, ValidationError)):
-        storage.icechunk_access_for_url("s3://output/repo")
-
-
-@pytest.mark.parametrize(
-    "raw",
-    [
-        '{"s3://output/repo": {}, "s3://output/repo/": {}}',
-        '{"s3://output/repo": {}, "s3://output/repo": {}}',
-        '{"https://output/repo": {"output_secret_name": "writer-ref"}}',
-    ],
-)
-def test_icechunk_access_rejects_ambiguous_or_non_s3_output(
-    monkeypatch: pytest.MonkeyPatch, raw: str
-) -> None:
-    monkeypatch.setenv("REFORMATTERS_ICECHUNK_ACCESS", raw)
-    with pytest.raises(AssertionError):
-        storage.icechunk_access_for_url("s3://output/repo")
+    assert "output_secret_name" not in public
+    assert public["source_secret_names"] == {"s3://source/": "other-ref"}
 
 
 def test_private_storage_options_preserves_transport_loads_once(

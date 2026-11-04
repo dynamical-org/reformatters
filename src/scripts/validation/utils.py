@@ -425,12 +425,12 @@ def _icechunk_storage(url: str) -> icechunk.Storage | None:
         return None
     bucket, _, prefix = url.removeprefix("s3://").partition("/")
     assert prefix, url
-    access = icechunk_access_for_url(url)
-    if access.output_secret_name is not None:
+    output_secret_name = icechunk_access_for_url(url).get("output_secret_name")
+    if output_secret_name is not None:
         return icechunk.s3_storage(
             bucket=bucket,
             prefix=prefix,
-            **load_private_storage_options(access.output_secret_name),
+            **load_private_storage_options(output_secret_name),
         )
     return icechunk.s3_storage(
         bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
@@ -446,7 +446,7 @@ def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
     )
     containers = config.virtual_chunk_containers
     items = containers.values() if isinstance(containers, dict) else containers
-    source_secret_names = icechunk_access_for_url(url).source_secret_names
+    source_secret_names = icechunk_access_for_url(url).get("source_secret_names", {})
     credentials = (
         virtual_chunk_credentials(list(items or ()), source_secret_names)
         if containers or source_secret_names

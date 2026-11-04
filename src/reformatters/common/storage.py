@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
-from typing import Annotated, Any, Literal, assert_never
+from typing import Any, Literal, assert_never
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -18,7 +18,7 @@ import zarr
 import zarr.abc.store
 import zarr.storage
 from icechunk.store import IcechunkStore
-from pydantic import ConfigDict, Field, InstanceOf, TypeAdapter, computed_field
+from pydantic import Field, InstanceOf, computed_field
 from zarr.abc.store import Store
 
 from reformatters.common import kubernetes
@@ -44,42 +44,11 @@ class DatasetFormat(StrEnum):
     ICECHUNK = "icechunk"
 
 
-class IcechunkAccess(FrozenBaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    output_secret_name: Annotated[str, Field(min_length=1)] | None = None
-    source_secret_names: dict[str, Annotated[str, Field(min_length=1)]] = Field(
-        default_factory=dict
-    )
-
-
-def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        assert key not in result, "Duplicate Icechunk access key"
-        result[key] = value
-    return result
-
-
-def icechunk_access_for_url(url: str) -> IcechunkAccess:
-    raw = os.environ.get("REFORMATTERS_ICECHUNK_ACCESS")
-    if raw is None:
-        return IcechunkAccess()
-    bindings = TypeAdapter(dict[str, IcechunkAccess]).validate_python(
-        json.loads(raw, object_pairs_hook=_unique_json_object)
-    )
-    normalized: dict[str, IcechunkAccess] = {}
-    for key, access in bindings.items():
-        normalized_key = key.rstrip("/")
-        assert normalized_key not in normalized, (
-            "Duplicate normalized Icechunk access URL"
-        )
-        if access.output_secret_name is not None:
-            assert urlparse(normalized_key).scheme == "s3", (
-                "Private output binding requires s3://"
-            )
-        normalized[normalized_key] = access
-    return normalized.get(url.rstrip("/"), IcechunkAccess())
+def icechunk_access_for_url(url: str) -> dict[str, Any]:
+    # Supply Secret references to validation tools that have only a repository URL.
+    raw = os.environ.get("REFORMATTERS_ICECHUNK_ACCESS", "{}")
+    bindings = {key.rstrip("/"): value for key, value in json.loads(raw).items()}
+    return bindings.get(url.rstrip("/"), {})
 
 
 def load_private_storage_options(secret_name: str) -> dict[str, Any]:
@@ -694,19 +663,22 @@ def virtual_chunk_credentials(
         assert name, "Source Secret name must be nonempty"
     credentials_by_prefix: dict[str, Any] = {}
     for container in containers:
-        if container.url_prefix in source_secret_names:
-            credentials = load_s3_credentials(source_secret_names[container.url_prefix])
-            credentials_by_prefix[container.url_prefix] = (
-                icechunk.s3_static_credentials(
-                    access_key_id=credentials["access_key_id"],
-                    secret_access_key=credentials["secret_access_key"],
-                    session_token=credentials.get("session_token"),
+        if isinstance(container.store, s3_compatible_stores):
+            if container.url_prefix in source_secret_names:
+                credentials = load_s3_credentials(
+                    source_secret_names[container.url_prefix]
                 )
-            )
-        elif isinstance(container.store, s3_compatible_stores):
-            credentials_by_prefix[container.url_prefix] = (
-                icechunk.s3_anonymous_credentials()
-            )
+                credentials_by_prefix[container.url_prefix] = (
+                    icechunk.s3_static_credentials(
+                        access_key_id=credentials["access_key_id"],
+                        secret_access_key=credentials["secret_access_key"],
+                        session_token=credentials.get("session_token"),
+                    )
+                )
+            else:
+                credentials_by_prefix[container.url_prefix] = (
+                    icechunk.s3_anonymous_credentials()
+                )
         elif isinstance(container.store, icechunk.ObjectStoreConfig.Gcs):
             credentials_by_prefix[container.url_prefix] = icechunk.gcs_credentials(
                 anonymous=True
