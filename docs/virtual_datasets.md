@@ -173,70 +173,15 @@ How manifests are split, and how to size the splits, is covered in [Manifest spl
 
 ### Private sources
 
-Set `IcechunkVirtualConfig.source_secret_names` to a mapping from each private
-container's exact `url_prefix` to its Kubernetes Secret name. Unmapped containers
-retain anonymous access. Source Secrets contain `access_key_id`,
-`secret_access_key`, and optionally `session_token`. Keep endpoint, region and
-addressing settings in the native container. `StorageConfig.k8s_secret_name`
-continues to supply the independent output credential and output transport options.
-Secret references and credentials are not persisted in Icechunk.
+Map private container prefixes to Kubernetes Secrets with `IcechunkVirtualConfig.source_secret_names`;
+output credentials remain separate in `StorageConfig`. See [storage.py](../src/reformatters/common/storage.py).
 
-`StoreFactory.k8s_secret_names()` includes the source Secrets for pod mounts.
-Materialized integrations using private sources add their source Secret names to
-their operational job's `secret_names`. Secret creation and source read-only IAM
-permissions are operator responsibilities. Include list permission on the source
-prefix: without it, S3 can return 403 for a missing object instead of 404.
+For direct reads, use `s3_store_from_secret` and wrap signed operations, including lazy iteration,
+in `source_access()` so authentication failures stop workers. Custom-endpoint containers need
+`force_path_style=True` to match the client. Source credentials need list permission so missing
+objects return 404 rather than 403. See [download.py](../src/reformatters/common/download.py).
 
-Direct source reads use the same source Secret with `s3_store_from_secret`.
-Share region and endpoint constants with the native container and use
-`force_path_style=True` on custom-endpoint containers to match the client's path
-addressing. Use bucket-rooted clients with bucket-relative object keys:
-
-```python
-from reformatters.common.download import (
-    download_to_disk,
-    s3_store_from_secret,
-    source_access,
-)
-
-source_store = s3_store_from_secret(
-    source_bucket_url,
-    region=source_region,
-    k8s_secret_name=source_secret_name,
-    endpoint=source_endpoint,
-)
-with source_access():
-    download_to_disk(source_store, object_key, local_path)
-```
-
-Use `source_access()` around signed listing and range reads too, including
-iteration of lazy listings and response streams. It makes rejected credentials
-fatal to workers while preserving ordinary missing-file and transient-error
-handling. Resolve the source client before entering per-file processing.
-Clients are cached per process; restart jobs after rotating Secrets. Session
-tokens must remain valid for the full job duration; they are not refreshed.
-
-URL-based validation and decode tools read `REFORMATTERS_ICECHUNK_ACCESS`, a JSON
-mapping from exact repository URLs to Secret references:
-
-```json
-{
-  "s3://example-output/dataset/v1.icechunk": {
-    "output_secret_name": "example-output-secret",
-    "source_secret_names": {
-      "s3://example-source/": "example-source-secret"
-    }
-  }
-}
-```
-
-Either entry field may be omitted. An output-only entry opens a private
-materialized Icechunk repository; a source-only entry can read a public repository
-with private virtual chunks. Trailing slashes are ignored; other URL aliases must
-be listed separately. Unlisted comparison URLs keep their public defaults.
-The binding applies to Icechunk validation readers; maintenance commands retain
-their existing output-authentication options, and plain-Zarr readers are unchanged.
-
-Private access uses existing production-mode Secret loading: mounted files in
-pods, or Kubernetes API access for local runs with `DYNAMICAL_ENV=prod`. Explicit
-source credentials cannot be loaded from development mode's empty Secret result.
+URL-only validation tools use `REFORMATTERS_ICECHUNK_ACCESS`: a JSON map from repository URL to
+optional `output_secret_name` and `source_secret_names` (source prefix → Secret name).
+Local Secret loading requires `DYNAMICAL_ENV=prod`. Tokens must outlive the job; restart jobs
+after rotating Secrets.

@@ -1,7 +1,5 @@
 import contextlib
 import functools
-import json
-import os
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -23,7 +21,7 @@ from zarr.abc.store import Store
 
 from reformatters.common import kubernetes
 from reformatters.common.config import Config, Env
-from reformatters.common.download import load_s3_credentials, validate_s3_credentials
+from reformatters.common.download import load_s3_credentials
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
@@ -42,20 +40,6 @@ _NO_SECRET_NAME = "no-secret"  # noqa: S105
 class DatasetFormat(StrEnum):
     ZARR3 = "zarr3"
     ICECHUNK = "icechunk"
-
-
-def icechunk_access_for_url(url: str) -> dict[str, Any]:
-    # Supply Secret references to validation tools that have only a repository URL.
-    raw = os.environ.get("REFORMATTERS_ICECHUNK_ACCESS", "{}")
-    bindings = {key.rstrip("/"): value for key, value in json.loads(raw).items()}
-    return bindings.get(url.rstrip("/"), {})
-
-
-def load_private_storage_options(secret_name: str) -> dict[str, Any]:
-    options = kubernetes.load_secret(secret_name)
-    validate_s3_credentials(options)
-    assert options.get("anonymous") is not True, "Private output cannot be anonymous"
-    return options
 
 
 class StorageConfig(FrozenBaseModel):

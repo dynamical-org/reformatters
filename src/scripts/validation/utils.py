@@ -1,4 +1,6 @@
 import functools
+import json
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -16,12 +18,10 @@ import zarr
 from matplotlib.axes import Axes
 from zarr.storage import ObjectStore, StoreLike
 
+from reformatters.common import kubernetes
+from reformatters.common.download import validate_s3_credentials
 from reformatters.common.retry import retry
-from reformatters.common.storage import (
-    icechunk_access_for_url,
-    load_private_storage_options,
-    virtual_chunk_credentials,
-)
+from reformatters.common.storage import virtual_chunk_credentials
 from reformatters.common.validation import open_flattened_dataset
 from reformatters.google.weathernext3.forecast_virtual.template_config import (
     STATISTICS,
@@ -408,6 +408,20 @@ def var_slug(var: str) -> str:
     keeps the original name; only filenames and HTML ids go through here.
     """
     return var.replace("/", "__")
+
+
+def icechunk_access_for_url(url: str) -> dict[str, Any]:
+    # Supply Secret references to validation tools that have only a repository URL.
+    raw = os.environ.get("REFORMATTERS_ICECHUNK_ACCESS", "{}")
+    bindings = {key.rstrip("/"): value for key, value in json.loads(raw).items()}
+    return bindings.get(url.rstrip("/"), {})
+
+
+def load_private_storage_options(secret_name: str) -> dict[str, Any]:
+    options = kubernetes.load_secret(secret_name)
+    validate_s3_credentials(options)
+    assert options.get("anonymous") is not True, "Private output cannot be anonymous"
+    return options
 
 
 def _icechunk_storage(url: str) -> icechunk.Storage | None:

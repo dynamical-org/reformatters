@@ -1,4 +1,5 @@
 import json
+from typing import Any
 from unittest.mock import Mock, call
 
 import icechunk
@@ -155,3 +156,70 @@ def test_unknown_source_binding_fails_against_materialized_config(
     )
     with pytest.raises(AssertionError, match="Unknown source container prefix"):
         open_icechunk_readonly(url)
+
+
+def test_icechunk_access_exact_url_and_independent_references(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("REFORMATTERS_ICECHUNK_ACCESS", raising=False)
+    assert utils.icechunk_access_for_url("s3://output/repo") == {}
+    monkeypatch.setenv(
+        "REFORMATTERS_ICECHUNK_ACCESS",
+        json.dumps(
+            {
+                "s3://output/repo/": {
+                    "output_secret_name": "writer-ref",
+                    "source_secret_names": {"s3://source/": "reader-ref"},
+                },
+                "https://public.example/repo": {
+                    "source_secret_names": {"s3://source/": "other-ref"}
+                },
+            }
+        ),
+    )
+    access = utils.icechunk_access_for_url("s3://output/repo///")
+    assert access["output_secret_name"] == "writer-ref"  # noqa: S105
+    assert access["source_secret_names"] == {"s3://source/": "reader-ref"}
+    assert utils.icechunk_access_for_url("s3://output/repo/child") == {}
+    public = utils.icechunk_access_for_url("https://public.example/repo")
+    assert "output_secret_name" not in public
+    assert public["source_secret_names"] == {"s3://source/": "other-ref"}
+
+
+def test_private_storage_options_preserves_transport_loads_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    options = {
+        "access_key_id": "writer-key",
+        "secret_access_key": "writer-value",
+        "session_token": "writer-token",
+        "endpoint_url": "https://output.example",
+        "region": "auto",
+        "force_path_style": True,
+    }
+    loader = Mock(return_value=options)
+    monkeypatch.setattr(utils.kubernetes, "load_secret", loader)
+    assert utils.load_private_storage_options("writer-ref") == options
+    loader.assert_called_once_with("writer-ref")
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {},
+        {"access_key_id": "writer-key"},
+        {
+            "access_key_id": "writer-key",
+            "secret_access_key": "writer-value",
+            "anonymous": True,
+        },
+    ],
+)
+def test_private_storage_options_guards_explicit_private_binding(
+    monkeypatch: pytest.MonkeyPatch, options: dict[str, Any]
+) -> None:
+    loader = Mock(return_value=options)
+    monkeypatch.setattr(utils.kubernetes, "load_secret", loader)
+    with pytest.raises((ValueError, AssertionError)):
+        utils.load_private_storage_options("writer-ref")
+    loader.assert_called_once_with("writer-ref")

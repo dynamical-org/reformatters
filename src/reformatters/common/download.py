@@ -39,41 +39,136 @@ The main functions which have (effectively) interchangeable interfaces are
 `httpx_download_to_disk` which uses httpx and supports redirects and cookies.
 """
 
+_DEFAULT_RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+_MAX_RETRIES = 16
+_RETRY_TIMEOUT_SECONDS = 300.0
 
-class SourceAccessError(RuntimeError):
-    pass
+
+def http_download_to_disk(
+    url: str,
+    dataset_id: str,
+    byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
+    local_path_suffix: str = "",
+    disk_cache: bool = False,
+) -> Path:
+    parsed_url = urlparse(url)
+    base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+    store = http_store(base_url)
+    local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
+    download_to_disk(
+        store,
+        parsed_url.path,
+        local_path,
+        disk_cache=disk_cache,
+        byte_ranges=byte_ranges,
+    )
+    return local_path
 
 
-@contextlib.contextmanager
-def source_access() -> Iterator[None]:
+def httpx_download_to_disk(
+    url: str,
+    dataset_id: str,
+    byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
+    local_path_suffix: str = "",
+    rate_limiter: RateLimiter | None = None,
+    retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
+    disk_cache: bool = False,
+) -> Path:
+    """httpx based download which supports redirects and maintains cookies."""
+    parsed_url = urlparse(url)
+    local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
+    if disk_cache and local_path.exists():
+        return local_path
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = local_path.with_name(f"{local_path.name}.{uuid.uuid4().hex[:8]}")
+
     try:
-        yield
-    except (PermissionDeniedError, UnauthenticatedError) as exc:
-        raise SourceAccessError("Private source authentication failed") from exc
+        if byte_ranges is not None:
+            starts, ends = byte_ranges
+            # Build multi-range header. Ends from grib index are exclusive; HTTP Range is inclusive.
+            range_specs = [f"{s}-{e - 1}" for s, e in zip(starts, ends, strict=True)]
+            range_header = f"bytes={', '.join(range_specs)}"
+            response = httpx_get(
+                url,
+                headers={"Range": range_header},
+                rate_limiter=rate_limiter,
+                retry_status_codes=retry_status_codes,
+            )
+
+            content_type = response.headers.get("content-type", "")
+            if "multipart/byteranges" in content_type:
+                body = _parse_multipart_byteranges(response.content, content_type)
+            else:
+                # Single range or server returned full content
+                body = response.content
+
+            with open(temp_path, "wb") as f:
+                f.write(body)
+        else:
+            response = httpx_get(
+                url, rate_limiter=rate_limiter, retry_status_codes=retry_status_codes
+            )
+            with open(temp_path, "wb") as f:
+                f.write(response.content)
+
+        temp_path.rename(local_path)
+
+    except Exception:
+        with contextlib.suppress(FileNotFoundError):
+            temp_path.unlink()
+            local_path.unlink()
+        raise
+
+    return local_path
 
 
-def validate_s3_credentials(options: Mapping[str, Any]) -> dict[str, str]:
-    if not isinstance(options, Mapping):
-        raise ValueError("Invalid static S3 credentials")
-    credentials: dict[str, str] = {}
-    for key in ("access_key_id", "secret_access_key"):
-        value = options.get(key)
-        if not isinstance(value, str) or not value:
-            raise ValueError("Invalid static S3 credentials")
-        credentials[key] = value
-    if "session_token" in options:
-        token = options["session_token"]
-        if not isinstance(token, str) or not token:
-            raise ValueError("Invalid static S3 credentials")
-        credentials["session_token"] = token
-    return credentials
+def s3_download_to_disk(
+    url: str,
+    dataset_id: str,
+    *,
+    region: str,
+    byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
+    local_path_suffix: str = "",
+    disk_cache: bool = False,
+) -> Path:
+    """Download s3://bucket/key to disk via the cached anonymous obstore S3 store."""
+    parsed_url = urlparse(url)
+    assert parsed_url.scheme == "s3", url
+    store = s3_store(f"s3://{parsed_url.netloc}", region=region)
+    local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
+    download_to_disk(
+        store,
+        parsed_url.path.removeprefix("/"),
+        local_path,
+        disk_cache=disk_cache,
+        byte_ranges=byte_ranges,
+    )
+    return local_path
 
 
-def load_s3_credentials(secret_name: str) -> dict[str, str]:
-    try:
-        return validate_s3_credentials(kubernetes.load_secret(secret_name))
-    except ValueError as exc:
-        raise SourceAccessError("Invalid static S3 credentials") from exc
+def gcs_download_to_disk(url: str, dataset_id: str) -> Path:
+    """Download gs://bucket/key to disk via the cached anonymous obstore GCS store."""
+    parsed_url = urlparse(url)
+    assert parsed_url.scheme == "gs", url
+    local_path = get_local_path(dataset_id, parsed_url.path)
+    download_to_disk(
+        gcs_store(f"gs://{parsed_url.netloc}"),
+        parsed_url.path.removeprefix("/"),
+        local_path,
+    )
+    return local_path
+
+
+def s3_read_bytes(url: str, *, region: str, start: int, end: int) -> bytes:
+    """The `[start, end)` byte range of s3://bucket/key, via the anonymous S3 store."""
+    parsed_url = urlparse(url)
+    assert parsed_url.scheme == "s3", url
+    store = s3_store(f"s3://{parsed_url.netloc}", region=region)
+    return bytes(
+        obstore.get_range(
+            store, parsed_url.path.removeprefix("/"), start=start, end=end
+        )
+    )
 
 
 def download_to_disk(
@@ -113,6 +208,50 @@ def download_to_disk(
             local_path.unlink()
 
         raise
+
+
+def httpx_get(
+    url: str,
+    headers: dict[str, str] | None = None,
+    rate_limiter: RateLimiter | None = None,
+    retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
+) -> httpx.Response:
+    client = _httpx_client()
+    start_time = time.monotonic()
+
+    last_exception: Exception | None = None
+    for attempt in range(_MAX_RETRIES + 1):
+        if time.monotonic() - start_time > _RETRY_TIMEOUT_SECONDS:
+            break
+
+        if attempt > 0:
+            time.sleep(exponential_backoff_time(attempt - 1))
+
+        if rate_limiter is not None:
+            rate_limiter.wait()
+
+        try:
+            response = client.get(url, headers=headers)
+        except httpx.TransportError as e:
+            last_exception = e
+            log.warning(f"httpx transport error on attempt {attempt + 1}: {e}")
+            continue
+
+        if response.status_code not in retry_status_codes:
+            response.raise_for_status()
+            return response
+
+        last_exception = httpx.HTTPStatusError(
+            f"Server returned {response.status_code}",
+            request=response.request,
+            response=response,
+        )
+        log.warning(
+            f"Retryable status {response.status_code} on attempt {attempt + 1} for {url}"
+        )
+
+    assert last_exception is not None
+    raise last_exception
 
 
 _CLIENT_OPTIONS: ClientConfig = {
@@ -189,24 +328,6 @@ def s3_store(
 
 
 @functools.cache
-def s3_store_from_secret(
-    bucket_url: str,
-    *,
-    region: str,
-    k8s_secret_name: str,
-    endpoint: str | None = None,
-) -> obstore.store.S3Store:
-    return s3_store(
-        bucket_url,
-        region=region,
-        skip_signature=False,
-        endpoint=endpoint,
-        virtual_hosted_style_request=False if endpoint is not None else None,
-        **load_s3_credentials(k8s_secret_name),
-    )
-
-
-@functools.cache
 def gcs_store(bucket_url: str) -> obstore.store.GCSStore:
     """An anonymous obstore store for a public gs://bucket."""
     store = obstore.store.from_url(
@@ -217,76 +338,6 @@ def gcs_store(bucket_url: str) -> obstore.store.GCSStore:
     )
     assert isinstance(store, obstore.store.GCSStore)
     return store
-
-
-def http_download_to_disk(
-    url: str,
-    dataset_id: str,
-    byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
-    local_path_suffix: str = "",
-    disk_cache: bool = False,
-) -> Path:
-    parsed_url = urlparse(url)
-    base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-    store = http_store(base_url)
-    local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
-    download_to_disk(
-        store,
-        parsed_url.path,
-        local_path,
-        disk_cache=disk_cache,
-        byte_ranges=byte_ranges,
-    )
-    return local_path
-
-
-def s3_download_to_disk(
-    url: str,
-    dataset_id: str,
-    *,
-    region: str,
-    byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
-    local_path_suffix: str = "",
-    disk_cache: bool = False,
-) -> Path:
-    """Download s3://bucket/key to disk via the cached anonymous obstore S3 store."""
-    parsed_url = urlparse(url)
-    assert parsed_url.scheme == "s3", url
-    store = s3_store(f"s3://{parsed_url.netloc}", region=region)
-    local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
-    download_to_disk(
-        store,
-        parsed_url.path.removeprefix("/"),
-        local_path,
-        disk_cache=disk_cache,
-        byte_ranges=byte_ranges,
-    )
-    return local_path
-
-
-def gcs_download_to_disk(url: str, dataset_id: str) -> Path:
-    """Download gs://bucket/key to disk via the cached anonymous obstore GCS store."""
-    parsed_url = urlparse(url)
-    assert parsed_url.scheme == "gs", url
-    local_path = get_local_path(dataset_id, parsed_url.path)
-    download_to_disk(
-        gcs_store(f"gs://{parsed_url.netloc}"),
-        parsed_url.path.removeprefix("/"),
-        local_path,
-    )
-    return local_path
-
-
-def s3_read_bytes(url: str, *, region: str, start: int, end: int) -> bytes:
-    """The `[start, end)` byte range of s3://bucket/key, via the anonymous S3 store."""
-    parsed_url = urlparse(url)
-    assert parsed_url.scheme == "s3", url
-    store = s3_store(f"s3://{parsed_url.netloc}", region=region)
-    return bytes(
-        obstore.get_range(
-            store, parsed_url.path.removeprefix("/"), start=start, end=end
-        )
-    )
 
 
 def get_local_path(dataset_id: str, path: str, local_path_suffix: str = "") -> Path:
@@ -333,55 +384,6 @@ class RateLimiter:
                 self._last = time.monotonic()
 
 
-_DEFAULT_RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
-_MAX_RETRIES = 16
-_RETRY_TIMEOUT_SECONDS = 300.0
-
-
-def httpx_get(
-    url: str,
-    headers: dict[str, str] | None = None,
-    rate_limiter: RateLimiter | None = None,
-    retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
-) -> httpx.Response:
-    client = _httpx_client()
-    start_time = time.monotonic()
-
-    last_exception: Exception | None = None
-    for attempt in range(_MAX_RETRIES + 1):
-        if time.monotonic() - start_time > _RETRY_TIMEOUT_SECONDS:
-            break
-
-        if attempt > 0:
-            time.sleep(exponential_backoff_time(attempt - 1))
-
-        if rate_limiter is not None:
-            rate_limiter.wait()
-
-        try:
-            response = client.get(url, headers=headers)
-        except httpx.TransportError as e:
-            last_exception = e
-            log.warning(f"httpx transport error on attempt {attempt + 1}: {e}")
-            continue
-
-        if response.status_code not in retry_status_codes:
-            response.raise_for_status()
-            return response
-
-        last_exception = httpx.HTTPStatusError(
-            f"Server returned {response.status_code}",
-            request=response.request,
-            response=response,
-        )
-        log.warning(
-            f"Retryable status {response.status_code} on attempt {attempt + 1} for {url}"
-        )
-
-    assert last_exception is not None
-    raise last_exception
-
-
 def _parse_multipart_byteranges(data: bytes, content_type: str) -> bytes:
     # Extract boundary from Content-Type: multipart/byteranges; boundary=XXXX
     _, _, params = content_type.partition(";")
@@ -413,63 +415,6 @@ def _parse_multipart_byteranges(data: bytes, content_type: str) -> bytes:
     return b"".join(body_parts)
 
 
-def httpx_download_to_disk(
-    url: str,
-    dataset_id: str,
-    byte_ranges: tuple[Sequence[int], Sequence[int]] | None = None,
-    local_path_suffix: str = "",
-    rate_limiter: RateLimiter | None = None,
-    retry_status_codes: set[int] = _DEFAULT_RETRY_STATUS_CODES,
-    disk_cache: bool = False,
-) -> Path:
-    """httpx based download which supports redirects and maintains cookies."""
-    parsed_url = urlparse(url)
-    local_path = get_local_path(dataset_id, parsed_url.path, local_path_suffix)
-    if disk_cache and local_path.exists():
-        return local_path
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = local_path.with_name(f"{local_path.name}.{uuid.uuid4().hex[:8]}")
-
-    try:
-        if byte_ranges is not None:
-            starts, ends = byte_ranges
-            # Build multi-range header. Ends from grib index are exclusive; HTTP Range is inclusive.
-            range_specs = [f"{s}-{e - 1}" for s, e in zip(starts, ends, strict=True)]
-            range_header = f"bytes={', '.join(range_specs)}"
-            response = httpx_get(
-                url,
-                headers={"Range": range_header},
-                rate_limiter=rate_limiter,
-                retry_status_codes=retry_status_codes,
-            )
-
-            content_type = response.headers.get("content-type", "")
-            if "multipart/byteranges" in content_type:
-                body = _parse_multipart_byteranges(response.content, content_type)
-            else:
-                # Single range or server returned full content
-                body = response.content
-
-            with open(temp_path, "wb") as f:
-                f.write(body)
-        else:
-            response = httpx_get(
-                url, rate_limiter=rate_limiter, retry_status_codes=retry_status_codes
-            )
-            with open(temp_path, "wb") as f:
-                f.write(response.content)
-
-        temp_path.rename(local_path)
-
-    except Exception:
-        with contextlib.suppress(FileNotFoundError):
-            temp_path.unlink()
-            local_path.unlink()
-        raise
-
-    return local_path
-
-
 def http_status_code(e: Exception) -> int | None:
     """HTTP status code from an httpx or requests error response, else None."""
     if isinstance(e, httpx.HTTPStatusError):
@@ -495,3 +440,57 @@ def is_not_found(e: Exception) -> bool:
     if isinstance(e, GenericError):
         return _EMPTY_OBJECT_RANGE_ERROR in str(e)
     return http_status_code(e) in (HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
+
+
+class SourceAccessError(RuntimeError):
+    pass
+
+
+@contextlib.contextmanager
+def source_access() -> Iterator[None]:
+    try:
+        yield
+    except (PermissionDeniedError, UnauthenticatedError) as exc:
+        raise SourceAccessError("Private source authentication failed") from exc
+
+
+def validate_s3_credentials(options: Mapping[str, Any]) -> dict[str, str]:
+    if not isinstance(options, Mapping):
+        raise ValueError("Invalid static S3 credentials")
+    credentials: dict[str, str] = {}
+    for key in ("access_key_id", "secret_access_key"):
+        value = options.get(key)
+        if not isinstance(value, str) or not value:
+            raise ValueError("Invalid static S3 credentials")
+        credentials[key] = value
+    if "session_token" in options:
+        token = options["session_token"]
+        if not isinstance(token, str) or not token:
+            raise ValueError("Invalid static S3 credentials")
+        credentials["session_token"] = token
+    return credentials
+
+
+def load_s3_credentials(secret_name: str) -> dict[str, str]:
+    try:
+        return validate_s3_credentials(kubernetes.load_secret(secret_name))
+    except ValueError as exc:
+        raise SourceAccessError("Invalid static S3 credentials") from exc
+
+
+@functools.cache
+def s3_store_from_secret(
+    bucket_url: str,
+    *,
+    region: str,
+    k8s_secret_name: str,
+    endpoint: str | None = None,
+) -> obstore.store.S3Store:
+    return s3_store(
+        bucket_url,
+        region=region,
+        skip_signature=False,
+        endpoint=endpoint,
+        virtual_hosted_style_request=False if endpoint is not None else None,
+        **load_s3_credentials(k8s_secret_name),
+    )
