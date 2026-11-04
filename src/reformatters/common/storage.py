@@ -21,6 +21,7 @@ from zarr.abc.store import Store
 
 from reformatters.common import kubernetes
 from reformatters.common.config import Config, Env
+from reformatters.common.download import load_s3_credentials
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.retry import retry
@@ -77,10 +78,13 @@ class StoreFactory(FrozenBaseModel):
                 assert_never(unreachable)
 
     def k8s_secret_names(self) -> list[str]:
-        return [
+        names = [
             self.primary_storage_config.k8s_secret_name,
             *[config.k8s_secret_name for config in self.replica_storage_configs],
         ]
+        if self.icechunk_virtual_config is not None:
+            names.extend(self.icechunk_virtual_config.source_secret_names.values())
+        return list(dict.fromkeys(names))
 
     def primary_url(self) -> str:
         """Canonical production URL for the primary store, regardless of environment."""
@@ -586,12 +590,13 @@ class IcechunkVirtualConfig(FrozenBaseModel):
     )
     # Per-array manifest splitting policy (see manifest_append_dim_split).
     manifest_split: InstanceOf[icechunk.ManifestSplittingConfig]
+    source_secret_names: dict[str, str] = Field(default_factory=dict)
 
 
 def _repository_config_and_credentials(
     virtual_config: IcechunkVirtualConfig | None,
 ) -> tuple[icechunk.RepositoryConfig, dict[str, Any] | None]:
-    """Build the icechunk `RepositoryConfig` override for a dataset, plus the anonymous
+    """Build the icechunk `RepositoryConfig` override for a dataset, plus the
     authorize map for a virtual one (`None` for a materialized one)."""
     config = icechunk.RepositoryConfig.default()
     config.storage = icechunk.StorageSettings(
@@ -617,33 +622,47 @@ def _repository_config_and_credentials(
     # manifest versions (multi-GB OOM). A virtual ref is ~180 B, so 1M refs ≈ 200 MB.
     config.caching = icechunk.CachingConfig(num_chunk_refs=1_000_000)
 
-    return config, anonymous_virtual_chunk_credentials(virtual_config.containers)
+    return config, virtual_chunk_credentials(
+        virtual_config.containers, virtual_config.source_secret_names
+    )
 
 
-def anonymous_virtual_chunk_credentials(
+def virtual_chunk_credentials(
     containers: Sequence[icechunk.VirtualChunkContainer],
+    source_secret_names: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Anonymous authorize map for virtual chunk containers, keyed by url prefix.
-
-    Our S3, S3-compatible and GCS sources (NOAA NODD, ECMWF, Source Coop) are all
-    anonymous-read; authenticated transform proxies use HTTP; local-filesystem
-    containers (dev/test) need no credentials. Each container gets the credential kind
-    its store accepts -- an S3 credential handed to an HTTP container is an error, not a
-    no-op. To support a requester-pays or otherwise private object store, add an
-    optional per-container credentials field to IcechunkVirtualConfig and prefer it over
-    these defaults.
-    """
     s3_compatible_stores = (
         icechunk.ObjectStoreConfig.S3,
         icechunk.ObjectStoreConfig.S3Compatible,
         icechunk.ObjectStoreConfig.Tigris,
     )
+    source_secret_names = source_secret_names or {}
+    containers_by_prefix = {container.url_prefix: container for container in containers}
+    for prefix, name in source_secret_names.items():
+        assert prefix in containers_by_prefix, "Unknown source container prefix"
+        assert isinstance(containers_by_prefix[prefix].store, s3_compatible_stores), (
+            "Source credentials require an S3-compatible container"
+        )
+        assert isinstance(name, str), "Source Secret name must be a string"
+        assert name, "Source Secret name must be nonempty"
     credentials_by_prefix: dict[str, Any] = {}
     for container in containers:
         if isinstance(container.store, s3_compatible_stores):
-            credentials_by_prefix[container.url_prefix] = (
-                icechunk.s3_anonymous_credentials()
-            )
+            if container.url_prefix in source_secret_names:
+                credentials = load_s3_credentials(
+                    source_secret_names[container.url_prefix]
+                )
+                credentials_by_prefix[container.url_prefix] = (
+                    icechunk.s3_static_credentials(
+                        access_key_id=credentials["access_key_id"],
+                        secret_access_key=credentials["secret_access_key"],
+                        session_token=credentials.get("session_token"),
+                    )
+                )
+            else:
+                credentials_by_prefix[container.url_prefix] = (
+                    icechunk.s3_anonymous_credentials()
+                )
         elif isinstance(container.store, icechunk.ObjectStoreConfig.Gcs):
             credentials_by_prefix[container.url_prefix] = icechunk.gcs_credentials(
                 anonymous=True
@@ -660,8 +679,7 @@ def anonymous_virtual_chunk_credentials(
             raise AssertionError(
                 f"Virtual chunk container {container.url_prefix} uses an unsupported "
                 f"store ({type(container.store).__name__}); only S3-compatible and "
-                "GCS (anonymous), HTTP and local-filesystem sources are supported. Add "
-                "explicit credentials to IcechunkVirtualConfig."
+                "GCS (anonymous), HTTP and local-filesystem sources are supported."
             )
 
     return icechunk.containers_credentials(credentials_by_prefix)

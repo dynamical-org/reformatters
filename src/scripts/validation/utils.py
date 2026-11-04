@@ -1,4 +1,6 @@
 import functools
+import json
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -16,8 +18,10 @@ import zarr
 from matplotlib.axes import Axes
 from zarr.storage import ObjectStore, StoreLike
 
+from reformatters.common import kubernetes
+from reformatters.common.download import validate_s3_credentials
 from reformatters.common.retry import retry
-from reformatters.common.storage import anonymous_virtual_chunk_credentials
+from reformatters.common.storage import virtual_chunk_credentials
 from reformatters.common.validation import open_flattened_dataset
 from reformatters.google.weathernext3.forecast_virtual.template_config import (
     STATISTICS,
@@ -406,21 +410,18 @@ def var_slug(var: str) -> str:
     return var.replace("/", "__")
 
 
-def _anonymous_virtual_credentials(
-    storage: icechunk.Storage,
-) -> dict[str, Any] | None:
-    """Anonymous read credentials for a virtual store's persisted chunk containers.
+def icechunk_access_for_url(url: str) -> dict[str, Any]:
+    # Supply Secret references to validation tools that have only a repository URL.
+    raw = os.environ.get("REFORMATTERS_ICECHUNK_ACCESS", "{}")
+    bindings = {key.rstrip("/"): value for key, value in json.loads(raw).items()}
+    return bindings.get(url.rstrip("/"), {})
 
-    A virtual icechunk store decodes chunks from source files, which requires authorizing
-    access to the source buckets. The container set is persisted in the repo config (see
-    docs/virtual_datasets.md). Returns None for a materialized store.
-    """
-    config = icechunk.Repository.fetch_config(storage)
-    containers = config.virtual_chunk_containers if config is not None else None
-    if not containers:
-        return None
-    items = containers.values() if isinstance(containers, dict) else containers
-    return anonymous_virtual_chunk_credentials(list(items))
+
+def load_private_storage_options(secret_name: str) -> dict[str, Any]:
+    options = kubernetes.load_secret(secret_name)
+    validate_s3_credentials(options)
+    assert options.get("anonymous") is not True, "Private output cannot be anonymous"
+    return options
 
 
 def _icechunk_storage(url: str) -> icechunk.Storage | None:
@@ -438,6 +439,13 @@ def _icechunk_storage(url: str) -> icechunk.Storage | None:
         return None
     bucket, _, prefix = url.removeprefix("s3://").partition("/")
     assert prefix, url
+    output_secret_name = icechunk_access_for_url(url).get("output_secret_name")
+    if output_secret_name is not None:
+        return icechunk.s3_storage(
+            bucket=bucket,
+            prefix=prefix,
+            **load_private_storage_options(output_secret_name),
+        )
     return icechunk.s3_storage(
         bucket=bucket, prefix=prefix, anonymous=True, region="us-west-2"
     )
@@ -450,6 +458,14 @@ def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
     config = (
         icechunk.Repository.fetch_config(storage) or icechunk.RepositoryConfig.default()
     )
+    containers = config.virtual_chunk_containers
+    items = containers.values() if isinstance(containers, dict) else containers
+    source_secret_names = icechunk_access_for_url(url).get("source_secret_names", {})
+    credentials = (
+        virtual_chunk_credentials(list(items or ()), source_secret_names)
+        if containers or source_secret_names
+        else None
+    )
     # A whole-archive scan probes refs from many threads at once. A cache that cannot
     # hold one manifest split makes every thread materialize its own copy of it, so peak
     # memory scales with thread count instead of split size — 14 GB on a store whose
@@ -459,7 +475,7 @@ def open_icechunk_readonly(url: str) -> icechunk.IcechunkStore:
     repo = icechunk.Repository.open(
         storage,
         config=config,
-        authorize_virtual_chunk_access=_anonymous_virtual_credentials(storage),
+        authorize_virtual_chunk_access=credentials,
     )
     return repo.readonly_session("main").store
 
@@ -803,7 +819,10 @@ def deterministic_reference_allowed(stats: VariableStats) -> bool:
 def is_virtual_store(url: str) -> bool:
     """True if `url` is an icechunk store with persisted virtual chunk containers."""
     storage = _icechunk_storage(url)
-    return storage is not None and _anonymous_virtual_credentials(storage) is not None
+    if storage is None:
+        return False
+    config = icechunk.Repository.fetch_config(storage)
+    return config is not None and bool(config.virtual_chunk_containers)
 
 
 def extract_variable_metadata(ds: xr.Dataset, var: str) -> dict[str, Any]:

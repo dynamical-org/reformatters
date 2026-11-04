@@ -16,7 +16,7 @@ from zarr.abc.store import Store
 
 from reformatters.common import storage, template_utils
 from reformatters.common.binary_rounding import round_float32_inplace
-from reformatters.common.download import is_not_found
+from reformatters.common.download import SourceAccessError, is_not_found
 from reformatters.common.iterating import flatten_groups, split_groups
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import replace
@@ -325,6 +325,8 @@ class MaterializedRegionJob(
             try:
                 path = self.download_file(coord)
                 return replace(coord, downloaded_path=path)
+            except SourceAccessError:
+                raise
             except Exception as e:
                 updated_coord = replace(coord, status=SourceFileStatus.DownloadFailed)
 
@@ -383,6 +385,8 @@ class MaterializedRegionJob(
                     updated_coords[index] = replace(
                         coord, status=SourceFileStatus.Succeeded
                     )
+                except SourceAccessError:
+                    raise
                 except Exception:
                     log.exception(f"Read failed {coord.downloaded_path}")
                     updated_coords[index] = replace(

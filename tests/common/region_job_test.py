@@ -5,6 +5,7 @@ from datetime import timedelta
 from itertools import batched, pairwise
 from pathlib import Path
 from typing import ClassVar
+from unittest.mock import Mock
 
 import dask
 import dask.array
@@ -23,6 +24,7 @@ from reformatters.common.config_models import (
     DataVarAttrs,
     Encoding,
 )
+from reformatters.common.download import SourceAccessError
 from reformatters.common.iterating import get_worker_jobs
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
@@ -1403,3 +1405,32 @@ class TestSourceFileResultSerialization:
 
         restored = SourceFileResult.model_validate_json(original.model_dump_json())
         assert restored == original
+
+
+@pytest.mark.parametrize("stage", ["download", "read"])
+def test_private_source_authentication_is_fatal(
+    stage: str, template_ds: xr.DataTree, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    var = ExampleDataVar(name="var0")
+    job = ExampleRegionJob(
+        tmp_store=get_local_tmp_store(),
+        template_ds=template_ds,
+        data_vars=[var],
+        append_dim="time",
+        region=slice(0, 12),
+        reformat_job_name="test-job",
+    )
+    coord = ExampleSourceFileCoords(time=pd.Timestamp(template_ds.time.values[0]))
+    monkeypatch.setattr(
+        ExampleRegionJob,
+        "download_file" if stage == "download" else "read_data",
+        Mock(side_effect=SourceAccessError("denied")),
+    )
+    if stage == "download":
+        with pytest.raises(SourceAccessError):
+            job._download_processing_group([coord], [var.name])
+    else:
+        with pytest.raises(SourceAccessError):
+            job._read_into_data_array(
+                template_ds.to_dataset()[var.name].copy(deep=True), var, [coord]
+            )

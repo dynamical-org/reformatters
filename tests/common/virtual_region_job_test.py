@@ -27,6 +27,7 @@ import pytest
 import xarray as xr
 import zarr
 from gribberish.zarr import GribberishCodec
+from obstore.exceptions import PermissionDeniedError
 from pydantic import ValidationError, computed_field
 from zarr.core.buffer import default_buffer_prototype
 from zarr.core.metadata import ArrayV3Metadata
@@ -39,6 +40,7 @@ from reformatters.common.config_models import (
     DataVarAttrs,
     Encoding,
 )
+from reformatters.common.download import SourceAccessError, source_access
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.iterating import get_worker_jobs, item
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
@@ -2972,3 +2974,24 @@ def test_exists_many_batch_size_bounds_concurrent_probes() -> None:
 
     assert result == dict.fromkeys(keys, True)
     assert peak <= batch_size
+
+
+@pytest.mark.parametrize("private", [False, True])
+def test_source_authentication_failure_skips_only_public_files(
+    private: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = _make_region_job(_create_template_ds(1), region=slice(0, 1))
+    coord = job.source_file_coords()[0]
+
+    def denied(*args: object) -> list[VirtualRef]:
+        if private:
+            with source_access():
+                raise PermissionDeniedError("denied")
+        raise PermissionDeniedError("denied")
+
+    monkeypatch.setattr(VirtualTestRegionJob, "file_refs", denied)
+    if private:
+        with pytest.raises(SourceAccessError):
+            job._file_refs_or_skip(coord, BLOCK_NBYTES)
+    else:
+        assert job._file_refs_or_skip(coord, BLOCK_NBYTES) == []

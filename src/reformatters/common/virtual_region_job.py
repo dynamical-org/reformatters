@@ -19,6 +19,7 @@ from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common import storage, template_utils
 from reformatters.common.config_models import DataVar
+from reformatters.common.download import SourceAccessError
 from reformatters.common.iterating import node_group_name
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
@@ -333,7 +334,7 @@ class VirtualRegionJob(
                 )
                 return []
             return refs
-        except AssertionError:
+        except AssertionError, SourceAccessError:
             raise
         except Exception:
             log.exception(f"Skipping {coord.get_url()}: could not build virtual refs")

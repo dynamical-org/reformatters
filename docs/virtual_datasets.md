@@ -158,7 +158,7 @@ Tuning (completeness's `min_present_fraction`; decode health's `positions`, `sam
 
 ## Storage and reading
 
-A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` (`IcechunkVirtualConfig` on the `DynamicalDataset`, validated at construction). It holds the real icechunk objects directly — the `VirtualChunkContainer`s registering each source bucket and a `ManifestSplittingConfig` — rather than plain fields, because plain fields would be a lossy subset (no Source Coop S3-compatible endpoint, no GCS mirror, no per-array / multi-dim manifest splits). Nothing serializes the config: workers rebuild the whole dataset from the in-code registry by `dataset_id`, and `StoreFactory` consumes the config directly to register containers and build the (anonymous) `authorize_virtual_chunk_access` map.
+A virtual dataset requires every storage config to use the `ICECHUNK` format and an `icechunk_virtual_config` (`IcechunkVirtualConfig` on the `DynamicalDataset`, validated at construction). It holds the real icechunk objects directly — the `VirtualChunkContainer`s registering each source bucket and a `ManifestSplittingConfig` — rather than plain fields, because plain fields would be a lossy subset (no Source Coop S3-compatible endpoint, no GCS mirror, no per-array / multi-dim manifest splits). Nothing serializes the config: workers rebuild the whole dataset from the in-code registry by `dataset_id`, and `StoreFactory` consumes the config directly to register containers and build the `authorize_virtual_chunk_access` map.
 
 ### Containers as indirection
 
@@ -167,6 +167,21 @@ A virtual chunk container is more than anonymous credentials — refs are stored
 - **Dedup.** The repeated `s3://bucket/prefix` is not copied into every ref; on an all-virtual store this is most of the on-disk footprint.
 - **En-masse repoint.** Swapping a container registration (e.g. NODD-on-AWS → a GCS mirror, or a Source Coop move) repoints every ref at once, with no manifest rewrite.
 
-Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the (anonymous) credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
+Container *definitions* are persisted into the repo's config (recovered by `Repository.fetch_config`), so a reader supplies only the credentials map via `authorize_virtual_chunk_access` at open. Credentials are never persisted — a read without them raises.
 
 How manifests are split, and how to size the splits, is covered in [Manifest splitting](#manifest-splitting).
+
+### Private sources
+
+Map private container prefixes to Kubernetes Secrets with `IcechunkVirtualConfig.source_secret_names`;
+output credentials remain separate in `StorageConfig`. See [storage.py](../src/reformatters/common/storage.py).
+
+For direct reads, use `s3_store_from_secret` and wrap signed operations, including lazy iteration,
+in `source_access()` so authentication failures stop workers. Custom-endpoint containers need
+`force_path_style=True` to match the client. Source credentials need list permission so missing
+objects return 404 rather than 403. See [download.py](../src/reformatters/common/download.py).
+
+URL-only validation tools use `REFORMATTERS_ICECHUNK_ACCESS`: a JSON map from repository URL to
+optional `output_secret_name` and `source_secret_names` (source prefix → Secret name).
+Local Secret loading requires `DYNAMICAL_ENV=prod`. Tokens must outlive the job; restart jobs
+after rotating Secrets.

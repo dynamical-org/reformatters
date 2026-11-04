@@ -706,3 +706,112 @@ def testhttpx_get_raises_on_4xx() -> None:
         pytest.raises(httpx.HTTPStatusError),
     ):
         httpx_get("https://example.com/test")
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {},
+        {"access_key_id": "key"},
+        {"access_key_id": "", "secret_access_key": "value"},
+        {"access_key_id": 1, "secret_access_key": "value"},
+        {"access_key_id": "key", "secret_access_key": "value", "session_token": None},
+        {"access_key_id": "key", "secret_access_key": "value", "session_token": ""},
+        [],
+    ],
+)
+def test_load_s3_credentials_rejects_invalid_documents(
+    monkeypatch: pytest.MonkeyPatch, options: object
+) -> None:
+    loader = Mock(return_value=options)
+    monkeypatch.setattr(download_module.kubernetes, "load_secret", loader)
+    with pytest.raises(
+        download_module.SourceAccessError, match=r"^Invalid static S3 credentials$"
+    ):
+        download_module.load_s3_credentials("source-ref")
+    loader.assert_called_once_with("source-ref")
+
+
+def test_load_s3_credentials_selects_only_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    credentials = {
+        "access_key_id": "key",
+        "secret_access_key": "value",
+        "session_token": "token",
+    }
+    monkeypatch.setattr(
+        download_module.kubernetes,
+        "load_secret",
+        Mock(return_value={**credentials, "endpoint_url": "https://ignored.example"}),
+    )
+    assert download_module.load_s3_credentials("source-ref") == credentials
+
+
+@pytest.mark.parametrize(
+    "endpoint", [None, "https://source.example", "http://localhost:9000"]
+)
+def test_s3_store_from_secret_caches_signed_token_client(
+    monkeypatch: pytest.MonkeyPatch, endpoint: str | None
+) -> None:
+    download_module.s3_store_from_secret.cache_clear()
+    loader = Mock(
+        return_value={
+            "access_key_id": "key",
+            "secret_access_key": "value",
+            "session_token": "token",
+        }
+    )
+    monkeypatch.setattr(download_module.kubernetes, "load_secret", loader)
+    store = download_module.s3_store_from_secret(
+        "s3://bucket/source",
+        region="us-east-1",
+        k8s_secret_name="source-ref",  # noqa: S106
+        endpoint=endpoint,
+    )
+    assert (
+        download_module.s3_store_from_secret(
+            "s3://bucket/source",
+            region="us-east-1",
+            k8s_secret_name="source-ref",  # noqa: S106
+            endpoint=endpoint,
+        )
+        is store
+    )
+    loader.assert_called_once_with("source-ref")
+    assert store.prefix == "source"
+    assert store.config["skip_signature"] == "false"
+    assert store.config["session_token"] == "token"  # noqa: S105
+    if endpoint is not None:
+        assert store.config["endpoint"] == endpoint
+        assert store.config["virtual_hosted_style_request"] == "false"
+    assert (store.client_options.get("allow_http") == "true") == bool(
+        endpoint and endpoint.startswith("http://")
+    )
+    download_module.s3_store_from_secret.cache_clear()
+    s3_store.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "error_type", [PermissionDeniedError, download_module.UnauthenticatedError]
+)
+def test_source_access_translates_authentication_errors(
+    error_type: type[Exception],
+) -> None:
+    original = error_type("denied")
+    with (
+        pytest.raises(
+            download_module.SourceAccessError,
+            match=r"^Private source authentication failed$",
+        ) as caught,
+        download_module.source_access(),
+    ):
+        raise original
+    assert caught.value.__cause__ is original
+
+
+def test_source_access_preserves_transient_errors() -> None:
+    original = GenericError("transient")
+    with pytest.raises(GenericError) as caught, download_module.source_access():
+        raise original
+    assert caught.value is original
