@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Final
 
 from reformatters.common.logging import get_logger
 from reformatters.common.rclone import list_files
@@ -12,6 +12,8 @@ from .path_conversion import (
 )
 
 log = get_logger(__name__)
+
+LIST_TIMEOUT_SECONDS: Final[float] = 10 * 60
 
 
 def list_grib_files_on_dwd_https(
@@ -29,10 +31,12 @@ def list_grib_files_on_dwd_https(
         "--filter=- *",
     )
     return list_files(
-        path=f":http:{path}",
+        # A trailing slash prevents rclone from HEAD-probing a known directory as a file.
+        path=f":http:{str(path).rstrip('/')}/",
         checkers=checkers,
         rclone_args=rclone_args,
         env_vars=env_vars,
+        timeout_seconds=LIST_TIMEOUT_SECONDS,
     )
 
 
