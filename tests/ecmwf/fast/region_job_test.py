@@ -14,7 +14,6 @@ from obstore.exceptions import GenericError, PermissionDeniedError
 from reformatters.common import template_utils
 from reformatters.common.download import SourceAccessError
 from reformatters.common.storage import StoreFactory
-from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.ecmwf.aifs_ens.forecast_fast.region_job import (
     EcmwfAifsEnsForecastFastRegionJob,
 )
@@ -201,14 +200,17 @@ def test_stream_attempts_restart_after_interruption_and_never_retry_source_contr
     assert getter.call_count == 1
 
 
-def test_common_loop_and_default_download_concurrency_are_inherited() -> None:
+def test_provider_loop_and_default_download_concurrency() -> None:
     assert EcmwfFastRegionJob.download_concurrency == 64
-    assert VirtualRegionJob.completion_ready_updates is False
-    assert EcmwfIfsEnsForecast025DegreeFastRegionJob.completion_ready_updates is True
-    assert EcmwfAifsEnsForecastFastRegionJob.completion_ready_updates is True
     assert (
-        EcmwfFastRegionJob.process_virtual_refs is VirtualRegionJob.process_virtual_refs
+        EcmwfIfsEnsForecast025DegreeFastRegionJob.process_virtual_refs
+        is EcmwfFastRegionJob.process_virtual_refs
     )
+    assert (
+        EcmwfAifsEnsForecastFastRegionJob.process_virtual_refs
+        is EcmwfFastRegionJob.process_virtual_refs
+    )
+    assert "process_virtual_refs" in EcmwfFastRegionJob.__dict__
 
 
 @pytest.fixture

@@ -2,13 +2,7 @@ import asyncio
 import json
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from concurrent.futures import (
-    FIRST_COMPLETED,
-    FIRST_EXCEPTION,
-    Future,
-    ThreadPoolExecutor,
-    wait,
-)
+from concurrent.futures import ThreadPoolExecutor
 from functools import cache, cached_property, partial
 from itertools import groupby
 from pathlib import Path
@@ -104,8 +98,6 @@ class VirtualRegionJob(
 
     # Pending-dependent discovery gates must allow retained files after siblings commit.
     retain_failed_files: ClassVar[bool] = False
-
-    completion_ready_updates: ClassVar[bool] = False
 
     # The recent span of the append dim each operational update fire re-sweeps.
     operational_update_window: ClassVar[Timedelta]
@@ -283,15 +275,9 @@ class VirtualRegionJob(
         or its poll_deadline passes. Each yield is whole source files as (coord, refs)
         pairs — never split a file, never yield empty. Source-agnostic: it only asks
         discover_available which coords are ready. Override only for a different
-        batching policy. With completion_ready_updates, updates yield completed
-        files without waiting for siblings and keep polling during downloads.
-        Discovery pauses while the consumer commits. At cutoff all admitted work
-        drains into one final yield; close cancels queued work and joins running
-        reads. See "The write loop" in docs/virtual_datasets.md.
+        batching policy. The consumer closes a close-capable iterator on exit.
+        See "The write loop" in docs/virtual_datasets.md.
         """
-        if self.processing_mode == "update" and self.completion_ready_updates:
-            yield from self._completion_ready_refs(remaining)
-            return
         pending = list(remaining)
         last_log = time.monotonic()
         with ThreadPoolExecutor(self.download_concurrency) as pool:
@@ -347,96 +333,6 @@ class VirtualRegionJob(
                         last_log = time.monotonic()
                     elapsed = time.monotonic() - tick_start
                     time.sleep(max(0.0, self.tick_interval.total_seconds() - elapsed))
-
-    def _completion_ready_refs(
-        self, remaining: Sequence[SOURCE_FILE_COORD]
-    ) -> Iterator[Sequence[tuple[SOURCE_FILE_COORD, Sequence[VirtualRef]]]]:
-        pending = list(remaining)
-        futures: dict[Future[list[VirtualRef]], SOURCE_FILE_COORD] = {}
-        next_sweep = time.monotonic()
-        first_sweep = True
-        pool = ThreadPoolExecutor(self.download_concurrency)
-        try:
-            while pending:
-                for future in futures:
-                    if future.done():
-                        future.result()
-                cutoff = not first_sweep and pd.Timestamp.now() >= self.poll_deadline
-                if not cutoff and (first_sweep or time.monotonic() >= next_sweep):
-                    sweep_start = time.monotonic()
-                    in_flight = {id(coord) for coord in futures.values()}
-                    available = self.discover_available(
-                        [coord for coord in pending if id(coord) not in in_flight]
-                    )
-                    received_at = pd.Timestamp.now(tz="UTC").isoformat()
-                    log_virtual_event(
-                        "discovery_sweep",
-                        received_at=received_at,
-                        duration_s=time.monotonic() - sweep_start,
-                        files=len(available),
-                        active_streams=sum(f.running() for f in futures),
-                        outstanding_files=len(futures),
-                    )
-                    for coord, size in available:
-                        log_virtual_event(
-                            "discovered",
-                            file=coord.get_url(),
-                            received_at=received_at,
-                            bytes=size,
-                        )
-                        futures[pool.submit(self._ready_file_refs, coord, size)] = coord
-                    next_sweep = sweep_start + self.tick_interval.total_seconds()
-                    first_sweep = False
-                cutoff = pd.Timestamp.now() >= self.poll_deadline
-                if cutoff and futures:
-                    wait(futures, return_when=FIRST_EXCEPTION)
-                completed = [
-                    (futures.pop(future), future.result())
-                    for future in list(futures)
-                    if future.done()
-                ]
-                batch = [(coord, refs) for coord, refs in completed if refs]
-                removed = {
-                    id(coord)
-                    for coord, refs in completed
-                    if refs or not self.retain_failed_files
-                }
-                pending = [coord for coord in pending if id(coord) not in removed]
-                if batch:
-                    yield batch
-                if not pending or cutoff:
-                    if pending:
-                        log.info(
-                            f"Poll deadline reached with {len(pending)} source files "
-                            f"not yet ingested, leaving them to the next update "
-                            f"(first: {pending[0].get_url()})"
-                        )
-                    return
-                timeout = max(
-                    0.0,
-                    min(
-                        next_sweep - time.monotonic(),
-                        (self.poll_deadline - pd.Timestamp.now()).total_seconds(),
-                    ),
-                )
-                if futures:
-                    wait(futures, timeout=timeout, return_when=FIRST_COMPLETED)
-                else:
-                    time.sleep(timeout)
-        finally:
-            pool.shutdown(wait=True, cancel_futures=True)
-
-    def _ready_file_refs(
-        self, coord: SOURCE_FILE_COORD, file_size: int
-    ) -> list[VirtualRef]:
-        refs = self._file_refs_or_skip(coord, file_size)
-        log_virtual_event(
-            "ready",
-            file=coord.get_url(),
-            ready_at=pd.Timestamp.now(tz="UTC").isoformat(),
-            ref_count=len(refs),
-        )
-        return refs
 
     def _file_refs_or_skip(
         self, coord: SOURCE_FILE_COORD, file_size: int
@@ -554,14 +450,13 @@ class VirtualRegionJob(
         """
         processed: set[int] = set()
         ref_iterator = self.process_virtual_refs(remaining)
-        pipeline = self.processing_mode == "update" and self.completion_ready_updates
         try:
             for batch_number, file_refs_batch in enumerate(ref_iterator):
                 assert file_refs_batch, "process_virtual_refs yielded an empty batch"
                 for coord, file_refs in file_refs_batch:
                     self._assert_probe_chunk_covered(coord, file_refs)
                 batch_id = f"{self.reformat_job_name}:{batch_number}"
-                if pipeline:
+                if self.processing_mode == "update":
                     log_virtual_event(
                         "batch",
                         batch_id=batch_id,
@@ -576,7 +471,7 @@ class VirtualRegionJob(
                         file_refs_batch,
                         overwrite_chunks=overwrite_chunks,
                     )
-                    if pipeline and repo is primary_repo:
+                    if self.processing_mode == "update" and repo is primary_repo:
                         commit = partial(commit, pipeline_batch_id=batch_id)
                     retry(
                         commit,
