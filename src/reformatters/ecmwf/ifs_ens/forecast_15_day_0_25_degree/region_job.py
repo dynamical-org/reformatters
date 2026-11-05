@@ -50,8 +50,8 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
     # All variables are scattered throughout the grib file without any organization,
     # so it's more efficient to do separate windowed downloads & reads for each
     # variable that we can parallelize.
-    max_vars_per_download_group: ClassVar[int] = 1
-    max_vars_per_job: ClassVar[int] = 1
+    max_vars_per_download_group = 1
+    max_vars_per_job = 1
     open_data_sources: ClassVar[tuple[EcmwfOpenDataSource, ...]] = ("gcs", "s3")
 
     @classmethod

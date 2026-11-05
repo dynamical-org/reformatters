@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from typing import ClassVar, Protocol
 
@@ -58,7 +58,7 @@ class OperationalResources(FrozenBaseModel):
         monitor_name: str | Callable[[], str] | None = None,
         schedule: str | None = None,
         checkin_margin: int | Callable[[CronJob], int] = 10,
-    ) -> Iterator[None]:
+    ) -> Generator[None]:
         # No registered monitors -> nothing to report to, and no need to require
         # operational_kubernetes_resources to be defined.
         if not _RUN_MONITORS:

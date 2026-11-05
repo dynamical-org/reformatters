@@ -4,7 +4,6 @@ from collections.abc import Sequence
 from datetime import timedelta
 from itertools import batched, pairwise
 from pathlib import Path
-from typing import ClassVar
 from unittest.mock import Mock
 
 import dask
@@ -68,7 +67,7 @@ class ExampleSourceFileCoords(SourceFileCoord):
 
 
 class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCoords]):
-    max_vars_per_job: ClassVar[int] = 2
+    max_vars_per_job = 2
 
     @classmethod
     def source_file_var_groups(

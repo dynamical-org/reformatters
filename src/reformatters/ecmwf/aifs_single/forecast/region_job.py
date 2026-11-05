@@ -1,7 +1,7 @@
 import itertools
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import ClassVar, assert_never
+from typing import assert_never
 
 import numpy as np
 import pandas as pd
@@ -85,7 +85,7 @@ class EcmwfAifsSingleForecastSourceFileCoord(InitLeadSourceFileCoord):
 class EcmwfAifsSingleForecastRegionJob(
     MaterializedRegionJob[EcmwfDataVar, EcmwfAifsSingleForecastSourceFileCoord]
 ):
-    max_vars_per_download_group: ClassVar[int] = 10
+    max_vars_per_download_group = 10
 
     @classmethod
     def source_file_var_groups(

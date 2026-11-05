@@ -19,6 +19,4 @@ class NoaaUrmaAnalysisVirtualSourceFileCoord(NoaaRtmaAnalysisVirtualSourceFileCo
 class NoaaUrmaAnalysisVirtualRegionJob(NoaaRtmaAnalysisVirtualRegionJob):
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("48h")
     source_prefix: ClassVar[str] = SOURCE_PREFIX
-    source_file_coord_class: ClassVar[type[NoaaUrmaAnalysisVirtualSourceFileCoord]] = (
-        NoaaUrmaAnalysisVirtualSourceFileCoord
-    )
+    source_file_coord_class = NoaaUrmaAnalysisVirtualSourceFileCoord

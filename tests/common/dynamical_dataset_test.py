@@ -1,5 +1,5 @@
 import subprocess
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -181,7 +181,7 @@ class ExampleSourceFileCoord(SourceFileCoord):
 
 
 class ExampleRegionJob(MaterializedRegionJob[ExampleDataVar, ExampleSourceFileCoord]):
-    max_vars_per_job: ClassVar[int] = 2
+    max_vars_per_job = 2
 
 
 class ExampleConfig(TemplateConfig[ExampleDataVar]):
@@ -339,7 +339,7 @@ def test_failed_validation_reports_failure_and_retries_only_initial_production_r
     assert exc_info.value.__cause__ is failure
     record = next(record for record in caplog.records if record.exc_info)
     assert record.getMessage() == f"Operational validation failed for {job_name}"
-    assert record.exc_info is not None
+    assert record.exc_info
     assert record.exc_info[1] is failure
     assert events[-1] == ("error", "example-dataset-validate")
     if expected_retry is None:
@@ -991,7 +991,7 @@ def _recording_monitor(
         monitor_name: str | None,
         schedule: str | None,
         checkin_margin: int,
-    ) -> Iterator[None]:
+    ) -> Generator[None]:
         events.append(("enter", monitor_name or cron_job.name))
         try:
             yield

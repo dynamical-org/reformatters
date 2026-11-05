@@ -254,7 +254,7 @@ def test_download_exhausts_retries_and_logs_failure(
     assert transport.call_count == expected_requests
     (error,) = [record for record in caplog.records if record.levelname == "ERROR"]
     assert error.message == f"Download failed {coord.get_url()}"
-    assert error.exc_info is not None
+    assert error.exc_info
     exception = error.exc_info[1]
     if failure == "unauthorized":
         assert isinstance(exception, requests.HTTPError)

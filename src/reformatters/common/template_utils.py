@@ -1,7 +1,7 @@
 import contextlib
 import json
 import warnings
-from collections.abc import Callable, Iterator, Sized
+from collections.abc import Callable, Generator, Sized
 from pathlib import Path
 from typing import Any, Literal
 
@@ -28,7 +28,7 @@ log = get_logger(__name__)
 
 
 @contextlib.contextmanager
-def ignore_consolidated_metadata_spec_warning() -> Iterator[None]:
+def ignore_consolidated_metadata_spec_warning() -> Generator[None]:
     """Silence zarr's warning that consolidated metadata is not in the Zarr v3 spec.
 
     Unconsolidated metadata is also written so adding consolidated metadata is

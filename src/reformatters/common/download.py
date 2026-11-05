@@ -5,7 +5,7 @@ import functools
 import threading
 import time
 import uuid
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from datetime import timedelta
 from http import HTTPStatus
 from pathlib import Path
@@ -447,7 +447,7 @@ class SourceAccessError(RuntimeError):
 
 
 @contextlib.contextmanager
-def source_access() -> Iterator[None]:
+def source_access() -> Generator[None]:
     try:
         yield
     except (PermissionDeniedError, UnauthenticatedError) as exc:
