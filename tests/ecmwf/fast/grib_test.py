@@ -152,6 +152,281 @@ def source_bytes(model: FastModel, family: Family = "cf", hours: int = 6) -> byt
     return b"".join(messages)
 
 
+def unknown_message(model: FastModel, parameter: int = 255) -> bytes:
+    data = bytearray(grib1("2t", 0) if model == "ifs" else grib2("2t", 0))
+    product = 8 if model == "ifs" else 16 + 21 + 72
+    data[product + (8 if model == "ifs" else 10)] = parameter
+    data[product + (49 if model == "ifs" else 35)] = 255
+    return bytes(data)
+
+
+def resize_product(model: FastModel, data: bytes, size: int) -> bytes:
+    product = 8 if model == "ifs" else 16 + 21 + 72
+    width = 3 if model == "ifs" else 4
+    old_size = int.from_bytes(data[product : product + width], "big")
+    resized_product = data[product : product + old_size][:size].ljust(size, b"\x00")
+    resized = bytearray(data[:product] + resized_product + data[product + old_size :])
+    resized[product : product + width] = size.to_bytes(width, "big")
+    if model == "ifs":
+        resized[4:7] = len(resized).to_bytes(3, "big")
+    else:
+        resized[8:16] = len(resized).to_bytes(8, "big")
+    return bytes(resized)
+
+
+def resize_grib2_section(data: bytes, number: int, size: int) -> bytes:
+    sections: dict[int, bytes] = {}
+    offset = 16
+    while offset < len(data) - 4:
+        length = int.from_bytes(data[offset : offset + 4], "big")
+        sections[data[offset + 4]] = data[offset : offset + length]
+        offset += length
+    resized = section(number, size)
+    original = sections.get(number, b"")
+    resized[: len(original)] = original
+    resized[:4] = size.to_bytes(4, "big")
+    if number == 6:
+        resized[5] = 0
+    sections[number] = bytes(resized)
+    body = b"".join(value for _, value in sorted(sections.items())) + b"7777"
+    return data[:8] + (16 + len(body)).to_bytes(8, "big") + body
+
+
+@pytest.mark.parametrize(
+    ("number", "size"),
+    [(1, 1024), (2, 1024), (3, 1024), (4, 1024), (5, 1024), (6, 129786)],
+)
+def test_unknown_oversized_grib2_sections_drop_but_known_headers_stay_hard(
+    number: int, size: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    unknown = resize_grib2_section(unknown_message("aifs"), number, size)
+    supported = grib2("tp", 0)
+    data = unknown + supported
+    messages = inventory(StreamReader(chunks(data, 31)), len(data), coord("aifs"))
+    assert messages == [grib.Message("tp", 0, len(unknown), len(supported))]
+    assert len(caplog.records) == 1
+    assert "dropped unsupported fields={(0, 0, 255): 1}" in caplog.text
+    known = resize_grib2_section(grib2("2t", 0), number, size)
+    with pytest.raises(SourceContractError, match="Unsupported GRIB2 header size"):
+        inventory(StreamReader(chunks(known, 31)), len(known), coord("aifs"))
+
+
+@pytest.mark.parametrize("number", [2, 3, 4, 6])
+def test_truncation_inside_skipped_oversized_grib2_section_stays_hard(
+    number: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    data = resize_grib2_section(unknown_message("aifs"), number, 129786)
+    offset = 16
+    while data[offset + 4] != number:
+        offset += int.from_bytes(data[offset : offset + 4], "big")
+    truncated = data[: offset + 513]
+    with pytest.raises(InterruptedGribStreamError):
+        inventory(StreamReader(chunks(truncated, 31)), len(data), coord("aifs"))
+    assert not caplog.records
+
+
+def test_unknown_oversized_grib1_product_drops_but_known_header_stays_hard(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    unknown = resize_product("ifs", unknown_message("ifs"), 1024)
+    supported = grib1("tp", 0)
+    data = unknown + supported
+    messages = inventory(StreamReader(chunks(data, 31)), len(data), coord("ifs"))
+    assert messages == [grib.Message("tp", 0, len(unknown), len(supported))]
+    assert len(caplog.records) == 1
+    assert "dropped unsupported fields={(128, 255): 1}" in caplog.text
+    known = resize_product("ifs", grib1("2t", 0), 1024)
+    with pytest.raises(SourceContractError, match="Unsupported GRIB1 product section"):
+        inventory(StreamReader(chunks(known, 31)), len(known), coord("ifs"))
+    caplog.clear()
+    with pytest.raises(InterruptedGribStreamError):
+        inventory(
+            StreamReader(chunks(unknown[: 8 + 513], 31)), len(unknown), coord("ifs")
+        )
+    assert not caplog.records
+
+
+@pytest.mark.parametrize("model", ["ifs", "aifs"])
+@pytest.mark.parametrize("chunk_size", [1, 31, 65536])
+def test_unknown_parameters_drop_and_log_counts_without_changing_supported_refs(
+    model: FastModel, chunk_size: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    supported = source_bytes(model)
+    baseline = inventory(
+        StreamReader(chunks(supported, 31)), len(supported), coord(model)
+    )
+    assert not caplog.records
+    split = baseline[0].length
+    unknown = unknown_message(model)
+    other_unknown = unknown_message(model, 254)
+    data = unknown + supported[:split] + other_unknown + supported[split:] + unknown
+    reader = StreamReader(chunks(data, chunk_size))
+    actual = inventory(reader, len(data), coord(model))
+    assert actual == [
+        m._replace(
+            offset=m.offset
+            + len(unknown)
+            + (len(other_unknown) if m.offset >= split else 0)
+        )
+        for m in baseline
+    ]
+    assert reader.position == len(data)
+    for original, kept in zip(baseline, actual, strict=True):
+        assert (
+            data[kept.offset : kept.offset + kept.length]
+            == supported[original.offset : original.offset + original.length]
+        )
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelname == "ERROR"
+    assert coord(model).key in caplog.text
+    identities = (
+        {(128, 254): 1, (128, 255): 2}
+        if model == "ifs"
+        else {(0, 0, 254): 1, (0, 0, 255): 2}
+    )
+    assert f"dropped unsupported fields={identities}" in caplog.text
+    assert "missing fields=" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("model", "offset", "identity"),
+    [
+        ("ifs", 8 + 3, (255, 167)),
+        ("aifs", 6, (255, 0, 0)),
+        ("aifs", 16 + 21 + 72 + 9, (0, 255, 0)),
+    ],
+)
+def test_raw_identity_components_and_missing_fields_share_one_error(
+    model: FastModel,
+    offset: int,
+    identity: tuple[int, ...],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    data = bytearray(grib1("2t", 0) if model == "ifs" else grib2("2t", 0))
+    data[offset] = 255
+    assert (
+        inventory(StreamReader(chunks(bytes(data), 1)), len(data), coord(model)) == []
+    )
+    assert len(caplog.records) == 1
+    assert f"dropped unsupported fields={{{identity}: 1}}" in caplog.text
+    assert "missing fields=" in caplog.text
+    assert "('2t', 0)" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("model", "offset", "value", "error"),
+    [
+        ("ifs", 8 + 7, 0, "grid definition"),
+        ("ifs", 8 + 9, 100, "level"),
+        ("ifs", 8 + 13, 13, "date"),
+        ("ifs", 8 + 17, 2, "forecast time"),
+        ("ifs", 8 + 40, 0, "local definition"),
+        ("ifs", 8 + 52 + 5, 1, "grid"),
+        ("ifs", 8 + 52 + 32 + 3, 128, "packing"),
+        ("aifs", 16 + 14, 13, "date"),
+        ("aifs", 16 + 21 + 13, 1, "grid template"),
+        ("aifs", 16 + 21 + 72 + 8, 0, "product template"),
+        ("aifs", 16 + 21 + 72 + 17, 2, "forecast time unit"),
+        ("aifs", 16 + 21 + 72 + 22, 100, "fixed-height"),
+        ("aifs", 16 + 21 + 72 + 27, 3, "temperature height"),
+        ("aifs", 16 + 21 + 72 + 28, 0, "second fixed"),
+        ("aifs", 16 + 21 + 72 + 34, 0, "ensemble forecast"),
+        ("aifs", 16 + 21 + 72 + 37 + 10, 0, "CCSDS"),
+        ("aifs", 16 + 21 + 72 + 37 + 25 + 5, 0, "bitmap"),
+    ],
+)
+def test_unknown_identity_precedes_semantic_checks_but_known_gates_remain_hard(
+    model: FastModel, offset: int, value: int, error: str
+) -> None:
+    unknown = bytearray(unknown_message(model))
+    unknown[offset] = value
+    assert (
+        inventory(StreamReader(chunks(bytes(unknown), 1)), len(unknown), coord(model))
+        == []
+    )
+    known = bytearray(grib1("2t", 0) if model == "ifs" else grib2("2t", 0))
+    known[offset] = value
+    with pytest.raises(SourceContractError, match=error):
+        inventory(StreamReader(chunks(bytes(known), 31)), len(known), coord(model))
+
+
+@pytest.mark.parametrize(("model", "size"), [("ifs", 28), ("aifs", 11)])
+def test_unknown_short_product_drops_but_known_short_product_fails(
+    model: FastModel, size: int
+) -> None:
+    unknown = resize_product(model, unknown_message(model), size)
+    assert inventory(StreamReader(chunks(unknown, 1)), len(unknown), coord(model)) == []
+    build = grib1 if model == "ifs" else grib2
+    known = resize_product(model, build("2t", 0), size)
+    with pytest.raises(SourceContractError, match="product section"):
+        inventory(StreamReader(chunks(known, 31)), len(known), coord(model))
+
+
+@pytest.mark.parametrize(("model", "size"), [("ifs", 27), ("aifs", 10)])
+def test_unknown_product_must_be_safely_framed(model: FastModel, size: int) -> None:
+    data = resize_product(model, unknown_message(model), size)
+    with pytest.raises(SourceContractError, match="product section"):
+        inventory(StreamReader(chunks(data, 31)), len(data), coord(model))
+
+
+@pytest.mark.parametrize("model", ["ifs", "aifs"])
+def test_unknown_product_cannot_extend_beyond_message(model: FastModel) -> None:
+    build = grib1 if model == "ifs" else grib2
+    data = bytearray(build("2t", 0, payload=b"x" * 1024))
+    product = 8 if model == "ifs" else 16 + 21 + 72
+    width = 3 if model == "ifs" else 4
+    data[product + (8 if model == "ifs" else 10)] = 255
+    data[product : product + width] = (4096).to_bytes(width, "big")
+    with pytest.raises(
+        SourceContractError, match=r"product section|header size|outside message"
+    ):
+        inventory(StreamReader(chunks(bytes(data), 31)), len(data), coord(model))
+
+
+@pytest.mark.parametrize("number", [1, 2])
+def test_unknown_grib2_section_sequence_stays_hard(number: int) -> None:
+    data = bytearray(unknown_message("aifs"))
+    data[16 + 21 + 4] = number
+    with pytest.raises(SourceContractError, match=r"Multiple fields|section sequence"):
+        inventory(StreamReader(chunks(bytes(data), 31)), len(data), coord("aifs"))
+
+
+@pytest.mark.parametrize("model", ["ifs", "aifs"])
+def test_unknown_message_framing_and_truncation_remain_hard(
+    model: FastModel, caplog: pytest.LogCaptureFixture
+) -> None:
+    build = grib1 if model == "ifs" else grib2
+    data = build("2t", 0) + unknown_message(model)
+    for cut in (1, 8, 25, 80):
+        with pytest.raises(InterruptedGribStreamError):
+            inventory(StreamReader(chunks(data[:-cut], 31)), len(data), coord(model))
+    with pytest.raises(SourceContractError, match="trailer"):
+        inventory(
+            StreamReader(chunks(data[:-4] + b"bad!", 31)), len(data), coord(model)
+        )
+    with pytest.raises(SourceContractError, match="beyond"):
+        inventory(StreamReader(chunks(data + b"extra", 31)), len(data), coord(model))
+    with pytest.raises(SourceContractError, match="message length"):
+        inventory(StreamReader(chunks(data, 31)), len(data) - 1, coord(model))
+    assert not caplog.records
+
+
+@pytest.mark.parametrize("model", ["ifs", "aifs"])
+def test_dropped_messages_do_not_relax_kept_member_and_duplicate_checks(
+    model: FastModel,
+) -> None:
+    build = grib1 if model == "ifs" else grib2
+    unknown = unknown_message(model)
+    wrong_member = bytearray(build("2t", 0))
+    wrong_member[8 + 49 if model == "ifs" else 16 + 21 + 72 + 35] = 1
+    for data, error in (
+        (unknown + bytes(wrong_member), "Unexpected member"),
+        (build("2t", 0) + unknown + build("2t", 0), "Duplicate GRIB field"),
+    ):
+        with pytest.raises(SourceContractError, match=error):
+            inventory(StreamReader(chunks(data, 31)), len(data), coord(model))
+
+
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
 @pytest.mark.parametrize("family", ["cf", "pf"])
 @pytest.mark.parametrize("hours", [0, 6, 360])
