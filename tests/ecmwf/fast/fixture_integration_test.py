@@ -8,11 +8,11 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common.pydantic import replace
 from reformatters.common.storage import (
     DatasetFormat,
     IcechunkVirtualConfig,
     StorageConfig,
-    manifest_append_dim_split,
 )
 from reformatters.common.types import DatetimeLike
 from reformatters.ecmwf.aifs_ens.forecast_fast import EcmwfAifsEnsForecastFastDataset
@@ -42,13 +42,16 @@ def test_fixture_backfill_then_update_with_native_codec_snapshots(
         primary_storage_config=StorageConfig(
             base_path=str(tmp_path / "output"), format=DatasetFormat.ICECHUNK
         ),
+    )
+    dataset = replace(
+        dataset,
         icechunk_virtual_config=IcechunkVirtualConfig(
             containers=(
                 icechunk.VirtualChunkContainer(
                     prefix, icechunk.local_filesystem_store(str(FIXTURES))
                 ),
             ),
-            manifest_split=manifest_append_dim_split(split_size=16, dim="init_time"),
+            manifest_split=dataset.icechunk_virtual_config.manifest_split,
         ),
     )
     variables = [v for v in dataset.template_config.data_vars if v.name in VARIABLES]
@@ -153,6 +156,10 @@ def test_fixture_backfill_then_update_with_native_codec_snapshots(
         final.store, chunks=None, decode_timedelta=True, consolidated=False
     )
     assert after.sizes["init_time"] == 2
+    assert all(
+        manifest.num_chunk_refs <= 4
+        for manifest in repo.list_manifest_files(final.snapshot_id)
+    )
     assert_values(after)
     for name in VARIABLES:
         assert after[name].encoding["chunks"] == (1, 1, 1, 721, 1440)
