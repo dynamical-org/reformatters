@@ -92,7 +92,7 @@ class NasaImergAnalysisSourceFileCoord(SourceFileCoord):
                 base = "https://data.gesdisc.earthdata.nasa.gov/data/GPM_L3"
                 return (
                     f"{base}/{product_dir}/{self.time.strftime('%Y')}/"
-                    f"{self.time.dayofyear:03d}/{filename}.HDF5"
+                    f"{self.time.day_of_year:03d}/{filename}.HDF5"
                 )
             case "jsimpson":
                 base = "https://jsimpsonhttps.pps.eosdis.nasa.gov/imerg"

@@ -58,6 +58,21 @@ def test_parse_index_file_returns_dataframe(index_file: Path) -> None:
     assert isinstance(df, pd.DataFrame)
 
 
+def test_parse_index_file_preserves_numeric_fields(index_file: Path) -> None:
+    df = parse_index_file(index_file, ensemble=True).reset_index()
+    for column, values in {
+        "date": [20240201, 20240201, 20240201],
+        "time": [0, 0, 0],
+        "expver": [1, 1, 1],
+        "step": [3, 3, 3],
+        "_offset": [0, 1554442, 674936844],
+        "_length": [665525, 664922, 393429],
+    }.items():
+        assert df[column].dtype == np.dtype("int64")
+        assert df[column].tolist() == values
+    np.testing.assert_equal(df["levelist"].to_numpy(), [np.nan, np.nan, 500.0])
+
+
 def test_parse_index_file_fills_control_member_number_with_0(index_file: Path) -> None:
     df = parse_index_file(index_file, ensemble=True)
     # Reset index to inspect values easily

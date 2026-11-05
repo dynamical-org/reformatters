@@ -145,7 +145,9 @@ def region_job(
     return EcmwfIfsEns46DayRegionJob(
         tmp_store=tmp_path / "tmp.zarr",
         template_ds=(
-            DAILY_CONFIG.get_template(DAILY_CONFIG.append_dim_start)
+            DAILY_CONFIG.get_template(
+                DAILY_CONFIG.append_dim_start + DAILY_CONFIG.append_dim_frequency
+            )
             if template_ds is None
             else template_ds
         ),
@@ -508,7 +510,9 @@ def test_every_variable_reads_a_blob_the_archive_writes(tmp_path: Path) -> None:
     archived_file_names = {
         selection.file_name for selection in initialization_selections(ECDS_VARIABLES)
     }
-    template_ds = DAILY_CONFIG.get_template(DAILY_CONFIG.append_dim_start)
+    template_ds = DAILY_CONFIG.get_template(
+        DAILY_CONFIG.append_dim_start + DAILY_CONFIG.append_dim_frequency
+    )
 
     for data_var in DAILY_CONFIG.data_vars:
         job = region_job(data_var, tmp_path, template_ds)

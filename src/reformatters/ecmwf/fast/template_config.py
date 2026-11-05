@@ -50,7 +50,9 @@ class EcmwfFastTemplateConfig(EcmwfAifsSingleCommonTemplateConfig[EcmwfDataVar])
 
     def dimension_coordinates(self) -> dict[str, Any]:
         return super().dimension_coordinates() | {
-            "lead_time": pd.to_timedelta(lead_hours(self.model, 0), unit="h"),
+            "lead_time": pd.to_timedelta(lead_hours(self.model, 0), unit="h").as_unit(
+                "s"
+            ),
             "ensemble_member": np.arange(51, dtype=np.int64),
         }
 

@@ -27,7 +27,9 @@ def region_job(
 ) -> EcmwfIfsEns46DayRegionJob:
     return EcmwfIfsEns46DayRegionJob(
         tmp_store=tmp_path / "tmp.zarr",
-        template_ds=CONFIG.get_template(CONFIG.append_dim_start),
+        template_ds=CONFIG.get_template(
+            CONFIG.append_dim_start + CONFIG.append_dim_frequency
+        ),
         data_vars=[selected_data_var],
         append_dim=CONFIG.append_dim,
         region=slice(0, 1),

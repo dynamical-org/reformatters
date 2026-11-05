@@ -78,6 +78,21 @@ def test_gesdisc_url_late_v07b_day_of_year() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("time", "directory"),
+    [
+        ("2024-01-01", "2024/001"),
+        ("2024-02-29", "2024/060"),
+        ("2024-03-01", "2024/061"),
+        ("2024-12-31", "2024/366"),
+        ("2025-12-31", "2025/365"),
+    ],
+)
+def test_gesdisc_url_calendar_boundaries(time: str, directory: str) -> None:
+    coord = NasaImergAnalysisSourceFileCoord(run="late", time=pd.Timestamp(time))
+    assert f"/GPM_3IMERGHHL.07/{directory}/" in coord.get_url("gesdisc")
+
+
 def test_jsimpson_url_and_half_hour_fields() -> None:
     coord = NasaImergAnalysisSourceFileCoord(
         run="early", time=pd.Timestamp("2026-05-26T12:30")
