@@ -1599,6 +1599,7 @@ name = "reformatters"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "boto3" },
     { name = "dask" },
     { name = "google-crc32c" },
     { name = "gribberish" },
@@ -1623,7 +1624,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "boto3" },
     { name = "cf-xarray" },
     { name = "markdown-it-py" },
     { name = "matplotlib" },
@@ -1641,6 +1641,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3", specifier = "~=1.42" },
     { name = "dask", specifier = "~=2026.7" },
     { name = "google-crc32c", specifier = ">=1.8.0" },
     { name = "gribberish", specifier = "~=1.8" },
@@ -1665,7 +1666,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "boto3", specifier = ">=1.42.49" },
     { name = "cf-xarray", specifier = ">=0.11.3" },
     { name = "markdown-it-py", specifier = ">=4.0.0" },
     { name = "matplotlib", specifier = "~=3.11" },

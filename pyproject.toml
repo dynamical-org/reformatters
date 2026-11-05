@@ -7,6 +7,7 @@ requires-python = ">=3.14"
 
 
 dependencies = [
+    "boto3~=1.42",
     "dask~=2026.7",
     "numba~=0.67",
     "numcodecs~=0.16",
@@ -44,7 +45,6 @@ main = "reformatters.__main__:app"
 
 [dependency-groups]
 dev = [
-    "boto3>=1.42.49",
     "cf-xarray>=0.11.3",
     "markdown-it-py>=4.0.0",
     "matplotlib~=3.11",
