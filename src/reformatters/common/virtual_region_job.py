@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -263,14 +264,15 @@ class VirtualRegionJob(
         self,
         remaining: Sequence[SOURCE_FILE_COORD],
     ) -> Iterator[Sequence[tuple[SOURCE_FILE_COORD, Sequence[VirtualRef]]]]:
-        """Drive discover_available + file_refs, yielding one commit's worth per tick.
+        """Drive discovery and yield whole source files for atomic commits.
 
-        One yield per tick contains every file that became available since the last:
+        By default, one yield per sweep contains every file available in that sweep:
         a backfill sweeps once and exits, an update polls until everything is ingested
         or its poll_deadline passes. Each yield is whole source files as (coord, refs)
         pairs — never split a file, never yield empty. Source-agnostic: it only asks
         discover_available which coords are ready. Override only for a different
-        batching policy. See "The write loop" in docs/virtual_datasets.md.
+        batching policy. The consumer closes a close-capable iterator on exit.
+        See "The write loop" in docs/virtual_datasets.md.
         """
         pending = list(remaining)
         last_log = time.monotonic()
@@ -364,7 +366,7 @@ class VirtualRegionJob(
         view, then runs one write loop over their union. Files whose refs the store
         already holds are skipped unless ``overwrite_chunks`` asks for a rewrite.
         A backfill worker's generator yields a single batch (one commit for the
-        whole worker), an update job's generator polls and commits per tick.
+        whole worker), an update job's generator polls and yields incremental batches.
         Always returns an empty dict: virtual refs live in the icechunk manifest,
         so there is nothing to thread back to finalize.
         """
@@ -438,28 +440,44 @@ class VirtualRegionJob(
         `remaining` is the union of the worker's source files, pre-filtered unless
         `overwrite_chunks` requests a rewrite. The same loop serves backfill
         (temp branch, one batch -> one commit) and operational updates
-        ("main", per-tick commits); see "The write loop" in
+        ("main", incremental commits); see "The write loop" in
         docs/virtual_datasets.md. Return whether every initially pending file was
         ingested before the poll deadline.
         """
         processed: set[int] = set()
-        for file_refs_batch in self.process_virtual_refs(remaining):
-            assert file_refs_batch, "process_virtual_refs yielded an empty batch"
-            for coord, file_refs in file_refs_batch:
-                self._assert_probe_chunk_covered(coord, file_refs)
-            for repo in (*replica_repos, primary_repo):
-                retry(
-                    partial(
+        ref_iterator = self.process_virtual_refs(remaining)
+        try:
+            for batch_number, file_refs_batch in enumerate(ref_iterator):
+                assert file_refs_batch, "process_virtual_refs yielded an empty batch"
+                for coord, file_refs in file_refs_batch:
+                    self._assert_probe_chunk_covered(coord, file_refs)
+                batch_id = f"{self.reformat_job_name}:{batch_number}"
+                if self.processing_mode == "update":
+                    log_virtual_event(
+                        "batch",
+                        batch_id=batch_id,
+                        files=[coord.get_url() for coord, _ in file_refs_batch],
+                        selected_at=pd.Timestamp.now(tz="UTC").isoformat(),
+                    )
+                for repo in (*replica_repos, primary_repo):
+                    commit = partial(
                         self._commit_virtual_batch,
                         repo,
                         branch,
                         file_refs_batch,
                         overwrite_chunks=overwrite_chunks,
-                    ),
-                    max_attempts=5,
-                    retryable_exceptions=(icechunk.ConflictError,),
-                )
-            processed.update(id(coord) for coord, _ in file_refs_batch)
+                    )
+                    if self.processing_mode == "update" and repo is primary_repo:
+                        commit = partial(commit, pipeline_batch_id=batch_id)
+                    retry(
+                        commit,
+                        max_attempts=5,
+                        retryable_exceptions=(icechunk.ConflictError,),
+                    )
+                processed.update(id(coord) for coord, _ in file_refs_batch)
+        finally:
+            if (close := getattr(ref_iterator, "close", None)) is not None:
+                close()
         return (
             self.processing_mode == "update"
             and bool(remaining)
@@ -474,6 +492,7 @@ class VirtualRegionJob(
         file_refs_batch: Sequence[tuple[SOURCE_FILE_COORD, Sequence[VirtualRef]]],
         *,
         overwrite_chunks: bool,
+        pipeline_batch_id: str | None = None,
     ) -> None:
         prepare_start = time.monotonic()
         # Reopen on conflict so filtering and extent use the new snapshot.
@@ -525,6 +544,17 @@ class VirtualRegionJob(
             [],
             allow_rebase=not resized,
         )
+        if pipeline_batch_id is not None:
+            log_virtual_event(
+                "primary_committed",
+                batch_id=pipeline_batch_id,
+                files=[coord.get_url() for coord, _ in file_refs_batch],
+                committed_at=pd.Timestamp.now(tz="UTC").isoformat(),
+                duration_s=time.monotonic() - prepare_start,
+                commit_s=time.monotonic() - commit_start,
+                ref_count=len(refs),
+                resized=resized,
+            )
         log.info(
             f"Committed {len(refs)} refs "
             f"(emit {emit_s:.1f}s, commit {time.monotonic() - commit_start:.1f}s) "
@@ -798,6 +828,22 @@ class _NoRegion:
 
 
 _NO_REGION: Final = _NoRegion()
+
+
+def log_virtual_event(event: str, **fields: object) -> None:
+    """Log an event with at most ten file URLs and millisecond-precision durations."""
+    files = fields.get("files")
+    if isinstance(files, list):
+        fields["file_count"] = len(files)
+        if len(files) > 10:
+            fields["files"] = files[:10]
+    fields = {
+        name: round(value, 3)
+        if name.endswith("_s") and isinstance(value, float)
+        else value
+        for name, value in fields.items()
+    }
+    log.info("Virtual pipeline %s", json.dumps({"event": event, **fields}))
 
 
 def _chunk_key_encoder(

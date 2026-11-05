@@ -32,6 +32,8 @@ Virtual datasets are *metadata-heavy*, not storage-heavy. One GRIB message — o
 
 `processing_mode` on the job selects the generator's stopping rule: `"backfill"` sweeps what exists once and exits; `"update"` polls until everything expected is ingested or its `poll_deadline` passes (see [Operational updates](#operational-updates)). `operational_update_jobs` implementations must construct jobs with `processing_mode="update"` (asserted by the driver).
 
+A custom `process_virtual_refs` must preserve whole-file batches and any discovery gates that require files to commit together. The consumer closes a close-capable iterator on exit, including writer failure; ordinary iterators are supported.
+
 The write loop returns a completion flag for operational dispatch before validation; backfills ignore it. See the [completion-trigger mechanism](parallel_processing.md#completion-triggers) and [completion conditions](operational_update_timing.md#completion-triggers).
 
 ## What a `VirtualRegionJob` implementer writes
@@ -64,7 +66,7 @@ Ingest usable messages without requiring complete file coverage; retain checks t
 
 ## Reader safety: whole files, atomic commits
 
-Every ref from a source file, plus any append-dim expansion its positions require, lands in the same icechunk commit as the rest of that file — a reader on `main` sees either none or all of the available refs built from that file. A commit may hold one file (an operational tick) or many (a backfill worker's whole batch); atomicity is per *commit*, and each file is wholly inside one. Operational updates commit per tick, so readers see each lead time's data within seconds of its file publishing.
+Every ref from a source file, plus any append-dim expansion its positions require, lands in the same icechunk commit as the rest of that file — a reader on `main` sees either none or all of the available refs built from that file. A commit may hold one file (an operational tick) or many (a backfill worker's whole batch); atomicity is per *commit*, and each file is wholly inside one. Operational updates commit whole-file batches as the source becomes available.
 
 This invariant is also what lets the filter probe a single representative cell per file: if its representative cell is present, all of the accepted refs from that file were committed together. This does not imply that the source contained every expected message.
 

@@ -1,5 +1,12 @@
-from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
+import time
+from collections.abc import Iterator, Sequence
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    FIRST_EXCEPTION,
+    Future,
+    ThreadPoolExecutor,
+    wait,
+)
 from datetime import UTC, datetime
 from functools import partial
 from time import monotonic
@@ -15,7 +22,11 @@ from reformatters.common.download import s3_store_from_secret, source_access
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 from reformatters.common.types import Timedelta
-from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
+from reformatters.common.virtual_region_job import (
+    VirtualRef,
+    VirtualRegionJob,
+    log_virtual_event,
+)
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
 from .grib import (
@@ -90,6 +101,100 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                         self._last_modified[key] = last_modified
         return list(available.values())
 
+    def process_virtual_refs(  # noqa: PLR0912
+        self, remaining: Sequence[EcmwfFastSourceFileCoord]
+    ) -> Iterator[Sequence[tuple[EcmwfFastSourceFileCoord, Sequence[VirtualRef]]]]:
+        """Yield finished whole files while polling; drain admitted work at cutoff."""
+        if self.processing_mode == "backfill":
+            yield from super().process_virtual_refs(remaining)
+            return
+        pending = list(remaining)
+        futures: dict[Future[list[VirtualRef]], EcmwfFastSourceFileCoord] = {}
+        next_sweep = time.monotonic()
+        first_sweep = True
+        pool = ThreadPoolExecutor(self.download_concurrency)
+        try:
+            while pending:
+                for future in futures:
+                    if future.done():
+                        future.result()
+                cutoff = not first_sweep and pd.Timestamp.now() >= self.poll_deadline
+                if not cutoff and (first_sweep or time.monotonic() >= next_sweep):
+                    sweep_start = time.monotonic()
+                    in_flight = {id(coord) for coord in futures.values()}
+                    available = self.discover_available(
+                        [coord for coord in pending if id(coord) not in in_flight]
+                    )
+                    received_at = pd.Timestamp.now(tz="UTC").isoformat()
+                    log_virtual_event(
+                        "discovery_sweep",
+                        received_at=received_at,
+                        duration_s=time.monotonic() - sweep_start,
+                        files=len(available),
+                        active_streams=sum(f.running() for f in futures),
+                        outstanding_files=len(futures),
+                    )
+                    for coord, size in available:
+                        log_virtual_event(
+                            "discovered",
+                            file=coord.get_url(),
+                            received_at=received_at,
+                            bytes=size,
+                        )
+                        futures[pool.submit(self._ready_file_refs, coord, size)] = coord
+                    next_sweep = sweep_start + self.tick_interval.total_seconds()
+                    first_sweep = False
+                cutoff = pd.Timestamp.now() >= self.poll_deadline
+                if cutoff and futures:
+                    wait(futures, return_when=FIRST_EXCEPTION)
+                completed = [
+                    (futures.pop(future), future.result())
+                    for future in list(futures)
+                    if future.done()
+                ]
+                batch = [(coord, refs) for coord, refs in completed if refs]
+                removed = {
+                    id(coord)
+                    for coord, refs in completed
+                    if refs or not self.retain_failed_files
+                }
+                pending = [coord for coord in pending if id(coord) not in removed]
+                if batch:
+                    yield batch
+                if not pending or cutoff:
+                    if pending:
+                        log.info(
+                            f"Poll deadline reached with {len(pending)} source files "
+                            f"not yet ingested, leaving them to the next update "
+                            f"(first: {pending[0].get_url()})"
+                        )
+                    return
+                timeout = max(
+                    0.0,
+                    min(
+                        next_sweep - time.monotonic(),
+                        (self.poll_deadline - pd.Timestamp.now()).total_seconds(),
+                    ),
+                )
+                if futures:
+                    wait(futures, timeout=timeout, return_when=FIRST_COMPLETED)
+                else:
+                    time.sleep(timeout)
+        finally:
+            pool.shutdown(wait=True, cancel_futures=True)
+
+    def _ready_file_refs(
+        self, coord: EcmwfFastSourceFileCoord, file_size: int
+    ) -> list[VirtualRef]:
+        refs = self._file_refs_or_skip(coord, file_size)
+        log_virtual_event(
+            "ready",
+            file=coord.get_url(),
+            ready_at=pd.Timestamp.now(tz="UTC").isoformat(),
+            ref_count=len(refs),
+        )
+        return refs
+
     def file_refs(
         self, coord: EcmwfFastSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
@@ -116,6 +221,17 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                 else "unknown"
             )
             request_started = monotonic()
+            if self.processing_mode == "update":
+                log_virtual_event(
+                    "request",
+                    file=coord.get_url(),
+                    key=coord.key,
+                    requested_at=datetime.now(UTC).isoformat(),
+                    last_modified=last_modified.isoformat()
+                    if last_modified is not None
+                    else None,
+                    bytes=file_size,
+                )
             response = obstore.get(store, coord.key)
             request_seconds = monotonic() - request_started
             if response.meta["size"] != file_size:
