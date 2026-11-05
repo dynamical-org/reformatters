@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
@@ -202,6 +203,9 @@ def test_stream_attempts_restart_after_interruption_and_never_retry_source_contr
 
 def test_common_loop_and_default_download_concurrency_are_inherited() -> None:
     assert EcmwfFastRegionJob.download_concurrency == 64
+    assert VirtualRegionJob.completion_ready_updates is False
+    assert EcmwfIfsEnsForecast025DegreeFastRegionJob.completion_ready_updates is True
+    assert EcmwfAifsEnsForecastFastRegionJob.completion_ready_updates is True
     assert (
         EcmwfFastRegionJob.process_virtual_refs is VirtualRegionJob.process_virtual_refs
     )
@@ -626,3 +630,39 @@ def test_real_fixture_metadata_discrepancies_alert_without_changing_refs(
     source_getter.return_value = source_response(bytes(changed))
     assert job._file_refs_or_skip(coord, len(changed)) == []
     assert "Source discrepancies" not in caplog.text
+
+
+@pytest.mark.parametrize("last_modified", [None, LAST_MODIFIED])
+def test_stream_request_event_preserves_optional_last_modified(
+    tmp_path: Path,
+    source_getter: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+    last_modified: datetime | None,
+) -> None:
+    job = make_job(tmp_path, EcmwfIfsEnsForecast025DegreeFastRegionJob).model_copy(
+        update={"processing_mode": "update"}
+    )
+    coord = next(
+        c
+        for c in job.source_file_coords()
+        if c.family == "cf" and c.lead_time == pd.Timedelta("6h")
+    )
+    if last_modified is not None:
+        job._last_modified[coord.key] = last_modified
+    data = source_bytes("ifs")
+    source_getter.return_value = source_response(data)
+    with caplog.at_level("INFO"):
+        assert job.file_refs(coord, len(data))
+    events = [
+        json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
+        for r in caplog.records
+        if '"event": "request"' in r.getMessage()
+    ]
+    assert len(events) == 1
+    assert events[0]["file"] == coord.get_url()
+    assert events[0]["key"] == coord.key
+    assert events[0]["bytes"] == len(data)
+    assert events[0]["last_modified"] == (
+        None if last_modified is None else last_modified.isoformat()
+    )
+    assert datetime.fromisoformat(events[0]["requested_at"]).tzinfo is not None

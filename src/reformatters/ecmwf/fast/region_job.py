@@ -15,7 +15,11 @@ from reformatters.common.download import s3_store_from_secret, source_access
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 from reformatters.common.types import Timedelta
-from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
+from reformatters.common.virtual_region_job import (
+    VirtualRef,
+    VirtualRegionJob,
+    log_virtual_event,
+)
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
 from .grib import (
@@ -40,6 +44,7 @@ log = get_logger(__name__)
 class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord]):
     model: ClassVar[FastModel]
     retain_failed_files: ClassVar[bool] = True
+    completion_ready_updates: ClassVar[bool] = True
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
     _last_modified: dict[str, datetime] = PrivateAttr(default_factory=dict)
 
@@ -116,6 +121,17 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                 else "unknown"
             )
             request_started = monotonic()
+            if self.processing_mode == "update" and self.completion_ready_updates:
+                log_virtual_event(
+                    "request",
+                    file=coord.get_url(),
+                    key=coord.key,
+                    requested_at=datetime.now(UTC).isoformat(),
+                    last_modified=last_modified.isoformat()
+                    if last_modified is not None
+                    else None,
+                    bytes=file_size,
+                )
             response = obstore.get(store, coord.key)
             request_seconds = monotonic() - request_started
             if response.meta["size"] != file_size:
