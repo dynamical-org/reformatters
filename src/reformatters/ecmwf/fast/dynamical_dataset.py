@@ -44,7 +44,6 @@ class EcmwfFastDataset(DynamicalDataset[EcmwfDataVar, EcmwfFastSourceFileCoord])
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
                 schedule=f"{minute} 5,11,17,23 * * *",
-                suspend=True,
                 concurrency_policy="Allow",
                 pod_active_deadline=timedelta(hours=6, minutes=3, seconds=30),
                 active_deadline=timedelta(hours=6, minutes=3, seconds=30),

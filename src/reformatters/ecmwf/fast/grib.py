@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from time import monotonic
 from typing import NamedTuple, assert_never
 
 import pandas as pd
@@ -46,10 +47,13 @@ class StreamReader:
         self.chunks = chunks
         self.buffer = memoryview(b"")
         self.position = 0
+        self.stream_wait_seconds = 0.0
 
     def _available(self) -> bool:
         while not self.buffer:
+            started = monotonic()
             chunk = next(self.chunks, None)
+            self.stream_wait_seconds += monotonic() - started
             if chunk is None:
                 return False
             self.buffer = memoryview(chunk)

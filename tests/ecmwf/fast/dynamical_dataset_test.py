@@ -42,7 +42,7 @@ def test_schedule_deadline_currency_and_repair_window(
     cron = dataset.operational_kubernetes_resources("test-image")[0]
     minute = 8 if dataset.template_config.model == "ifs" else 34
     assert cron.schedule == f"{minute} 5,11,17,23 * * *"
-    assert cron.suspend
+    assert not cron.suspend
     assert cron.workers_total == cron.parallelism == 1
     assert cron.concurrency_policy == "Allow"
     assert cron.ephemeral_storage == "20G"
