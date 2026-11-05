@@ -301,9 +301,7 @@ def test_common_loop_propagates_auth_and_programming_failures_without_retry(
     assert source_getter.call_count == 1
 
 
-@pytest.mark.parametrize(
-    "damage", ["size", "magic", "date", "structure", "duplicate", "missing"]
-)
+@pytest.mark.parametrize("damage", ["size", "magic", "date", "structure", "duplicate"])
 def test_source_contract_failures_are_logged_and_skipped_without_retry(
     tmp_path: Path,
     source_getter: MagicMock,
@@ -325,8 +323,6 @@ def test_source_contract_failures_are_logged_and_skipped_without_retry(
         data[8 + 7] = 0
     elif damage == "duplicate":
         data.extend(grib1("2t", 0))
-    elif damage == "missing":
-        data = bytearray(grib1("2t", 0))
     source_getter.return_value = source_response(bytes(data))
     assert job._file_refs_or_skip(coord, len(data) + (damage == "size")) == []
     assert source_getter.call_count == 1
@@ -340,11 +336,13 @@ def test_source_contract_failures_are_logged_and_skipped_without_retry(
     "cls",
     [EcmwfIfsEnsForecast025DegreeFastRegionJob, EcmwfAifsEnsForecastFastRegionJob],
 )
-def test_common_loop_commits_healthy_file_and_leaves_incomplete_file_absent(
+@pytest.mark.parametrize("partial_param", ["2t", "tp"])
+def test_common_loop_partial_file_requires_temperature(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     source_getter: MagicMock,
     cls: type[EcmwfFastRegionJob],
+    partial_param: str,
 ) -> None:
     config = (
         EcmwfIfsEnsForecast025DegreeFastTemplateConfig()
@@ -366,7 +364,10 @@ def test_common_loop_commits_healthy_file_and_leaves_incomplete_file_absent(
     )
     bad, healthy = job.source_file_coords()
     build = grib1 if cls.model == "ifs" else grib2
-    files = {bad.key: build("2t", 0), healthy.key: source_bytes(cls.model, hours=12)}
+    files = {
+        bad.key: build(partial_param, 0),
+        healthy.key: source_bytes(cls.model, hours=12),
+    }
     source_getter.side_effect = lambda store, key: source_response(files[key])
     monkeypatch.setattr(
         cls,
@@ -390,10 +391,13 @@ def test_common_loop_commits_healthy_file_and_leaves_incomplete_file_absent(
     job.process_virtual(repo, [], "main", [bad, healthy])
     final = repo.readonly_session("main")
     assert final.snapshot_id != before
-    assert job.filter_already_present([bad, healthy], final.store) == [bad]
+    assert job.filter_already_present([bad, healthy], final.store) == (
+        [] if partial_param == "2t" else [bad]
+    )
     assert source_getter.call_count == 2
     refs = list(final.all_virtual_chunk_locations())
-    assert refs == [healthy.get_url()] * len(config.data_vars)
+    assert refs.count(healthy.get_url()) == len(config.data_vars)
+    assert refs.count(bad.get_url()) == (1 if partial_param == "2t" else 0)
 
 
 @pytest.fixture(
@@ -558,3 +562,67 @@ def test_worker_driver_version_state_does_not_leak_to_independent_runs(
         )
     assert source_getter.call_count == 2 * len(coords)
     assert job.discover_available(coords) == [(coord, 100) for coord in coords]
+
+
+@pytest.mark.parametrize(
+    "cls",
+    [EcmwfIfsEnsForecast025DegreeFastRegionJob, EcmwfAifsEnsForecastFastRegionJob],
+)
+def test_real_fixture_metadata_discrepancies_alert_without_changing_refs(
+    tmp_path: Path,
+    source_getter: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+    cls: type[EcmwfFastRegionJob],
+) -> None:
+    config = (
+        EcmwfIfsEnsForecast025DegreeFastTemplateConfig()
+        if cls.model == "ifs"
+        else EcmwfAifsEnsForecastFastTemplateConfig()
+    )
+    job = make_job(tmp_path, cls).model_copy(
+        update={
+            "template_ds": config.get_template(pd.Timestamp("2026-11-04T01:00")).sel(
+                init_time=[pd.Timestamp("2026-11-04")]
+            )
+        }
+    )
+    coord = next(
+        c
+        for c in job.source_file_coords()
+        if c.family == "cf" and c.lead_time == pd.Timedelta(0)
+    ).model_copy(update={"source_params": frozenset({"2t"})})
+    original = (Path(__file__).parent / "fixtures" / coord.key).read_bytes()
+    source_getter.return_value = source_response(original)
+    baseline = job._file_refs_or_skip(coord, len(original))
+    assert len(baseline) == 1
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]
+    changed = bytearray(original)
+    if cls.model == "ifs":
+        changed[8 + 4] = 99
+    else:
+        offset = 16
+        while offset < len(changed) - 4:
+            size = int.from_bytes(changed[offset : offset + 4], "big")
+            number = changed[offset + 4]
+            if number == 1:
+                changed[offset + 5 : offset + 7] = (99).to_bytes(2, "big")
+            elif number == 3:
+                changed[offset + 14] = 5
+            elif number == 4:
+                changed[offset + 36] = 101
+            offset += size
+    caplog.clear()
+    source_getter.return_value = source_response(bytes(changed))
+    assert job._file_refs_or_skip(coord, len(changed)) == baseline
+    errors = [r.getMessage() for r in caplog.records if r.levelname == "ERROR"]
+    assert len(errors) == 1
+    assert coord.key in errors[0]
+    assert "centre=99 (expected 98)" in errors[0]
+    if cls.model == "aifs":
+        assert "earth shape=5 (expected 6)" in errors[0]
+        assert "ensemble size=101 (expected 51)" in errors[0]
+    caplog.clear()
+    changed[-4:] = b"bad!"
+    source_getter.return_value = source_response(bytes(changed))
+    assert job._file_refs_or_skip(coord, len(changed)) == []
+    assert "Source discrepancies" not in caplog.text

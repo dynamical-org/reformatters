@@ -13,9 +13,10 @@ and 4,994,413 for AIFS.
 `metadata.json` records original source keys, selected source byte ranges,
 identities, and numerical snapshots at latitude 0 / longitude 0. Snapshots include
 the template's Kelvin-to-Celsius conversion. Each original file passed its full
-seven-field control or 350-field perturbed inventory before selection. Each slice
-then passed the same production scanner against its exact one-field, one-member
-declared inventory.
+seven-field control or 350-field perturbed inventory before selection. The fixture
+coordinates declare a one-field, one-member inventory. The scanner logs missing
+declared fields while returning well-formed messages; unexpected fields and
+malformed messages are rejected.
 
 `fixture_integration_test.py` reads these files exclusively through a local
 Icechunk virtual container and `file://` references. Slice offsets refer to these

@@ -1641,7 +1641,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "boto3", specifier = ">=1.42.49" },
+    { name = "boto3", specifier = "~=1.42" },
     { name = "dask", specifier = "~=2026.7" },
     { name = "google-crc32c", specifier = ">=1.8.0" },
     { name = "gribberish", specifier = "~=1.8" },

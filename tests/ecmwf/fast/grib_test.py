@@ -173,12 +173,11 @@ def test_complete_shuffled_inventory_and_chunk_boundaries(
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
-def test_incomplete_duplicate_and_wrong_family_fail_closed(model: FastModel) -> None:
+def test_truncated_duplicate_and_wrong_family_fail_closed(model: FastModel) -> None:
     data = source_bytes(model)
     build = grib1 if model == "ifs" else grib2
     for damaged in (
         data + build("2t", 0),
-        b"".join(build(p, 0) for p in PARAMS if p != "2t"),
         b"".join(build(p, 1) for p in PARAMS),
     ):
         with pytest.raises(SourceContractError):
@@ -218,7 +217,7 @@ def test_grib2_second_surface_and_ensemble_type_rejected() -> None:
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
-def test_declared_source_inventory_is_exact_and_independent_of_output(
+def test_declared_source_inventory_allows_missing_but_not_extra_fields(
     model: FastModel,
 ) -> None:
     build = grib1 if model == "ifs" else grib2
@@ -227,10 +226,9 @@ def test_declared_source_inventory_is_exact_and_independent_of_output(
         update={"source_params": frozenset({"2t", "tp"}), "source_members": (0,)}
     )
     assert len(inventory(StreamReader(chunks(data, 31)), len(data), selected)) == 2
-    with pytest.raises(SourceContractError, match="Incomplete"):
-        inventory(StreamReader(chunks(data, 31)), len(data), coord(model))
+    assert len(inventory(StreamReader(chunks(data, 31)), len(data), coord(model))) == 2
     full = source_bytes(model)
-    with pytest.raises(SourceContractError, match="Incomplete"):
+    with pytest.raises(SourceContractError, match="Unexpected GRIB fields"):
         inventory(StreamReader(chunks(full, 31)), len(full), selected)
 
 
@@ -260,3 +258,23 @@ def test_impossible_scanner_position_is_a_programming_invariant(
     data = grib1("2t", 0)
     with pytest.raises(AssertionError, match="scanner did not reach trailer"):
         inventory(StreamReader(iter([data])), len(data), coord("ifs"))
+
+
+@pytest.mark.parametrize("model", ["ifs", "aifs"])
+def test_missing_messages_alert_but_truncated_messages_fail(
+    model: FastModel,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    build = grib1 if model == "ifs" else grib2
+    data = build("2t", 0) + build("tp", 0)
+    messages = inventory(StreamReader(chunks(data, 31)), len(data), coord(model))
+    assert [(m.param, m.member) for m in messages] == [("2t", 0), ("tp", 0)]
+    assert len(caplog.records) == 1
+    assert coord(model).key in caplog.text
+    assert "missing fields=" in caplog.text
+    assert "('ssrd', 0)" in caplog.text
+    caplog.clear()
+    for damaged in (data[:-1], data + b"bad!bad!", data[:-4] + b"bad!"):
+        with pytest.raises(SourceContractError):
+            inventory(StreamReader(chunks(damaged, 31)), len(damaged), coord(model))
+    assert not caplog.records

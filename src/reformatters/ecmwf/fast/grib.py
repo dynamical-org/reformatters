@@ -1,11 +1,14 @@
 from collections.abc import Iterator
-from typing import NamedTuple
+from typing import NamedTuple, assert_never
 
 import pandas as pd
 
+from reformatters.common.logging import get_logger
 from reformatters.common.time_utils import whole_hours
 
 from .source import EcmwfFastSourceFileCoord
+
+log = get_logger(__name__)
 
 _GRIB1_PARAMS = {
     (128, 167): "2t",
@@ -110,7 +113,10 @@ def _date(data: bytes) -> pd.Timestamp:
 
 
 def _grib1(
-    reader: StreamReader, end: int, coord: EcmwfFastSourceFileCoord
+    reader: StreamReader,
+    end: int,
+    coord: EcmwfFastSourceFileCoord,
+    deviations: set[str],
 ) -> tuple[str, int]:
     length = reader.read(3)
     pds_size = _uint(length)
@@ -120,7 +126,8 @@ def _grib1(
         "GRIB1 product section outside message",
     )
     pds = length + reader.read(pds_size - 3)
-    _require_source(pds[4] == 98, "Expected ECMWF centre")
+    if pds[4] != 98:
+        deviations.add(f"centre={pds[4]} (expected 98)")
     _require_source(pds[7] == 128, "Expected GRIB1 grid definition without bitmap")
     _require_source(pds[9:12] == b"\x01\x00\x00", "Unexpected GRIB1 level")
     _require_source(
@@ -184,7 +191,11 @@ def _grib1(
 
 
 def _grib2(
-    reader: StreamReader, end: int, discipline: int, coord: EcmwfFastSourceFileCoord
+    reader: StreamReader,
+    end: int,
+    discipline: int,
+    coord: EcmwfFastSourceFileCoord,
+    deviations: set[str],
 ) -> tuple[str, int]:
     sections: dict[int, bytes] = {}
     order = []
@@ -210,16 +221,16 @@ def _grib2(
     )
     ref, grid, product, packing, bitmap = (sections[n] for n in (1, 3, 4, 5, 6))
     _require_source(len(ref) == 21, "Unsupported GRIB2 identification")
-    _require_source(_uint(ref[5:7]) == 98, "Unsupported GRIB2 identification")
+    if (centre := _uint(ref[5:7])) != 98:
+        deviations.add(f"centre={centre} (expected 98)")
     _require_source(
         _date(ref[12:19]) == coord.init_time,
         "GRIB2 initialization differs from filename",
     )
-    _require_source(len(grid) == 72, "Unsupported GRIB2 grid template or earth shape")
-    _require_source(
-        _uint(grid[12:14]) == 0, "Unsupported GRIB2 grid template or earth shape"
-    )
-    _require_source(grid[14] == 6, "Unsupported GRIB2 grid template or earth shape")
+    _require_source(len(grid) == 72, "Unsupported GRIB2 grid template")
+    _require_source(_uint(grid[12:14]) == 0, "Unsupported GRIB2 grid template")
+    if grid[14] != 6:
+        deviations.add(f"earth shape={grid[14]} (expected 6)")
     _require_source(_uint(grid[30:34]) == 1440, "Unsupported GRIB2 grid dimensions")
     _require_source(_uint(grid[34:38]) == 721, "Unsupported GRIB2 grid dimensions")
     _require_source(
@@ -250,11 +261,14 @@ def _grib2(
         "Only native CCSDS GRIB2 fields are supported",
     )
     _require_source(bitmap == b"\x00\x00\x00\x06\x06\xff", "Unsupported GRIB2 bitmap")
-    return _grib2_product(product, discipline, coord)
+    return _grib2_product(product, discipline, coord, deviations)
 
 
 def _grib2_product(
-    product: bytes, discipline: int, coord: EcmwfFastSourceFileCoord
+    product: bytes,
+    discipline: int,
+    coord: EcmwfFastSourceFileCoord,
+    deviations: set[str],
 ) -> tuple[str, int]:
     _require_source(len(product) in (37, 61), "Unsupported GRIB2 product section")
     _require_source(_uint(product[5:7]) == 0, "Unsupported GRIB2 product section")
@@ -264,7 +278,8 @@ def _grib2_product(
         len(product) == (37 if template == 1 else 61),
         "Unsupported GRIB2 product template",
     )
-    _require_source(product[36] == 51, "Unexpected ensemble size")
+    if product[36] != 51:
+        deviations.add(f"ensemble size={product[36]} (expected 51)")
     _require_source(
         product[34] == (5 if coord.family == "cf" else 6),
         "Unexpected ensemble forecast type",
@@ -316,17 +331,23 @@ def _grib2_product(
 def inventory(
     reader: StreamReader, file_size: int, coord: EcmwfFastSourceFileCoord
 ) -> list[Message]:
+    match coord.model:
+        case "ifs":
+            expected_edition = 1
+        case "aifs":
+            expected_edition = 2
+        case unexpected:
+            assert_never(unexpected)
     _require_source(file_size > 0, "Invalid source file size")
     messages = []
+    deviations: set[str] = set()
     seen: set[tuple[str, int]] = set()
     while reader.position < file_size:
         offset = reader.position
         header = reader.read(8)
         _require_source(header[:4] == b"GRIB", "Missing GRIB message magic")
         edition = header[7]
-        _require_source(
-            edition == (1 if coord.model == "ifs" else 2), "Unexpected GRIB edition"
-        )
+        _require_source(edition == expected_edition, "Unexpected GRIB edition")
         if edition == 1:
             length = _uint(header[4:7])
             _require_source(
@@ -339,9 +360,9 @@ def inventory(
             reader.position + 4 < end <= file_size, "Invalid GRIB message length"
         )
         param, member = (
-            _grib1(reader, end, coord)
+            _grib1(reader, end, coord, deviations)
             if edition == 1
-            else _grib2(reader, end, header[6], coord)
+            else _grib2(reader, end, header[6], coord, deviations)
         )
         assert reader.position == end - 4, "GRIB scanner did not reach trailer boundary"
         _require_source(reader.read(4) == b"7777", "Missing GRIB trailer")
@@ -357,7 +378,13 @@ def inventory(
         (param, member) for param in coord.source_params for member in coord.members
     }
     _require_source(
-        seen == expected,
-        f"Incomplete GRIB inventory: {len(seen)} of {len(expected)} fields",
+        seen <= expected,
+        f"Unexpected GRIB fields: {sorted(seen - expected)}",
     )
+    if missing := expected - seen:
+        deviations.add(f"missing fields={sorted(missing)}")
+    if deviations:
+        log.error(
+            f"Source discrepancies in {coord.key}: {'; '.join(sorted(deviations))}"
+        )
     return messages

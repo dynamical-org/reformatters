@@ -2,13 +2,13 @@
   "attributes": {
     "dataset_id": "ecmwf-aifs-ens-forecast-fast",
     "dataset_version": "0.1.0",
-    "name": "ECMWF AIFS ENS forecast, fast, virtual",
-    "description": "Weather forecasts from the ECMWF AIFS ensemble model, published as source files arrive.",
+    "name": "ECMWF AIFS ENS forecast, fast",
+    "description": "Weather forecasts from the ECMWF AIFS ensemble model, published with low latency.",
     "attribution": "ECMWF AIFS ensemble forecast data processed by dynamical.org.",
     "license": "LicenseRef-Commercial",
     "spatial_domain": "Global",
     "spatial_resolution": "0.25 degrees (~20km)",
-    "time_domain": "Forecasts initialized 2026-10-22 00:00:00 UTC to Present",
+    "time_domain": "Forecasts initialized 2026-11-01 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 6 hours",
     "forecast_domain": "Forecast lead time 0-360 hours (0-15 days) ahead",
     "forecast_resolution": "6 hourly"
@@ -228,7 +228,7 @@
           "long_name": "Forecast initialization time",
           "standard_name": "forecast_reference_time",
           "statistics_approximate": {
-            "min": "2026-10-22T00:00:00",
+            "min": "2026-11-01T00:00:00",
             "max": "Present"
           },
           "units": "seconds since 1970-01-01",
@@ -625,7 +625,7 @@
           "long_name": "Valid time",
           "standard_name": "time",
           "statistics_approximate": {
-            "min": "2026-10-22T00:00:00",
+            "min": "2026-11-01T00:00:00",
             "max": "Present + 15 days"
           },
           "units": "seconds since 1970-01-01",

@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from datetime import timedelta
-from typing import ClassVar
+from typing import ClassVar, assert_never
 
 from pydantic import Field
 
@@ -33,7 +33,13 @@ class EcmwfFastDataset(DynamicalDataset[EcmwfDataVar, EcmwfFastSourceFileCoord])
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        minute = 8 if self.template_config.model == "ifs" else 34
+        match self.template_config.model:
+            case "ifs":
+                minute = 8
+            case "aifs":
+                minute = 34
+            case unexpected:
+                assert_never(unexpected)
         return [
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
@@ -54,11 +60,13 @@ class EcmwfFastDataset(DynamicalDataset[EcmwfDataVar, EcmwfFastSourceFileCoord])
         ]
 
     def validators(self) -> Sequence[validation.Validator]:
-        delay = (
-            timedelta(hours=5, minutes=36)
-            if self.template_config.model == "ifs"
-            else timedelta(hours=6, minutes=2)
-        )
+        match self.template_config.model:
+            case "ifs":
+                delay = timedelta(hours=5, minutes=36)
+            case "aifs":
+                delay = timedelta(hours=6, minutes=2)
+            case unexpected:
+                assert_never(unexpected)
         return (
             validation.CheckCurrentData(max_delay=delay),
             validation.CheckVirtualManifestCompleteness(),

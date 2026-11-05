@@ -7,10 +7,16 @@ import xarray as xr
 from pydantic import ValidationError
 
 from reformatters.common.config_models import DatasetAttributes
+from reformatters.ecmwf.aifs_ens.forecast_fast.template_config import (
+    EcmwfAifsEnsForecastFastTemplateConfig,
+)
 from reformatters.ecmwf.fast.template_config import (
     EcmwfFastTemplateConfig,
     FastModel,
     lead_hours,
+)
+from reformatters.ecmwf.ifs_ens.forecast_0_25_degree_fast.template_config import (
+    EcmwfIfsEnsForecast025DegreeFastTemplateConfig,
 )
 
 
@@ -68,9 +74,9 @@ def test_model_specific_forecast_axes() -> None:
     assert lead_hours("ifs", 6)[-1] == 144
     assert all(len(lead_hours("aifs", hour)) == 61 for hour in (0, 6, 12, 18))
     config = EcmwfFastTemplateConfig(model="ifs")
-    assert config.append_dim_start == pd.Timestamp("2026-10-22T00:00")
-    inits = config.append_dim_coordinates("2026-10-23")
-    assert pd.Timestamp("2026-10-22T06:00") in inits
+    assert config.append_dim_start == pd.Timestamp("2026-11-01T00:00")
+    inits = config.append_dim_coordinates("2026-11-02")
+    assert pd.Timestamp("2026-11-01T06:00") in inits
     coords = config.derive_coordinates(
         xr.Dataset(
             coords={
@@ -85,9 +91,17 @@ def test_model_specific_forecast_axes() -> None:
     )
 
 
-@pytest.mark.parametrize("model", ["ifs", "aifs"])
-def test_commercial_license_is_exact_and_confined_to_license(model: FastModel) -> None:
-    attrs = EcmwfFastTemplateConfig(model=model).dataset_attributes.model_dump()
+@pytest.mark.parametrize(
+    "config",
+    [
+        EcmwfIfsEnsForecast025DegreeFastTemplateConfig(),
+        EcmwfAifsEnsForecastFastTemplateConfig(),
+    ],
+)
+def test_commercial_license_is_exact_and_confined_to_license(
+    config: EcmwfFastTemplateConfig,
+) -> None:
+    attrs = config.dataset_attributes.model_dump()
     assert attrs.pop("license") == "LicenseRef-Commercial"
     assert "licen" not in json.dumps(attrs).lower()
     with pytest.raises(ValidationError):

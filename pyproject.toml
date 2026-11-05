@@ -7,7 +7,7 @@ requires-python = ">=3.14"
 
 
 dependencies = [
-    "boto3>=1.42.49",
+    "boto3~=1.42",
     "dask~=2026.7",
     "numba~=0.67",
     "numcodecs~=0.16",

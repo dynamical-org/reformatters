@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any, Literal, assert_never
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,6 @@ from reformatters.common.config_models import (
     ROOT,
     Coordinate,
     CoordinateAttrs,
-    DatasetAttributes,
     DataVarAttrs,
     Encoding,
     StatisticsApproximate,
@@ -29,45 +28,25 @@ type FastModel = Literal["ifs", "aifs"]
 
 
 def lead_hours(model: FastModel, init_hour: int) -> tuple[int, ...]:
-    if model == "aifs":
-        return tuple(range(0, 361, 6))
-    return (
-        *range(91),
-        *range(93, 145, 3),
-        *(range(150, 361, 6) if init_hour in (0, 12) else ()),
-    )
+    match model:
+        case "ifs":
+            return (
+                *range(91),
+                *range(93, 145, 3),
+                *(range(150, 361, 6) if init_hour in (0, 12) else ()),
+            )
+        case "aifs":
+            return tuple(range(0, 361, 6))
+        case unexpected:
+            assert_never(unexpected)
 
 
 class EcmwfFastTemplateConfig(EcmwfAifsSingleCommonTemplateConfig[EcmwfDataVar]):
     model: FastModel
-    append_dim_start: Timestamp = pd.Timestamp("2026-10-22T00:00")
+    append_dim_start: Timestamp = pd.Timestamp("2026-11-01T00:00")
     dims: Dims = {
         ROOT: ("init_time", "lead_time", "ensemble_member", "latitude", "longitude")
     }
-
-    @computed_field
-    @property
-    def dataset_attributes(self) -> DatasetAttributes:
-        model_name = self.model.upper()
-        variant = "0-25-degree-fast" if self.model == "ifs" else "fast"
-        return DatasetAttributes(
-            dataset_id=f"ecmwf-{self.model}-ens-forecast-{variant}",
-            dataset_version="0.1.0",
-            name=f"ECMWF {model_name} ENS forecast, fast, virtual",
-            description=f"Weather forecasts from the ECMWF {model_name} ensemble model, published as source files arrive.",
-            attribution=f"ECMWF {model_name} ensemble forecast data processed by dynamical.org.",
-            license="LicenseRef-Commercial",
-            spatial_domain="Global",
-            spatial_resolution="0.25 degrees (~20km)",
-            time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
-            time_resolution="Forecasts initialized every 6 hours",
-            forecast_domain="Forecast lead time 0-360 hours (0-15 days) ahead",
-            forecast_resolution=(
-                "0-90 hours: hourly, 93-144 hours: 3 hourly, 150-360 hours: 6 hourly"
-                if self.model == "ifs"
-                else "6 hourly"
-            ),
-        )
 
     def dimension_coordinates(self) -> dict[str, Any]:
         return super().dimension_coordinates() | {
@@ -95,7 +74,13 @@ class EcmwfFastTemplateConfig(EcmwfAifsSingleCommonTemplateConfig[EcmwfDataVar])
     @property
     def coords(self) -> Sequence[Coordinate]:
         coords = []
-        radius = 6367470.0 if self.model == "ifs" else 6371229.0
+        match self.model:
+            case "ifs":
+                radius = 6367470.0
+            case "aifs":
+                radius = 6371229.0
+            case unexpected:
+                assert_never(unexpected)
         for base_coord in super().coords:
             coord = base_coord
             if coord.name == "spatial_ref":
@@ -112,16 +97,22 @@ class EcmwfFastTemplateConfig(EcmwfAifsSingleCommonTemplateConfig[EcmwfDataVar])
                     comment=f"The source assumes a spherical earth with a radius of {radius:,.0f}m.",
                 )
                 coord = replace(coord, attrs=CoordinateAttrs(**attrs))
-            elif coord.name == "expected_forecast_length" and self.model == "ifs":
-                coord = replace(
-                    coord,
-                    attrs=replace(
-                        coord.attrs,
-                        statistics_approximate=StatisticsApproximate(
-                            min="6 days 00:00:00", max="15 days 00:00:00"
-                        ),
-                    ),
-                )
+            elif coord.name == "expected_forecast_length":
+                match self.model:
+                    case "ifs":
+                        coord = replace(
+                            coord,
+                            attrs=replace(
+                                coord.attrs,
+                                statistics_approximate=StatisticsApproximate(
+                                    min="6 days 00:00:00", max="15 days 00:00:00"
+                                ),
+                            ),
+                        )
+                    case "aifs":
+                        pass
+                    case unexpected:
+                        assert_never(unexpected)
             coords.append(coord)
         return [
             *coords,
@@ -203,8 +194,14 @@ class EcmwfFastTemplateConfig(EcmwfAifsSingleCommonTemplateConfig[EcmwfDataVar])
             filters = []
             if param == "2t":
                 filters = [ScaleOffset(offset=-273.15, scale=1.0).to_dict()]
-            elif param == "tp" and self.model == "ifs":
-                filters = [ScaleOffset(offset=0.0, scale=0.001).to_dict()]
+            elif param == "tp":
+                match self.model:
+                    case "ifs":
+                        filters = [ScaleOffset(offset=0.0, scale=0.001).to_dict()]
+                    case "aifs":
+                        filters = []
+                    case unexpected:
+                        assert_never(unexpected)
             result.append(
                 EcmwfDataVar(
                     name=name,
