@@ -1,5 +1,5 @@
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Buffer, Generator, Iterator, Sequence
 from concurrent.futures import (
     FIRST_COMPLETED,
     FIRST_EXCEPTION,
@@ -15,10 +15,15 @@ from typing import ClassVar
 import obstore
 import pandas as pd
 import xarray as xr
-from obstore.exceptions import GenericError
+from obstore.exceptions import GenericError, PermissionDeniedError, UnauthenticatedError
+from obstore.store import ObjectStore
 from pydantic import PrivateAttr
 
-from reformatters.common.download import s3_store_from_secret, source_access
+from reformatters.common.download import (
+    SourceAccessError,
+    s3_store_from_secret,
+    source_access,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 from reformatters.common.types import Timedelta
@@ -48,10 +53,80 @@ from .template_config import FastModel, lead_hours
 log = get_logger(__name__)
 
 
+MAX_RANGE_CHUNK = 64 * 1024**2
+
+
+def _ranged_chunks(
+    store: ObjectStore, key: str, size: int, etag: str | None
+) -> Generator[Buffer]:
+    if not etag or etag.startswith("W/"):
+        raise SourceContractError("Source listing lacks a strong ETag")
+    count = (size + MAX_RANGE_CHUNK - 1) // MAX_RANGE_CHUNK
+    assert count > 0
+    buffers: list[Buffer] = [b""] * count
+    futures: list[Future[None]] = []
+    errors: list[BaseException] = []
+
+    def fetch(index: int) -> None:
+        start, end = size * index // count, size * (index + 1) // count
+        response = payload = None
+        try:
+            response = obstore.get(
+                store, key, options={"range": (start, end), "if_match": etag}
+            )
+            if response.range != (start, end):
+                raise SourceContractError("Source returned a different range")
+            if response.meta["size"] != size:
+                raise SourceContractError("Source size differs from listing")
+            if response.meta["e_tag"] != etag:
+                raise SourceContractError("Source ETag differs from pinned version")
+            payload = response.bytes()
+            if len(payload) < end - start:
+                raise InterruptedGribStreamError("Source range body was truncated")
+            if len(payload) > end - start:
+                raise SourceContractError(
+                    "Source range body exceeds requested interval"
+                )
+            buffers[index] = payload
+        finally:
+            response = payload = None
+
+    try:
+        with ThreadPoolExecutor(count) as pool:
+            futures.extend(pool.submit(fetch, index) for index in range(count))
+        for future in futures:
+            error = future.exception()
+            if error is not None:
+                errors.append(error)
+        for error in errors:
+            if isinstance(
+                error,
+                (
+                    AssertionError,
+                    SourceAccessError,
+                    PermissionDeniedError,
+                    UnauthenticatedError,
+                ),
+            ) or not isinstance(error, Exception):
+                raise error
+        for error in errors:
+            if not isinstance(error, (InterruptedGribStreamError, GenericError)):
+                raise error
+        if errors:
+            raise errors[0]
+        yield from buffers
+    finally:
+        buffers.clear()
+        futures.clear()
+        errors.clear()
+
+
 class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord]):
     model: ClassVar[FastModel]
     retain_failed_files: ClassVar[bool] = True
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
+    update_download_concurrency: ClassVar[int] = 5
+    _listed_etags: dict[str, tuple[int, str | None]] = PrivateAttr(default_factory=dict)
     _last_modified: dict[str, datetime] = PrivateAttr(default_factory=dict)
 
     def generate_source_file_coords(
@@ -87,11 +162,12 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
         available: dict[str, tuple[EcmwfFastSourceFileCoord, int]] = {}
         # A model_copy shares this dict with its source job.
         self._last_modified = self._last_modified.copy()
+        self._listed_etags = self._listed_etags.copy()
         with ThreadPoolExecutor(max_workers=len(prefixes)) as pool:
             for rows in pool.map(
                 partial(list_prefix_or_defer, client=client), prefixes
             ):
-                for key, size, last_modified in rows:
+                for key, size, last_modified, etag in rows:
                     if (
                         size > 0
                         and (coord := by_key.get(key)) is not None
@@ -99,6 +175,7 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                     ):
                         available[key] = (coord, size)
                         self._last_modified[key] = last_modified
+                        self._listed_etags[key] = (size, etag)
         return list(available.values())
 
     def process_virtual_refs(  # noqa: PLR0912
@@ -112,7 +189,7 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
         futures: dict[Future[list[VirtualRef]], EcmwfFastSourceFileCoord] = {}
         next_sweep = time.monotonic()
         first_sweep = True
-        pool = ThreadPoolExecutor(self.download_concurrency)
+        pool = ThreadPoolExecutor(self.update_download_concurrency)
         try:
             while pending:
                 for future in futures:
@@ -198,14 +275,20 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
     def file_refs(
         self, coord: EcmwfFastSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
+        listed = self._listed_etags.get(coord.key)
+        assert listed is None or listed[0] == file_size, (
+            "File size differs from its discovery observation"
+        )
         return retry(
-            partial(self._stream_file_refs, coord, file_size),
+            partial(
+                self._stream_file_refs, coord, file_size, listed[1] if listed else None
+            ),
             max_attempts=2,
             retryable_exceptions=(InterruptedGribStreamError, GenericError),
         )
 
     def _stream_file_refs(
-        self, coord: EcmwfFastSourceFileCoord, file_size: int
+        self, coord: EcmwfFastSourceFileCoord, file_size: int, etag: str | None
     ) -> list[VirtualRef]:
         store = s3_store_from_secret(
             SOURCE_PREFIX,
@@ -232,23 +315,42 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                     else None,
                     bytes=file_size,
                 )
-            response = obstore.get(store, coord.key)
-            request_seconds = monotonic() - request_started
-            if response.meta["size"] != file_size:
-                raise SourceContractError("Source size differs from listing")
-            reader = StreamReader(iter(response.stream(min_chunk_size=64 * 1024)))
-            scan_started = monotonic()
-            messages = inventory(reader, file_size, coord)
-            scan_seconds = monotonic() - scan_started
+            chunks = None
+            response = None
+            reader = None
+            try:
+                if self.processing_mode == "update":
+                    chunks = _ranged_chunks(store, coord.key, file_size, etag)
+                    reader = StreamReader(chunks)
+                    request_seconds = 0.0
+                else:
+                    response = obstore.get(store, coord.key)
+                    request_seconds = monotonic() - request_started
+                    if response.meta["size"] != file_size:
+                        raise SourceContractError("Source size differs from listing")
+                    reader = StreamReader(
+                        iter(response.stream(min_chunk_size=64 * 1024))
+                    )
+                scan_started = monotonic()
+                messages = inventory(reader, file_size, coord)
+                scan_seconds = monotonic() - scan_started
+            finally:
+                if reader is not None:
+                    reader.buffer = memoryview(b"")
+                    reader.chunks = iter(())
+                if chunks is not None:
+                    chunks.close()
+                response = None
         variables = {
             var.internal_attrs.grib_index_param: var for var in coord.data_vars
         }
         members = set(self.template_ds.ensemble_member.values)
+        path_suffix = " ranges" if self.processing_mode == "update" else ""
         log.info(
             f"Scanned {coord.key}: {len(messages)} fields, {reader.position} bytes"
             f" (age_at_start={age_at_start}, request={request_seconds:.3f}s,"
             f" stream_scan={scan_seconds:.3f}s,"
-            f" stream_wait={reader.stream_wait_seconds:.3f}s)"
+            f" stream_wait={reader.stream_wait_seconds:.3f}s){path_suffix}"
         )
         return [
             VirtualRef(

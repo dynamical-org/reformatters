@@ -105,10 +105,10 @@ def test_discovery_publishes_out_of_order_partial_families(
     )
     rows = {
         cf7.prefix: [
-            (cf7.key, 100, LAST_MODIFIED),
-            (cf7.prefix + "unrequested", 50, LAST_MODIFIED),
+            (cf7.key, 100, LAST_MODIFIED, None),
+            (cf7.prefix + "unrequested", 50, LAST_MODIFIED, None),
         ],
-        pf6.prefix: [(pf6.key, 200, LAST_MODIFIED)],
+        pf6.prefix: [(pf6.key, 200, LAST_MODIFIED, None)],
     }
     monkeypatch.setattr(region_job, "listing_client", object)
     monkeypatch.setattr(
@@ -118,13 +118,13 @@ def test_discovery_publishes_out_of_order_partial_families(
     assert [(id(c), size) for c, size in discovered] == [(id(cf7), 100), (id(pf6), 200)]
     rows[pf6.prefix] = []
     assert job.discover_available([pf6, cf7]) == []
-    rows[pf6.prefix] = [(pf6.key, 200, LAST_MODIFIED)]
+    rows[pf6.prefix] = [(pf6.key, 200, LAST_MODIFIED, None)]
     assert job.discover_available([pf6]) == []
-    rows[pf6.prefix] = [(pf6.key, 200, LAST_MODIFIED + pd.Timedelta("1s"))]
+    rows[pf6.prefix] = [(pf6.key, 200, LAST_MODIFIED + pd.Timedelta("1s"), None)]
     assert job.discover_available([pf6]) == [(pf6, 200)]
-    rows[cf7.prefix] = [(cf7.key, 0, LAST_MODIFIED + pd.Timedelta("1s"))]
+    rows[cf7.prefix] = [(cf7.key, 0, LAST_MODIFIED + pd.Timedelta("1s"), None)]
     assert job.discover_available([cf7]) == []
-    rows[cf7.prefix] = [(cf7.key, 100, LAST_MODIFIED + pd.Timedelta("1s"))]
+    rows[cf7.prefix] = [(cf7.key, 100, LAST_MODIFIED + pd.Timedelta("1s"), None)]
     assert job.discover_available([cf7]) == [(cf7, 100)]
 
 
@@ -145,11 +145,16 @@ def test_all_nonempty_prefixes_list_concurrently_and_deduplicate(
     client = object()
     factory = MagicMock(return_value=client)
 
-    def listed(prefix: str, client: object) -> list[tuple[str, int, datetime]]:
+    def listed(
+        prefix: str, client: object
+    ) -> list[tuple[str, int, datetime, str | None]]:
         calls.append(prefix)
         gate.wait()
         coord = next(c for c in pending if c.prefix == prefix)
-        return [(coord.key, 100, LAST_MODIFIED), (coord.key, 100, LAST_MODIFIED)]
+        return [
+            (coord.key, 100, LAST_MODIFIED, '"test"'),
+            (coord.key, 100, LAST_MODIFIED, '"test"'),
+        ]
 
     monkeypatch.setattr(region_job, "listing_client", factory)
     monkeypatch.setattr(region_job, "list_prefix_or_defer", listed)
@@ -226,7 +231,9 @@ def source_getter(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 
 def source_response(payload: bytes) -> MagicMock:
     result = MagicMock()
-    result.meta = {"size": len(payload)}
+    result.meta = {"size": len(payload), "e_tag": '"test"'}
+    result.range = (0, len(payload))
+    result.bytes.return_value = payload
     result.stream.side_effect = lambda **kwargs: chunks(payload, 31)
     return result
 
@@ -374,7 +381,7 @@ def test_common_loop_partial_file_requires_temperature(
         bad.key: build(partial_param, 0),
         healthy.key: source_bytes(cls.model, hours=12),
     }
-    source_getter.side_effect = lambda store, key: source_response(files[key])
+    source_getter.side_effect = lambda store, key, **kwargs: source_response(files[key])
     monkeypatch.setattr(
         cls,
         "discover_available",
@@ -467,10 +474,12 @@ def test_changed_last_modified_retries_same_size_file_during_update(
         bad.key: b"bad!" + repaired[4:],
         healthy.key: source_bytes(job.model, hours=12),
     }
-    source_getter.side_effect = lambda store, key: source_response(files[key])
+    source_getter.side_effect = lambda store, key, **kwargs: source_response(files[key])
     ticks = 0
 
-    def listed(prefix: str, client: object) -> list[tuple[str, int, datetime]]:
+    def listed(
+        prefix: str, client: object
+    ) -> list[tuple[str, int, datetime, str | None]]:
         nonlocal ticks
         ticks += 1
         if ticks == 2:
@@ -487,6 +496,7 @@ def test_changed_last_modified_retries_same_size_file_during_update(
                 coord.key,
                 len(files[coord.key]),
                 LAST_MODIFIED + pd.Timedelta(seconds=int(ticks >= 3 and coord is bad)),
+                '"test"',
             )
             for coord in (bad, healthy)
         ]
@@ -518,11 +528,13 @@ def test_unchanged_failures_wait_for_deadline_and_fresh_instance_retries(
     monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls, *a, **kw: now))
     ticks = 0
 
-    def listed(prefix: str, client: object) -> list[tuple[str, int, datetime]]:
+    def listed(
+        prefix: str, client: object
+    ) -> list[tuple[str, int, datetime, str | None]]:
         nonlocal ticks, now
         ticks += 1
         now += pd.Timedelta("1s")
-        return [(coord.key, 100, LAST_MODIFIED)]
+        return [(coord.key, 100, LAST_MODIFIED, '"test"')]
 
     monkeypatch.setattr(region_job, "list_prefix_or_defer", listed)
     if failure == "contract":
@@ -553,7 +565,9 @@ def test_worker_driver_version_state_does_not_leak_to_independent_runs(
     monkeypatch.setattr(
         region_job,
         "list_prefix_or_defer",
-        lambda prefix, client: [(coord.key, 100, LAST_MODIFIED) for coord in coords],
+        lambda prefix, client: [
+            (coord.key, 100, LAST_MODIFIED, '"test"') for coord in coords
+        ],
     )
     source_getter.return_value = source_response(b"bad!")
     factory = MagicMock(spec=StoreFactory)
@@ -653,6 +667,7 @@ def test_stream_request_event_preserves_optional_last_modified(
         job._last_modified[coord.key] = last_modified
     data = source_bytes("ifs")
     source_getter.return_value = source_response(data)
+    job._listed_etags[coord.key] = (len(data), '"test"')
     with caplog.at_level("INFO"):
         assert job.file_refs(coord, len(data))
     events = [

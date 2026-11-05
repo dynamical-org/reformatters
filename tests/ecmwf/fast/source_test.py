@@ -84,7 +84,7 @@ def test_literal_prefix_pagination_revisits_earlier_keys(
     monkeypatch.setattr(source, "listing_client", lambda: client)
     assert len(list(source.list_prefix(prefix))) == 1001
     assert list(source.list_prefix(prefix)) == [
-        (prefix + "earlier-than-previous", 43, modified)
+        (prefix + "earlier-than-previous", 43, modified, None)
     ]
     assert all(
         call.args == ("list_objects_v2",)
@@ -244,3 +244,15 @@ def test_transport_failure_defers_prefix_but_unexpected_errors_propagate(
     )
     with pytest.raises(SourceAccessError):
         source.list_prefix_or_defer("prefix", client)
+
+
+@pytest.mark.parametrize("etag", [None, "", 'W/"weak"', '"opaque-multipart-17"'])
+def test_listing_preserves_opaque_etag(client: MagicMock, etag: str | None) -> None:
+    modified = datetime(2026, 11, 4, tzinfo=UTC)
+    row = {"Key": "prefix-a", "Size": 42, "LastModified": modified}
+    if etag is not None:
+        row["ETag"] = etag
+    client.list_objects_v2.return_value = {"Contents": [row]}
+    assert list(source.list_prefix("prefix-", client)) == [
+        ("prefix-a", 42, modified, etag)
+    ]
