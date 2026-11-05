@@ -28,7 +28,7 @@ class EcmwfFastDataset(DynamicalDataset[EcmwfDataVar, EcmwfFastSourceFileCoord])
         default_factory=lambda: IcechunkVirtualConfig(
             containers=virtual_containers(),
             source_secret_names={SOURCE_PREFIX: SOURCE_SECRET},
-            manifest_split=manifest_append_dim_split(split_size=16, dim="init_time"),
+            manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
         )
     )
 
