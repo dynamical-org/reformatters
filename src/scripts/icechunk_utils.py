@@ -3,7 +3,7 @@
 """List, count, expire, and garbage collect icechunk repositories."""
 
 import argparse
-import datetime
+import datetime as dt
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -19,11 +19,11 @@ K8S_SECRET_NAME = "aws-open-data-icechunk-storage-options-key"  # noqa: S105
 AuthMode = Literal["secret", "env", "anonymous"]
 
 
-def parse_older_than(value: str) -> datetime.datetime:
-    dt = datetime.datetime.fromisoformat(value)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=datetime.UTC)
-    return dt
+def parse_older_than(value: str) -> dt.datetime:
+    cutoff = dt.datetime.fromisoformat(value)
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.replace(tzinfo=dt.UTC)
+    return cutoff
 
 
 def load_storage_options(k8s_secret: str) -> dict[str, Any]:
@@ -70,7 +70,7 @@ def get_repos(repo_uri: str | None, catalog_url: str) -> list[str]:
 
 def expire(
     repos: list[str],
-    older_than: datetime.datetime,
+    older_than: dt.datetime,
     force: bool,
     *,
     auth: AuthMode,
@@ -99,7 +99,7 @@ def expire(
 
 def garbage_collect(
     repos: list[str],
-    older_than: datetime.datetime,
+    older_than: dt.datetime,
     force: bool,
     *,
     auth: AuthMode,

@@ -31,7 +31,7 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["hatchling==1.32.4"]
+requires = ["hatchling==1.33.0"]
 build-backend = "hatchling.build"
 
 # Reviewed releases can have package-specific cutoffs within the five-day window.
@@ -54,7 +54,7 @@ dev = [
     "pytest~=9.1",
     "pytest-sugar~=1.0",
     "pytest-xdist~=3.8",
-    "ruff==0.16.8",
+    "ruff==0.17.3",
     "ty~=0.0.65",
     "types-boto3>=1.43.5",
     "types-requests~=2.33",

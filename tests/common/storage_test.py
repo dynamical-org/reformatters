@@ -442,7 +442,7 @@ class TestCoordinationFiles:
             }
         )
         monkeypatch.setattr(fs, "glob", listing)
-        monkeypatch.setattr(factory, "_coordination_fs", lambda: fs)
+        monkeypatch.setitem(factory.__dict__, "_coordination_fs", lambda: fs)
 
         with AioStubber(fs.s3) as service:
             expected = {
@@ -850,7 +850,7 @@ def test_clear_coordination_files_rm_path_rooted_in_internal(
     )
     mock_fs = MagicMock()
     mock_fs.ls.return_value = [f"{factory._coordination_base_path()}/my-job/results"]
-    monkeypatch.setattr(factory, "_coordination_fs", lambda: mock_fs)
+    monkeypatch.setitem(factory.__dict__, "_coordination_fs", lambda: mock_fs)
 
     factory.clear_coordination_files("my-job")
 
