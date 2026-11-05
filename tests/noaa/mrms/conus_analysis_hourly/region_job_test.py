@@ -211,7 +211,7 @@ def test_download_file_uses_fallback_products(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         pd.Timestamp, "now", classmethod(lambda *args: pd.Timestamp("2024-01-16T12:00"))
     )
-    monkeypatch.setattr(region_job, "_download_from_source", fake_download)
+    monkeypatch.setitem(region_job.__dict__, "_download_from_source", fake_download)
 
     path = region_job.download_file(
         NoaaMrmsSourceFileCoord(

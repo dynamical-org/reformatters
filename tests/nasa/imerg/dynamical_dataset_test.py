@@ -67,8 +67,8 @@ def _shrink_template(
     monkeypatch: pytest.MonkeyPatch, dataset: NasaImergAnalysisMaterializedDataset
 ) -> None:
     orig = dataset._get_template
-    monkeypatch.setattr(
-        dataset,
+    monkeypatch.setitem(
+        dataset.__dict__,
         "_get_template",
         lambda end: shrink_chunks_and_shards(orig(end)),
     )

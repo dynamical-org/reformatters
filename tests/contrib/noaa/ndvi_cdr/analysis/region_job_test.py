@@ -226,7 +226,7 @@ def test_read_usable_ndvi_avhrr_era(monkeypatch: pytest.MonkeyPatch) -> None:
         else:
             return qa_data
 
-    monkeypatch.setattr(region_job, "_read_netcdf_data", mock_read_netcdf_data)
+    monkeypatch.setitem(region_job.__dict__, "_read_netcdf_data", mock_read_netcdf_data)
 
     result = region_job._read_usable_ndvi(
         coord, template_config.data_vars[1]
@@ -292,7 +292,7 @@ def test_read_usable_ndvi_viirs_era(monkeypatch: pytest.MonkeyPatch) -> None:
         else:
             return qa_data
 
-    monkeypatch.setattr(region_job, "_read_netcdf_data", mock_read_netcdf_data)
+    monkeypatch.setitem(region_job.__dict__, "_read_netcdf_data", mock_read_netcdf_data)
 
     result = region_job._read_usable_ndvi(
         coord, template_config.data_vars[1]

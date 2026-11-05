@@ -1,0 +1,386 @@
+[
+  {
+    "model": "ifs",
+    "family": "cf",
+    "hours": 0,
+    "key": "dyn_a2_ifs-ens-cf_od_oper_fc_20261104T000000Z_20261104T000000Z_0h",
+    "bytes": 1557468,
+    "members": [
+      0
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 27.255914306640648
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 7268328,
+        "length": 1557468
+      }
+    ],
+    "init_time": "2026-11-04T00:00:00"
+  },
+  {
+    "model": "ifs",
+    "family": "cf",
+    "hours": 1,
+    "key": "dyn_a2_ifs-ens-cf_od_oper_fc_20261104T000000Z_20261104T010000Z_1h",
+    "bytes": 1557468,
+    "members": [
+      0
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 27.198266601562523
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 0,
+        "length": 1557468
+      }
+    ],
+    "init_time": "2026-11-04T00:00:00"
+  },
+  {
+    "model": "ifs",
+    "family": "pf",
+    "hours": 0,
+    "key": "dyn_a2_ifs-ens_od_enfo_pf_20261104T000000Z_20261104T000000Z_0h",
+    "bytes": 1557522,
+    "members": [
+      1
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 27.479669189453148
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 87221232,
+        "length": 1557522
+      }
+    ],
+    "init_time": "2026-11-04T00:00:00"
+  },
+  {
+    "model": "ifs",
+    "family": "pf",
+    "hours": 1,
+    "key": "dyn_a2_ifs-ens_od_enfo_pf_20261104T000000Z_20261104T010000Z_1h",
+    "bytes": 1557522,
+    "members": [
+      1
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 27.413507080078148
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 0,
+        "length": 1557522
+      }
+    ],
+    "init_time": "2026-11-04T00:00:00"
+  },
+  {
+    "model": "ifs",
+    "family": "cf",
+    "hours": 0,
+    "key": "dyn_a2_ifs-ens-cf_od_oper_fc_20261104T060000Z_20261104T060000Z_0h",
+    "bytes": 1557468,
+    "members": [
+      0
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 26.739404296875023
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 5710860,
+        "length": 1557468
+      }
+    ],
+    "init_time": "2026-11-04T06:00:00"
+  },
+  {
+    "model": "ifs",
+    "family": "cf",
+    "hours": 1,
+    "key": "dyn_a2_ifs-ens-cf_od_oper_fc_20261104T060000Z_20261104T070000Z_1h",
+    "bytes": 1557468,
+    "members": [
+      0
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 26.823449707031273
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 9863820,
+        "length": 1557468
+      }
+    ],
+    "init_time": "2026-11-04T06:00:00"
+  },
+  {
+    "model": "ifs",
+    "family": "pf",
+    "hours": 0,
+    "key": "dyn_a2_ifs-ens_od_enfo_pf_20261104T060000Z_20261104T060000Z_0h",
+    "bytes": 1557522,
+    "members": [
+      1
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 27.31061706542971
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 354608856,
+        "length": 1557522
+      }
+    ],
+    "init_time": "2026-11-04T06:00:00"
+  },
+  {
+    "model": "ifs",
+    "family": "pf",
+    "hours": 1,
+    "key": "dyn_a2_ifs-ens_od_enfo_pf_20261104T060000Z_20261104T070000Z_1h",
+    "bytes": 1557522,
+    "members": [
+      1
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 27.200677490234398
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 462577554,
+        "length": 1557522
+      }
+    ],
+    "init_time": "2026-11-04T06:00:00"
+  },
+  {
+    "model": "aifs",
+    "family": "cf",
+    "hours": 0,
+    "key": "dyn_a1_aifs-ens_ai_enfo_cf_20261104T000000Z_20261104T000000Z_0h",
+    "bytes": 615805,
+    "members": [
+      0
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 27.263772583007835
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 227,
+        "length": 615805
+      }
+    ],
+    "init_time": "2026-11-04T00:00:00"
+  },
+  {
+    "model": "aifs",
+    "family": "cf",
+    "hours": 6,
+    "key": "dyn_a1_aifs-ens_ai_enfo_cf_20261104T000000Z_20261104T060000Z_6h",
+    "bytes": 621486,
+    "members": [
+      0
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 26.739312744140648
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 885529,
+        "length": 621486
+      }
+    ],
+    "init_time": "2026-11-04T00:00:00"
+  },
+  {
+    "model": "aifs",
+    "family": "pf",
+    "hours": 0,
+    "key": "dyn_a1_aifs-ens_ai_enfo_pf_20261104T000000Z_20261104T000000Z_0h",
+    "bytes": 627926,
+    "members": [
+      1
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 27.458886718750023
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 1274640,
+        "length": 627926
+      }
+    ],
+    "init_time": "2026-11-04T00:00:00"
+  },
+  {
+    "model": "aifs",
+    "family": "pf",
+    "hours": 6,
+    "key": "dyn_a1_aifs-ens_ai_enfo_pf_20261104T000000Z_20261104T060000Z_6h",
+    "bytes": 629960,
+    "members": [
+      1
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 27.077966308593773
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 15498622,
+        "length": 629960
+      }
+    ],
+    "init_time": "2026-11-04T00:00:00"
+  },
+  {
+    "model": "aifs",
+    "family": "cf",
+    "hours": 0,
+    "key": "dyn_a1_aifs-ens_ai_enfo_cf_20261104T060000Z_20261104T060000Z_0h",
+    "bytes": 614428,
+    "members": [
+      0
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 26.73780212402346
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 227,
+        "length": 614428
+      }
+    ],
+    "init_time": "2026-11-04T06:00:00"
+  },
+  {
+    "model": "aifs",
+    "family": "cf",
+    "hours": 6,
+    "key": "dyn_a1_aifs-ens_ai_enfo_cf_20261104T060000Z_20261104T120000Z_6h",
+    "bytes": 625417,
+    "members": [
+      0
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 26.956094360351585
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 880131,
+        "length": 625417
+      }
+    ],
+    "init_time": "2026-11-04T06:00:00"
+  },
+  {
+    "model": "aifs",
+    "family": "pf",
+    "hours": 0,
+    "key": "dyn_a1_aifs-ens_ai_enfo_pf_20261104T060000Z_20261104T060000Z_0h",
+    "bytes": 628629,
+    "members": [
+      1
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 27.37250671386721
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 31083918,
+        "length": 628629
+      }
+    ],
+    "init_time": "2026-11-04T06:00:00"
+  },
+  {
+    "model": "aifs",
+    "family": "pf",
+    "hours": 6,
+    "key": "dyn_a1_aifs-ens_ai_enfo_pf_20261104T060000Z_20261104T120000Z_6h",
+    "bytes": 630762,
+    "members": [
+      1
+    ],
+    "params": [
+      "2t"
+    ],
+    "point_lat0_lon0": {
+      "2t": 26.51966247558596
+    },
+    "source_ranges": [
+      {
+        "param": "2t",
+        "offset": 74907915,
+        "length": 630762
+      }
+    ],
+    "init_time": "2026-11-04T06:00:00"
+  }
+]

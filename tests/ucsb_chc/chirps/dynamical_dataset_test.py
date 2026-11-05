@@ -55,8 +55,8 @@ def _shrink_template(
     monkeypatch: pytest.MonkeyPatch, dataset: UcsbChcChirpsAnalysisMaterializedDataset
 ) -> None:
     original_get_template = dataset._get_template
-    monkeypatch.setattr(
-        dataset,
+    monkeypatch.setitem(
+        dataset.__dict__,
         "_get_template",
         lambda end: shrink_chunks_and_shards(original_get_template(end)),
     )
@@ -393,8 +393,8 @@ def test_update_spanning_two_time_shards_extends_through_the_second(
 ) -> None:
     dataset = _preliminary_dataset()
     original_get_template = dataset._get_template
-    monkeypatch.setattr(
-        dataset,
+    monkeypatch.setitem(
+        dataset.__dict__,
         "_get_template",
         lambda end: _set_time_chunks(
             shrink_chunks_and_shards(original_get_template(end)), 2

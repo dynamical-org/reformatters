@@ -1380,6 +1380,64 @@ def test_process_virtual_rejects_refs_missing_probe_chunk(tmp_path: Path) -> Non
 
 
 @pytest.mark.parametrize("processing_mode", ["backfill", "update"])
+@pytest.mark.parametrize("failure", ["empty", "error"])
+@pytest.mark.parametrize("retain_failed_files", [False, True])
+def test_failed_file_retention_is_opt_in(
+    monkeypatch: pytest.MonkeyPatch,
+    processing_mode: Literal["backfill", "update"],
+    failure: str,
+    retain_failed_files: bool,
+) -> None:
+    monkeypatch.setattr(
+        VirtualTestRegionJob, "retain_failed_files", retain_failed_files
+    )
+    job = _make_region_job(
+        _create_template_ds(1), region=slice(0, 1), processing_mode=processing_mode
+    )
+    bad, healthy = job.source_file_coords()
+    discovered: list[list[VirtualTestSourceFileCoord]] = []
+    attempts: dict[int, int] = {}
+
+    def discover(
+        self: VirtualTestRegionJob, pending: list[VirtualTestSourceFileCoord]
+    ) -> list[tuple[VirtualTestSourceFileCoord, int]]:
+        discovered.append(list(pending))
+        return [(coord, BLOCK_NBYTES) for coord in pending]
+
+    def file_refs(
+        self: VirtualTestRegionJob,
+        coord: VirtualTestSourceFileCoord,
+        file_size: int,
+    ) -> list[VirtualRef]:
+        attempts[id(coord)] = attempts.get(id(coord), 0) + 1
+        if coord is bad and attempts[id(coord)] == 1:
+            if failure == "error":
+                raise ValueError("incomplete source file")
+            return []
+        return [
+            VirtualRef(
+                self.data_vars[0], coord.out_loc(), "file://source", 0, file_size
+            )
+        ]
+
+    monkeypatch.setattr(VirtualTestRegionJob, "discover_available", discover)
+    monkeypatch.setattr(VirtualTestRegionJob, "file_refs", file_refs)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    batches = list(VirtualRegionJob.process_virtual_refs(job, [bad, healthy]))
+
+    assert [coord for coord, _ in batches[0]] == [healthy]
+    assert attempts[id(healthy)] == 1
+    if processing_mode == "update" and retain_failed_files:
+        assert discovered == [[bad, healthy], [bad]]
+        assert [coord for coord, _ in batches[1]] == [bad]
+        assert attempts[id(bad)] == 2
+    else:
+        assert discovered == [[bad, healthy]]
+        assert len(batches) == 1
+        assert attempts[id(bad)] == 1
+
+
+@pytest.mark.parametrize("processing_mode", ["backfill", "update"])
 def test_partial_and_probe_missing_files_do_not_block_siblings(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,

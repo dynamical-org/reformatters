@@ -58,6 +58,8 @@ type PilotDataset = (
 
 
 ADOPTED_VIRTUAL_IDS = (
+    "ecmwf-ifs-ens-forecast-0-25-degree-fast",
+    "ecmwf-aifs-ens-forecast-fast",
     "noaa-gfs-forecast-virtual",
     "noaa-gfs-analysis-virtual",
     "noaa-gefs-analysis-0-25-degree-virtual",

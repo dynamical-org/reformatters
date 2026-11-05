@@ -13,6 +13,7 @@ name: 'Manual: Create Job from CronJob'
         - dwd-icon-eu-forecast-5-day-update
         - eccc-hrdps-forecast-archive-grib-files
         - eccc-hrdps-forecast-update
+        - ecmwf-aifs-ens-forecast-fast-update
         - ecmwf-aifs-ens-forecast-update
         - ecmwf-aifs-single-forecast-update
         - ecmwf-aifs-single-forecast-virtual-update
@@ -20,6 +21,7 @@ name: 'Manual: Create Job from CronJob'
         - ecmwf-ifs-ens-46-day-6-hourly-update
         - ecmwf-ifs-ens-46-day-daily-update
         - ecmwf-ifs-ens-46-day-gribs-archive-grib-files
+        - ecmwf-ifs-ens-forecast-0-25-degree-fast-update
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-update
         - google-wn2-forecast-historical-virtual-update
         - google-wn2-forecast-operational-virtual-update
