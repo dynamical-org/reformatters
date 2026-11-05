@@ -274,3 +274,36 @@ def test_empty_sweeps_emit_no_batch_or_primary_events(
         )
     assert pipeline_events(caplog) == []
     assert _snapshot_count(primary) == 2
+
+
+@pytest.mark.parametrize("event", ["batch", "primary_committed"])
+@pytest.mark.parametrize("count", [0, 10, 11, 100])
+def test_virtual_event_bounds_urls_and_preserves_total(
+    caplog: pytest.LogCaptureFixture, event: str, count: int
+) -> None:
+    urls = [f"https://example.test/{i}" for i in range(count)]
+    with caplog.at_level("INFO"):
+        virtual_region_job.log_virtual_event(event, files=urls)
+    [record] = pipeline_events(caplog)
+    assert record["files"] == urls[:10]
+    assert record["file_count"] == count
+    assert len(urls) == count
+
+
+def test_virtual_event_rounds_seconds_without_changing_file_counts(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level("INFO"):
+        virtual_region_job.log_virtual_event(
+            "discovery_sweep",
+            duration_s=1.234567,
+            commit_s=0.001876,
+            files=12,
+            received_at="2026-11-05T00:00:00.123456Z",
+        )
+    [record] = pipeline_events(caplog)
+    assert record["duration_s"] == 1.235
+    assert record["commit_s"] == 0.002
+    assert record["files"] == 12
+    assert "file_count" not in record
+    assert record["received_at"] == "2026-11-05T00:00:00.123456Z"

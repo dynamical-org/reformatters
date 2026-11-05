@@ -36,10 +36,6 @@ from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, T
 log = get_logger(__name__)
 
 
-def log_virtual_event(event: str, **fields: object) -> None:
-    log.info("Virtual pipeline %s", json.dumps({"event": event, **fields}))
-
-
 class VirtualRef(NamedTuple):
     """A single virtual chunk reference: one GRIB message -> one zarr chunk.
     `out_loc` is the output cell the message fills (e.g. {init_time, lead_time}).
@@ -832,6 +828,22 @@ class _NoRegion:
 
 
 _NO_REGION: Final = _NoRegion()
+
+
+def log_virtual_event(event: str, **fields: object) -> None:
+    """Log an event with at most ten file URLs and millisecond-precision durations."""
+    files = fields.get("files")
+    if isinstance(files, list):
+        fields["file_count"] = len(files)
+        if len(files) > 10:
+            fields["files"] = files[:10]
+    fields = {
+        name: round(value, 3)
+        if name.endswith("_s") and isinstance(value, float)
+        else value
+        for name, value in fields.items()
+    }
+    log.info("Virtual pipeline %s", json.dumps({"event": event, **fields}))
 
 
 def _chunk_key_encoder(
