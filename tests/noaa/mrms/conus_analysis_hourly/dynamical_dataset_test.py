@@ -104,8 +104,8 @@ def test_backfill_local_and_operational_update(
         dataset: NoaaMrmsConusAnalysisHourlyDataset,
     ) -> None:
         orig = dataset._get_template
-        monkeypatch.setattr(
-            dataset,
+        monkeypatch.setitem(
+            dataset.__dict__,
             "_get_template",
             lambda end: xr.DataTree.from_dict(
                 {
