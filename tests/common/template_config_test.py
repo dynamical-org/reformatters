@@ -114,7 +114,7 @@ def test_append_dim_coordinates_left_inclusive_right_exclusive(
     # up to but not including 2000-01-05
     end = pd.Timestamp("2000-01-05")
     got = example_config.append_dim_coordinates(end)
-    expected = pd.date_range("2000-01-01", end, freq="1D", inclusive="left")
+    expected = pd.date_range("2000-01-01", end, freq="24h", inclusive="left")
     pd.testing.assert_index_equal(got, expected)
 
 
