@@ -1,7 +1,8 @@
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import partial
+from time import monotonic
 from typing import ClassVar
 
 import obstore
@@ -108,17 +109,30 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
             endpoint=ENDPOINT,
         )
         with source_access():
+            last_modified = self._last_modified.get(coord.key)
+            age_at_start = (
+                f"{(datetime.now(UTC) - last_modified).total_seconds():.1f}s"
+                if last_modified is not None
+                else "unknown"
+            )
+            request_started = monotonic()
             response = obstore.get(store, coord.key)
+            request_seconds = monotonic() - request_started
             if response.meta["size"] != file_size:
                 raise SourceContractError("Source size differs from listing")
             reader = StreamReader(iter(response.stream(min_chunk_size=64 * 1024)))
+            scan_started = monotonic()
             messages = inventory(reader, file_size, coord)
+            scan_seconds = monotonic() - scan_started
         variables = {
             var.internal_attrs.grib_index_param: var for var in coord.data_vars
         }
         members = set(self.template_ds.ensemble_member.values)
         log.info(
             f"Scanned {coord.key}: {len(messages)} fields, {reader.position} bytes"
+            f" (age_at_start={age_at_start}, request={request_seconds:.3f}s,"
+            f" stream_scan={scan_seconds:.3f}s,"
+            f" stream_wait={reader.stream_wait_seconds:.3f}s)"
         )
         return [
             VirtualRef(
