@@ -5,7 +5,7 @@ import re
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from collections.abc import Iterator
+from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -61,7 +61,7 @@ def listing_prefix(url: str) -> str:
 
 
 @contextmanager
-def atomic_file(path: Path) -> Iterator[IO[bytes]]:
+def atomic_file(path: Path) -> Generator[IO[bytes]]:
     """Yield a private file that replaces path only once it is closed."""
     with tempfile.NamedTemporaryFile(
         dir=path.parent, prefix=path.name, suffix=".tmp", delete=False

@@ -1,7 +1,7 @@
 import math
 import os
 import signal
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from types import FrameType
@@ -92,7 +92,7 @@ def monitor_cron(
     monitor_name: str | None = None,
     schedule: str | None = None,
     checkin_margin: int = 10,
-) -> Iterator[None]:
+) -> Generator[None]:
     """Send Sentry cron check-ins for `cron_job` around the wrapped block, so a
     missed or overrunning run alerts, not just a raised exception."""
     if not Config.is_sentry_enabled:

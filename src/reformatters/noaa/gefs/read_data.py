@@ -147,7 +147,7 @@ def _reproject_bilinear_longitude_wrap(
     # falls strictly inside the source extent and interpolates across the antimeridian.
     assert abs(raw.shape[1] * src_transform.a - 360) < 1e-6, "Source must span the full globe"  # fmt: skip
     wrapped = np.concatenate([raw[:, -1:], raw, raw[:, :1]], axis=1)
-    wrapped_transform = src_transform * rasterio.transform.Affine.translation(-1, 0)
+    wrapped_transform = src_transform @ rasterio.transform.Affine.translation(-1, 0)
     result: Array2D[np.float32]
     result, _ = rasterio.warp.reproject(
         wrapped,

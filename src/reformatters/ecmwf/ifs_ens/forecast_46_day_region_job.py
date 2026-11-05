@@ -12,7 +12,6 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import ClassVar
 
 import numpy as np
 import pandas as pd
@@ -134,7 +133,7 @@ class EcmwfIfsEns46DayRegionJob(
 ):
     # A pressure level variable's region array is ten times a surface variable's, so
     # one variable per job keeps every job's shared memory buffer to that one array.
-    max_vars_per_job: ClassVar[int] = 1
+    max_vars_per_job = 1
 
     @classmethod
     def source_file_var_groups(

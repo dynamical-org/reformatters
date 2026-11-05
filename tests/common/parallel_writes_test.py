@@ -10,7 +10,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 import dask
 import dask.array
@@ -85,7 +85,7 @@ class ParallelSourceFileCoord(SourceFileCoord):
 class ParallelRegionJob(
     MaterializedRegionJob[ParallelDataVar, ParallelSourceFileCoord]
 ):
-    max_vars_per_job: ClassVar[int] = 2
+    max_vars_per_job = 2
 
     def generate_source_file_coords(
         self,

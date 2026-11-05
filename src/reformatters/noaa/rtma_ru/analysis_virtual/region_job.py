@@ -1,5 +1,3 @@
-from typing import ClassVar
-
 from reformatters.noaa.rtma.analysis_virtual.region_job import (
     SOURCE_PREFIX,
     NoaaRtmaAnalysisVirtualRegionJob,
@@ -13,6 +11,4 @@ class NoaaRtmaRuAnalysisVirtualSourceFileCoord(NoaaRtmaAnalysisVirtualSourceFile
 
 
 class NoaaRtmaRuAnalysisVirtualRegionJob(NoaaRtmaAnalysisVirtualRegionJob):
-    source_file_coord_class: ClassVar[
-        type[NoaaRtmaRuAnalysisVirtualSourceFileCoord]
-    ] = NoaaRtmaRuAnalysisVirtualSourceFileCoord
+    source_file_coord_class = NoaaRtmaRuAnalysisVirtualSourceFileCoord
