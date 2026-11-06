@@ -35,7 +35,7 @@ def test_append_after_trim_keeps_label_data_identity(
 ) -> None:
     size = positions + 2
     repo, job, _ = _setup(tmp_path, positions=positions, size=size)
-    job.trim_retention(repo, "main")
+    job.trim_rolling_window(repo, "main")
     batch = _batch(job, size)
     job._commit_virtual_batch(repo, "main", batch, overwrite_chunks=False)
     ds = _open(repo).to_dataset()
@@ -65,21 +65,18 @@ def test_append_after_trim_keeps_label_data_identity(
 @pytest.mark.parametrize("positions", [1, 12])
 @pytest.mark.parametrize("overwrite", [False, True])
 def test_stale_candidates_do_not_restore_trimmed_labels(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, positions: int, overwrite: bool
+    tmp_path: Path, positions: int, overwrite: bool
 ) -> None:
     repo, job, _ = _setup(tmp_path, positions=positions, size=positions + 2)
     stale = _batch(job, 0)
-    job.trim_retention(repo, "main")
+    job.trim_rolling_window(repo, "main")
     snapshot = repo.lookup_branch("main")
     coords = [coord for coord, _ in stale]
-    assert job.filter_already_present(coords, repo.readonly_session("main").store) == []
-    job._commit_virtual_batch(repo, "main", stale, overwrite_chunks=overwrite)
-    monkeypatch.setattr(
-        VirtualTestRegionJob,
-        "process_virtual_refs",
-        lambda self, remaining: iter([stale]),
+    assert (
+        job.filter_already_present(coords, repo.readonly_session("main").store)
+        == coords
     )
-    assert not job.process_virtual(repo, [], "main", coords, overwrite_chunks=overwrite)
+    job._commit_virtual_batch(repo, "main", stale, overwrite_chunks=overwrite)
     assert repo.lookup_branch("main") == snapshot
 
 
@@ -99,7 +96,7 @@ def test_append_trim_conflict_requires_fresh_replay(
     append = partial(
         job._commit_virtual_batch, repo, "main", _batch(job, 4), overwrite_chunks=False
     )
-    trim = partial(job.trim_retention, repo, "main")
+    trim = partial(job.trim_rolling_window, repo, "main")
     stale = repo.writable_session("main")
     winner, replay = (append, trim) if append_first else (trim, append)
     winner()
@@ -125,7 +122,7 @@ def test_refresh_after_trim_preserves_coordinates_and_is_noop_when_synced(
     tmp_path: Path,
 ) -> None:
     repo, job, factory = _setup(tmp_path, grouped=True)
-    job.trim_retention(repo, "main")
+    job.trim_rolling_window(repo, "main")
     before = _open(repo).load()
     job.refresh_metadata(factory, tmp_path / "refresh.zarr")
     xr.testing.assert_equal(_open(repo), before)

@@ -1316,7 +1316,7 @@ def test_virtual_loop_dispatches_before_replica_then_primary_trim(
         lambda *args, **kwargs: events.append("files") or True,
     )
     trim = Mock(side_effect=lambda repo, branch: events.append(f"trim-{repo}"))
-    monkeypatch.setattr(VirtualTestRegionJob, "trim_retention", trim)
+    monkeypatch.setattr(VirtualTestRegionJob, "trim_rolling_window", trim)
     trigger = Mock()
     trigger.dispatch.side_effect = lambda unit: events.append("completion")
     monkeypatch.setattr(VirtualTestDataset, "materialized_update_triggers", (trigger,))

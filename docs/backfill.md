@@ -79,6 +79,4 @@ For a backfill targeting `main`, an operational update that publishes mid-backfi
 
 ## Rolling virtual stores
 
-A dataset with `rolling_positions` supports backfill only into new empty stores. Create a new version with the setting and compatible writer together; older writers continue using the previous version's namespace. Workers use the standard temporary branch protocol, without trimming. The first operational update trims the published store after its polling loop completes, so the backfilled store can initially exceed the configured position count.
-
-Repair backfills into populated rolling stores are refused. A retry after backfill publication is also refused without changing the published data; inspect that result and continue with operational updates rather than rerunning the backfill. The operational retry window can fill recent gaps; older gaps remain until they roll off or a new store is built. See [rolling retention](virtual_datasets.md#rolling-retention).
+Rolling datasets accept backfills only into empty stores; the first operational update reduces them to the configured count. Repairs and retries after publication are refused. Gaps outside the operational repair window remain until they roll off or the store is rebuilt.

@@ -111,7 +111,7 @@ def test_generic_trim_preserves_labels_virtual_refs_native_data_and_coordinates(
     source = tmp_path / "messages.bin"
     payload = source.read_bytes()
     source.unlink()
-    job.trim_retention(repo, "main")
+    job.trim_rolling_window(repo, "main")
     source.write_bytes(payload)
     xr.testing.assert_equal(_open(repo), before.isel(init_time=slice(2, None)))
     session = repo.readonly_session("main")
@@ -122,5 +122,5 @@ def test_generic_trim_preserves_labels_virtual_refs_native_data_and_coordinates(
                 == icechunk.ChunkType.virtual
             )
     snapshot = repo.lookup_branch("main")
-    job.trim_retention(repo, "main")
+    job.trim_rolling_window(repo, "main")
     assert repo.lookup_branch("main") == snapshot

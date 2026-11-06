@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import ClassVar, assert_never
 
-from pydantic import Field
+from pydantic import Field, PositiveInt
 
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -23,6 +23,7 @@ from .template_config import EcmwfFastTemplateConfig
 class EcmwfFastDataset(DynamicalDataset[EcmwfDataVar, EcmwfFastSourceFileCoord]):
     template_config: EcmwfFastTemplateConfig
     region_job_class: type[EcmwfFastRegionJob]
+    rolling_positions: PositiveInt | None = 12
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=2, seconds=30)
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda: IcechunkVirtualConfig(

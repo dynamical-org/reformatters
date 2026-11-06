@@ -100,15 +100,9 @@ Per-tick commit latency is dominated by the manifest read-modify-write of every 
 
 ## Rolling retention
 
-Set `DynamicalDataset.rolling_positions` to a positive integer to keep a rolling window of append-dimension positions. The default `None` keeps the archive. Rolling datasets require a regular timestamp append grid, unit append-dimension data chunks, and no data sharding. Each source file and all its references must describe the same append timestamp (a pandas Timestamp or timestamp string). Enable the setting on a new store version together with the writer that understands shifted coordinates.
+`rolling_positions=N` keeps the newest N append-dimension positions after each update. Ingestion or interrupted cleanup can temporarily leave more; this is a count, not a time limit. Before enabling it on an existing store, suspend scheduled updates and wait for all old writers to exit, then deploy the new writer and resume updates. After the first trim, do not disable `rolling_positions` or deploy a writer without rolling support: its metadata refresh can relabel the retained data.
 
-Updates publish files normally. After the polling loop finishes and dispatches completion triggers, each store is trimmed in a separate Icechunk commit if its committed append dimension exceeds the configured count. The transaction shifts references, resizes arrays, and slices dependent coordinates together. The first committed append coordinate is the origin for every write attempt; labels below it are ignored. Rolling writes retry from a fresh session after conflicts rather than automatically rebasing old chunk indices across a trim.
-
-The count is a post-update target: a new position normally leaves one extra position visible throughout ingestion. Interrupted updates or failed cleanup can leave more excess until a later successful cleanup. Positions remain during source outages; the setting is not a time limit. Shifting references traverses manifests, so cleanup can take substantially longer than an ordinary file commit. Keeping it outside the polling loop avoids delaying that loop's subsequent files; overlapping writers can still conflict and retry. Cleanup after a polling deadline shares the remaining pod time with validation. Repeated conflicts can exhaust retries or the pod deadline, leaving excess positions and preventing that update from reaching validation.
-
-Backfills are supported only into new empty stores and do not trim their temporary branch. The first operational update performs cleanup. Repair backfills into populated rolling stores are refused; gaps outside the operational retry window remain until they roll off or the store is rebuilt, and completeness validation continues reporting them. See [backfill](backfill.md#rolling-virtual-stores).
-
-Completeness checks cover the committed rolling window; decode checks use the configured sampling policy. Replica coordinate differences still fail validation, including transient differences during separate cleanup commits. Trimming affects the current snapshot; it does not expire Icechunk history or delete source objects.
+[Backfills](backfill.md#rolling-virtual-stores) require an empty store. Unrepairable gaps alert until they roll off. Trimming does not delete source files or Icechunk history.
 
 ## Backfill: parallel on a pre-sized temp branch
 

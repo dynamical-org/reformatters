@@ -236,11 +236,7 @@ class VirtualRegionJob(
         would trigger a download + decode.
         """
         if self.rolling_positions is not None:
-            mapper = self.for_store(store)
-            labels = mapper.template_ds.to_dataset().get_index(self.append_dim)
-            return mapper.filter_already_present(
-                [c for c in candidates if c.out_loc()[self.append_dim] in labels], store
-            )
+            return self.for_store(store).filter_already_present(candidates, store)
         group = zarr.open_group(store, mode="r")
         rep_vars = [self.representative_var(coord) for coord in candidates]
         indices = self._resolve_chunk_keys(
@@ -508,15 +504,10 @@ class VirtualRegionJob(
         finally:
             if (close := getattr(ref_iterator, "close", None)) is not None:
                 close()
-        eligible = list(remaining)
-        if self.rolling_positions is not None:
-            mapper = self.for_store(primary_repo.readonly_session(branch).store)
-            labels = mapper.template_ds.to_dataset().get_index(self.append_dim)
-            eligible = [c for c in remaining if c.out_loc()[self.append_dim] in labels]
         return (
             self.processing_mode == "update"
-            and bool(eligible)
-            and all(id(coord) in processed for coord in eligible)
+            and bool(remaining)
+            and all(id(coord) in processed for coord in remaining)
             and pd.Timestamp.now() < self.poll_deadline
         )
 
@@ -604,7 +595,7 @@ class VirtualRegionJob(
             f"prepare={prepare_s:.1f}s resized={resized}"
         )
 
-    def trim_retention(self, repo: icechunk.Repository, branch: str) -> None:
+    def trim_rolling_window(self, repo: icechunk.Repository, branch: str) -> None:
         assert self.rolling_positions is not None
         assert self.rolling_positions > 0
         session = repo.writable_session(branch)
@@ -644,7 +635,7 @@ class VirtualRegionJob(
             if values is not None:
                 array[:] = values
         storage.commit_if_icechunk(
-            "Trim virtual retention", session.store, [], allow_rebase=False
+            "Rolling retention window trim", session.store, [], allow_rebase=False
         )
 
     def _assert_probe_chunk_covered(

@@ -21,6 +21,11 @@ def test_registered_ids_and_separate_source_output_access() -> None:
         "ecmwf-aifs-ens-forecast-fast",
     }
     for dataset in DATASETS:
+        assert dataset.rolling_positions == 12
+        assert (
+            "12 forecast initializations"
+            in dataset.template_config.dataset_attributes.time_domain
+        )
         assert dataset.primary_storage_config.format == DatasetFormat.ICECHUNK
         assert dataset.primary_storage_config.k8s_secret_name == OUTPUT_SECRET
         assert dataset.icechunk_virtual_config.source_secret_names == {

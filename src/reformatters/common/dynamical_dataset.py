@@ -837,7 +837,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         if self.rolling_positions is not None:
             for _, repo in self.store_factory.icechunk_repos(sort="primary-last"):
                 retry(
-                    partial(job.trim_retention, repo, "main"),
+                    partial(job.trim_rolling_window, repo, "main"),
                     max_attempts=5,
                     retryable_exceptions=(icechunk.ConflictError,),
                 )

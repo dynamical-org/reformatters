@@ -17,7 +17,7 @@ def test_completeness_checks_retained_lower_bound_beyond_hot_region(
     tmp_path: Path, oldest_missing: bool
 ) -> None:
     repo, job, _ = _setup(tmp_path)
-    job.trim_retention(repo, "main")
+    job.trim_rolling_window(repo, "main")
     if oldest_missing:
         session = repo.writable_session("main")
         zarr.core.sync.sync(session.store.delete("temperature_2m/c/0/0/0/0"))
