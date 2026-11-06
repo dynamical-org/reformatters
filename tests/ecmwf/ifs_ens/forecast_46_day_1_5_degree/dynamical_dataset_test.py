@@ -52,7 +52,9 @@ def test_daily_identity_matches_registry_template_and_storage() -> None:
     )
     for node in template.subtree:
         assert node.attrs["dataset_id"] == dataset_id
-        assert node.attrs["name"] == "ECMWF IFS ENS forecast, 46 day, daily, 1.5 degree"
+        assert (
+            node.attrs["name"] == "ECMWF IFS SUBS forecast, 46 day, daily, 1.5 degree"
+        )
         np.testing.assert_array_equal(
             node["lead_time"], pd.timedelta_range("0h", "1104h", freq="24h")
         )

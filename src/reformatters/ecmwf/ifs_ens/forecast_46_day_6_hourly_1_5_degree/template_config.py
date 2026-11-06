@@ -55,9 +55,9 @@ class EcmwfIfsEnsForecast46Day6Hourly15DegreeTemplateConfig(
         return DatasetAttributes(
             dataset_id="ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree",
             dataset_version="0.1.0",
-            name="ECMWF IFS ENS forecast, 46 day, 6 hourly, 1.5 degree",
-            description="Sub-seasonal-range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
-            attribution="ECMWF IFS ENS sub-seasonal-range forecast data processed by dynamical.org from the ECMWF Data Store.",
+            name="ECMWF IFS SUBS forecast, 46 day, 6 hourly, 1.5 degree",
+            description="Sub-seasonal-range ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS). SUBS is the sub-seasonal configuration of the IFS ensemble.",
+            attribution="ECMWF IFS SUBS sub-seasonal-range forecast data processed by dynamical.org from the ECMWF Data Store.",
             license="CC-BY-4.0",
             spatial_domain="Global",
             spatial_resolution="1.5 degrees (~165km)",

@@ -78,7 +78,7 @@ def test_dataset_metadata_identifies_the_six_hourly_product() -> None:
     attrs = config.dataset_attributes
 
     assert attrs.dataset_id == ("ecmwf-ifs-ens-forecast-46-day-6-hourly-1-5-degree")
-    assert attrs.name == "ECMWF IFS ENS forecast, 46 day, 6 hourly, 1.5 degree"
+    assert attrs.name == "ECMWF IFS SUBS forecast, 46 day, 6 hourly, 1.5 degree"
     assert attrs.forecast_resolution == "6 hourly"
     assert attrs.dataset_version == "0.1.0"
     assert config.append_dim_start == pd.Timestamp("2026-01-01T00:00")
