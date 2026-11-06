@@ -85,12 +85,11 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
             for hours in lead_hours(self.model, init.hour)
             if (lead := pd.Timedelta(hours=hours)) in leads
             for family in ("cf", "pf")
-            if (
+            if members.intersection(
                 family_members := tuple(
                     m for m in source_members if (m == 0) == (family == "cf")
                 )
             )
-            and members.intersection(family_members)
         ]
 
     def discover_available(

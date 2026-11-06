@@ -41,7 +41,7 @@ _GRIB2_PARAMS: dict[tuple[int, int, int, int, float], tuple[str, str]] = {
     (0, 1, 52, 1, 0): ("tp", "kg m-2"),
     (0, 4, 7, 1, 0): ("ssrd", "J m-2"),
 }
-_EQUIVALENT_UNITS = (frozenset({"kg m-2", "mm"}), frozenset({"J m-2", "W s m-2"}))
+_EQUIVALENT_UNITS = (frozenset({"kg m-2", "mm"}),)
 _TIME_SECONDS = {0: 60, 1: 3600, 2: 86400, 10: 10800, 11: 21600, 12: 43200}
 _GRIB1_TIME_SECONDS = _TIME_SECONDS | {13: 900, 14: 1800, 254: 1}
 _GRIB2_TIME_SECONDS = _TIME_SECONDS | {13: 1}
@@ -63,8 +63,8 @@ def _source_units(
     param: str, units: str, coord: EcmwfFastSourceFileCoord, deviations: set[str]
 ) -> None:
     _admit(param in coord.source_params, f"unconfigured parameter={param}")
-    expected = coord.source_units[param]
-    if units == expected:
+    expected = coord.source_unit(param)
+    if expected is None or units == expected:
         return
     _admit(
         any({units, expected} <= group for group in _EQUIVALENT_UNITS),
@@ -456,14 +456,8 @@ def _grib2_product(
             lead == coord.lead_time.total_seconds(),
             "GRIB2 accumulation length differs from filename",
         )
-        if _uint(product[base + 8 : base + 12]) or _uint(stat[8:12]):
-            deviations.add(
-                f"GRIB2 accumulation missing inputs={_uint(product[base + 8 : base + 12])}, increment unit={stat[7]}, value={_uint(stat[8:12])}"
-            )
         if stat[2] != 1:
             deviations.add(f"GRIB2 accumulation time unit={stat[2]}")
-        if _uint(stat[8:12]):
-            _time_seconds(_uint(stat[8:12]), stat[7], 2)
     else:
         _require_source(len(product) == base, "Unsupported GRIB2 product section")
         _admit(param not in ("tp", "ssrd"), "changed GRIB2 accumulation meaning")
@@ -520,17 +514,15 @@ def inventory(
         if member not in coord.members:
             skipped[f"unconfigured member={member}"] += 1
             continue
-        _require_source(identity not in seen, f"Duplicate GRIB field {identity}")
+        if identity in seen:
+            skipped[f"Duplicate GRIB field {identity}"] += 1
+            continue
         seen.add(identity)
         messages.append(Message(param, member, offset, length))
     reader.assert_eof()
     expected = {
         (param, member) for param in coord.source_params for member in coord.members
     }
-    _require_source(
-        seen <= expected,
-        f"Unexpected GRIB fields: {sorted(seen - expected)}",
-    )
     if missing := expected - seen:
         deviations.add(f"missing fields={sorted(missing)}")
     if dropped:

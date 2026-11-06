@@ -45,6 +45,7 @@ def test_filename_supplies_long_lead_and_family_member(
         init_time=pd.Timestamp("2026-11-03"),
         lead_time=pd.Timedelta("360h"),
         data_vars=[],
+        source_members=(0,) if family == "cf" else tuple(range(1, 51)),
     )
     assert coord.key.endswith("20261103T000000Z_20261118T000000Z_360h")
     assert coord.get_url() == source.SOURCE_PREFIX + coord.key

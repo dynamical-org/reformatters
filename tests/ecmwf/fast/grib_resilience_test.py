@@ -20,7 +20,7 @@ from reformatters.ecmwf.fast.grib import (
 )
 from reformatters.ecmwf.fast.source import EcmwfFastSourceFileCoord
 from reformatters.ecmwf.fast.template_config import EcmwfFastTemplateConfig, FastModel
-from tests.ecmwf.fast.grib_test import chunks, coord, grib1, grib2, signed
+from tests.ecmwf.fast.grib_test import PARAMS, chunks, coord, grib1, grib2, signed
 
 PRODUCT2 = 16 + 21 + 72
 
@@ -125,39 +125,57 @@ def test_cross_edition_precipitation_uses_configured_source_scale(
     )
 
 
-@pytest.mark.parametrize(
-    ("model", "param", "units"), [("aifs", "tp", "mm"), ("ifs", "ssrd", "W s m-2")]
-)
 def test_equivalent_source_unit_spelling_is_kept_and_reported(
-    model: FastModel,
-    param: str,
-    units: str,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     variable = next(
         v
-        for v in EcmwfFastTemplateConfig(model=model).data_vars
-        if v.internal_attrs.grib_index_param == param
+        for v in EcmwfFastTemplateConfig(model="aifs").data_vars
+        if v.internal_attrs.grib_index_param == "tp"
     )
     variable = replace(
-        variable, internal_attrs=replace(variable.internal_attrs, source_units=units)
+        variable, internal_attrs=replace(variable.internal_attrs, source_units="mm")
     )
-    source = coord(model).model_copy(
-        update={"data_vars": [variable], "source_params": frozenset({param})}
+    source = coord("aifs").model_copy(
+        update={"data_vars": [variable], "source_params": frozenset({"tp"})}
     )
-    data = (grib1 if model == "ifs" else grib2)(param, 0)
-    assert read(data, source) == [Message(param, 0, 0, len(data))]
+    data = grib2("tp", 0)
+    assert read(data, source) == [Message("tp", 0, 0, len(data))]
     assert len(caplog.records) == 1
     assert "equivalent source units=" in caplog.text
+
+
+def test_unselected_parameters_still_count_in_full_source_inventory(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    source = coord("aifs")
+    source = source.model_copy(update={"data_vars": source.data_vars[:1]})
+    data = b"".join(
+        grib1(param, 0) if param == "tp" else grib2(param, 0)
+        for param in sorted(PARAMS)
+    )
+    assert {message.param for message in read(data, source)} == PARAMS
+    assert not caplog.records
+
+
+def test_selected_parameter_requires_configured_source_units() -> None:
+    source = coord("ifs")
+    variable = source.data_vars[0]
+    variable = replace(
+        variable, internal_attrs=replace(variable.internal_attrs, source_units=None)
+    )
+    source = source.model_copy(update={"data_vars": [variable]})
+    with pytest.raises(AssertionError, match="Missing configured source units for 2t"):
+        read(grib1("2t", 0), source)
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
 def test_all_native_identity_units_match_config_without_equivalence_entries(
     model: FastModel,
 ) -> None:
-    expected = coord(model).source_units
+    source = coord(model)
     mapping = grib._GRIB1_PARAMS if model == "ifs" else grib._GRIB2_PARAMS
-    assert all(expected[param] == units for param, units in mapping.values())
+    assert all(source.source_unit(param) == units for param, units in mapping.values())
     assert not any("K" in group for group in grib._EQUIVALENT_UNITS)
     for build in (grib1, grib2):
         for param in ("2t", "10u", "10v", "100u", "100v", "ssrd"):

@@ -12,7 +12,7 @@ from reformatters.ecmwf.fast.grib import (
     inventory,
 )
 from reformatters.ecmwf.fast.source import EcmwfFastSourceFileCoord, Family
-from reformatters.ecmwf.fast.template_config import FastModel
+from reformatters.ecmwf.fast.template_config import EcmwfFastTemplateConfig, FastModel
 
 PARAMS = frozenset({"2t", "10u", "10v", "100u", "100v", "tp", "ssrd"})
 
@@ -27,7 +27,8 @@ def coord(
         family=family,
         init_time=INIT,
         lead_time=pd.Timedelta(hours=hours),
-        data_vars=[],
+        data_vars=EcmwfFastTemplateConfig(model=model).data_vars,
+        source_members=(0,) if family == "cf" else tuple(range(1, 51)),
     )
 
 
@@ -411,19 +412,37 @@ def test_unknown_message_framing_and_truncation_remain_hard(
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
-def test_dropped_messages_do_not_relax_kept_member_and_duplicate_checks(
+def test_dropped_messages_do_not_relax_kept_member_checks(
     model: FastModel,
 ) -> None:
     build = grib1 if model == "ifs" else grib2
     unknown = unknown_message(model)
     wrong_member = bytearray(build("2t", 0))
     wrong_member[8 + 49 if model == "ifs" else 16 + 21 + 72 + 35] = 1
-    for data, error in (
-        (unknown + bytes(wrong_member), "Unexpected member"),
-        (build("2t", 0) + unknown + build("2t", 0), "Duplicate GRIB field"),
-    ):
-        with pytest.raises(SourceContractError, match=error):
-            inventory(StreamReader(chunks(data, 31)), len(data), coord(model))
+    data = unknown + bytes(wrong_member)
+    with pytest.raises(SourceContractError, match="Unexpected member"):
+        inventory(StreamReader(chunks(data, 31)), len(data), coord(model))
+
+
+@pytest.mark.parametrize("model", ["ifs", "aifs"])
+@pytest.mark.parametrize(("family", "member"), [("cf", 0), ("pf", 1)])
+def test_duplicate_logs_error_and_keeps_first_offset_and_valid_siblings(
+    model: FastModel, family: Family, member: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    build = grib1 if model == "ifs" else grib2
+    unknown = unknown_message(model)
+    first, sibling = build("2t", member), build("10u", member)
+    duplicate = build("2t", member)
+    data = unknown + first + duplicate + sibling
+    assert inventory(
+        StreamReader(chunks(data, 31)), len(data), coord(model, family)
+    ) == [
+        grib.Message("2t", member, len(unknown), len(first)),
+        grib.Message("10u", member, len(unknown + first + duplicate), len(sibling)),
+    ]
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelname == "ERROR"
+    assert "Duplicate GRIB field" in caplog.text
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
@@ -447,15 +466,14 @@ def test_complete_shuffled_inventory_and_chunk_boundaries(
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
-def test_truncated_duplicate_and_wrong_family_fail_closed(model: FastModel) -> None:
+def test_truncated_and_wrong_family_fail_closed(model: FastModel) -> None:
     data = source_bytes(model)
     build = grib1 if model == "ifs" else grib2
-    for damaged in (
-        data + build("2t", 0),
-        b"".join(build(p, 1) for p in PARAMS),
-    ):
-        with pytest.raises(SourceContractError):
-            inventory(StreamReader(chunks(damaged, 31)), len(damaged), coord(model))
+    wrong_family = b"".join(build(p, 1) for p in PARAMS)
+    with pytest.raises(SourceContractError):
+        inventory(
+            StreamReader(chunks(wrong_family, 31)), len(wrong_family), coord(model)
+        )
     with pytest.raises(InterruptedGribStreamError):
         inventory(StreamReader(chunks(data[:-1], 31)), len(data), coord(model))
     with pytest.raises(SourceContractError, match="trailer"):

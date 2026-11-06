@@ -313,7 +313,7 @@ def test_common_loop_propagates_auth_and_programming_failures_without_retry(
     assert source_getter.call_count == 1
 
 
-@pytest.mark.parametrize("damage", ["size", "magic", "date", "structure", "duplicate"])
+@pytest.mark.parametrize("damage", ["size", "magic", "date", "structure"])
 def test_source_contract_failures_are_logged_and_skipped_without_retry(
     tmp_path: Path,
     source_getter: MagicMock,
@@ -333,13 +333,43 @@ def test_source_contract_failures_are_logged_and_skipped_without_retry(
         data[8 + 13] = 13
     elif damage == "structure":
         data[8 + 7] = 0
-    elif damage == "duplicate":
-        data.extend(grib1("2t", 0))
     source_getter.return_value = source_response(bytes(data))
     assert job._file_refs_or_skip(coord, len(data) + (damage == "size")) == []
     assert source_getter.call_count == 1
     assert any(
         record.exc_info and isinstance(record.exc_info[1], SourceContractError)
+        for record in caplog.records
+    )
+
+
+@pytest.mark.parametrize(
+    "cls",
+    [EcmwfIfsEnsForecast025DegreeFastRegionJob, EcmwfAifsEnsForecastFastRegionJob],
+)
+def test_duplicate_keeps_first_ref_and_valid_sibling_without_retry(
+    tmp_path: Path,
+    source_getter: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+    cls: type[EcmwfFastRegionJob],
+) -> None:
+    job = make_job(tmp_path, cls)
+    coord = next(
+        c
+        for c in job.source_file_coords()
+        if c.family == "cf" and c.lead_time == pd.Timedelta("6h")
+    )
+    build = grib1 if cls.model == "ifs" else grib2
+    first, duplicate, sibling = build("2t", 0), build("2t", 0), build("10u", 0)
+    data = first + duplicate + sibling
+    source_getter.return_value = source_response(data)
+    refs = job.file_refs(coord, len(data))
+    assert [(ref.data_var.name, ref.offset, ref.length) for ref in refs] == [
+        ("temperature_2m", 0, len(first)),
+        ("wind_u_10m", len(first + duplicate), len(sibling)),
+    ]
+    assert source_getter.call_count == 1
+    assert any(
+        record.levelname == "ERROR" and "Duplicate GRIB field" in record.message
         for record in caplog.records
     )
 
@@ -702,4 +732,5 @@ def test_subset_backfill_uses_full_template_member_and_declared_parameter_scope(
     assert source.members == (1, 50)
     assert source.source_params == PARAMS
     assert len(source.data_vars) == 1
-    assert source.source_units["2t"] == "K"
+    assert source.source_unit("2t") is None
+    assert source.source_unit("10u") == "m s-1"
