@@ -87,8 +87,7 @@ def test_structural_holes_and_family_boundaries(
     assert {c.out_loc()["ensemble_member"] for c in coords} == {0, 1}
     assert all(c.source_params == PARAMS for c in coords)
     assert all(
-        list(c.members) == ([0] if c.family == "cf" else list(range(1, 51)))
-        for c in coords
+        list(c.members) == ([0] if c.family == "cf" else [1, 50]) for c in coords
     )
 
 
@@ -683,3 +682,24 @@ def test_stream_request_event_preserves_optional_last_modified(
         None if last_modified is None else last_modified.isoformat()
     )
     assert datetime.fromisoformat(events[0]["requested_at"]).tzinfo is not None
+
+
+@pytest.mark.parametrize(
+    "cls",
+    [EcmwfIfsEnsForecast025DegreeFastRegionJob, EcmwfAifsEnsForecastFastRegionJob],
+)
+def test_subset_backfill_uses_full_template_member_and_declared_parameter_scope(
+    tmp_path: Path, cls: type[EcmwfFastRegionJob]
+) -> None:
+    job = make_job(tmp_path, cls)
+    subset = job.template_ds.to_dataset().sel(
+        ensemble_member=[50], lead_time=pd.to_timedelta([6], unit="h")
+    )
+    coords = job.generate_source_file_coords(subset, job.data_vars[1:2])
+    assert len(coords) == 1
+    source = coords[0]
+    assert source.family == "pf"
+    assert source.members == (1, 50)
+    assert source.source_params == PARAMS
+    assert len(source.data_vars) == 1
+    assert source.source_units["2t"] == "K"

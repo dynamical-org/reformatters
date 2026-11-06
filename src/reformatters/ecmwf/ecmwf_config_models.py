@@ -65,6 +65,7 @@ class EcmwfInternalAttrs(BaseInternalAttrs):
     grib_description: str  # description of the level, not the variable
 
     scale_factor: float | None = None
+    source_units: str | None = None
 
     # Scale factors applied only to source files whose init_time falls in each entry's
     # [start, end) range, before deaccumulation. Use this for sources that changed encoding

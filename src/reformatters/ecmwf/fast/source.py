@@ -22,7 +22,7 @@ from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar
 
-from .template_config import FastModel
+from .template_config import EcmwfFastTemplateConfig, FastModel
 
 SOURCE_PREFIX = "s3://dynamical-ecmwf/"
 SOURCE_BUCKET = "dynamical-ecmwf"
@@ -38,6 +38,25 @@ _LIST_TRANSPORT_ERRORS = (
 )
 
 type Family = Literal["cf", "pf"]
+
+
+@cache
+def _default_members(model: FastModel, family: Family) -> tuple[int, ...]:
+    return tuple(
+        int(member)
+        for member in EcmwfFastTemplateConfig(model=model).dimension_coordinates()[
+            "ensemble_member"
+        ]
+        if (member == 0) == (family == "cf")
+    )
+
+
+@cache
+def _default_source_units(model: FastModel) -> dict[str, str | None]:
+    return {
+        var.internal_attrs.grib_index_param: var.internal_attrs.source_units
+        for var in EcmwfFastTemplateConfig(model=model).data_vars
+    }
 
 
 class ListingClient(Protocol):
@@ -87,7 +106,20 @@ class EcmwfFastSourceFileCoord(InitLeadSourceFileCoord):
     def members(self) -> Sequence[int]:
         if self.source_members is not None:
             return self.source_members
-        return range(1) if self.family == "cf" else range(1, 51)
+        return _default_members(self.model, self.family)
+
+    @property
+    def source_units(self) -> dict[str, str]:
+        configured = _default_source_units(self.model) | {
+            var.internal_attrs.grib_index_param: var.internal_attrs.source_units
+            for var in self.data_vars
+        }
+        result = {}
+        for param in self.source_params:
+            units = configured[param]
+            assert units is not None, f"Missing configured source units for {param}"
+            result[param] = units
+        return result
 
     def get_url(self) -> str:
         return SOURCE_PREFIX + self.key
