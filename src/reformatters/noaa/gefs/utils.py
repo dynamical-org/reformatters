@@ -3,8 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from reformatters.common.download import http_download_to_disk
-from reformatters.common.iterating import digest
+from reformatters.common.download import byte_ranges_digest, http_download_to_disk
 from reformatters.common.pydantic import replace
 from reformatters.noaa.gefs.gefs_config_models import (
     GefsSourceFileCoord,
@@ -48,7 +47,7 @@ def _download_file_from_gefs_source(
     starts, ends = grib_message_byte_ranges_from_index(
         idx_local_path, _index_data_vars(coord), coord.init_time, coord.lead_time
     )
-    vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
+    vars_suffix = byte_ranges_digest(starts, ends)
     return download(
         source_url,
         dataset_id,

@@ -11,8 +11,8 @@ from zarr.abc.store import Store
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import http_download_to_disk
-from reformatters.common.iterating import digest, group_by
+from reformatters.common.download import byte_ranges_digest, http_download_to_disk
+from reformatters.common.iterating import group_by
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
@@ -98,7 +98,7 @@ class NoaaGfsCommonRegionJob(
         starts, ends = grib_message_byte_ranges_from_index(
             idx_local_path, coord.data_vars, coord.init_time, coord.lead_time
         )
-        vars_suffix = digest(f"{s}-{e}" for s, e in zip(starts, ends, strict=True))
+        vars_suffix = byte_ranges_digest(starts, ends)
         return download(
             coord.get_url(source=source),
             self.dataset_id,

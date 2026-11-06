@@ -12,8 +12,8 @@ import xarray as xr
 from zarr.abc.store import Store
 
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import http_download_to_disk
-from reformatters.common.iterating import digest, item
+from reformatters.common.download import byte_ranges_digest, http_download_to_disk
+from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import RegionJob
@@ -152,9 +152,7 @@ class EcmwfIfsEnsForecast15Day025DegreeRegionJob(
             coord.ensemble_member,
             step=coord.index_step,
         )
-        suffix = digest(
-            f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
-        )
+        suffix = byte_ranges_digest(byte_range_starts, byte_range_ends)
         return http_download_to_disk(
             data_url,
             self.dataset_id,

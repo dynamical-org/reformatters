@@ -11,8 +11,8 @@ from zarr.abc.store import Store
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import mask_source_fill_value_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import http_download_to_disk
-from reformatters.common.iterating import digest, group_by, item
+from reformatters.common.download import byte_ranges_digest, http_download_to_disk
+from reformatters.common.iterating import group_by, item
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
@@ -152,9 +152,7 @@ class NoaaHrrrRegionJob(
             # Pre-v3 HRRR (2014-2016) has duplicate APCP entries in the GRIB index
             allowed_duplicate_elements=frozenset({"APCP"}),
         )
-        vars_suffix = digest(
-            f"{s}-{e}" for s, e in zip(byte_range_starts, byte_range_ends, strict=True)
-        )
+        vars_suffix = byte_ranges_digest(byte_range_starts, byte_range_ends)
         return download(
             coord.get_url(source=source),
             self.dataset_id,

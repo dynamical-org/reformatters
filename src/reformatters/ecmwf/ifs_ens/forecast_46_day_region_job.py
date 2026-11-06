@@ -22,8 +22,8 @@ from zarr.abc.store import Store
 
 from reformatters.common.config_models import mask_source_fill_value_inplace
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
-from reformatters.common.download import http_download_to_disk
-from reformatters.common.iterating import digest, item
+from reformatters.common.download import byte_ranges_digest, http_download_to_disk
+from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
@@ -185,9 +185,7 @@ class EcmwfIfsEns46DayRegionJob(
             coord.get_index_url(), self.dataset_id, disk_cache=True
         )
         starts, ends = _message_byte_ranges(index_path, coord)
-        suffix = digest(
-            f"{start}-{end}" for start, end in zip(starts, ends, strict=True)
-        )
+        suffix = byte_ranges_digest(starts, ends)
         return http_download_to_disk(
             coord.get_url(),
             self.dataset_id,
