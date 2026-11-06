@@ -1,3 +1,4 @@
+from collections import Counter
 from collections.abc import Iterator
 from time import monotonic
 from typing import NamedTuple, assert_never
@@ -121,15 +122,22 @@ def _grib1(
     end: int,
     coord: EcmwfFastSourceFileCoord,
     deviations: set[str],
-) -> tuple[str, int]:
+    dropped: Counter[tuple[int, ...]],
+) -> tuple[str, int] | None:
     length = reader.read(3)
     pds_size = _uint(length)
-    _require_source(52 <= pds_size <= 512, "Unsupported GRIB1 product section")
+    _require_source(pds_size >= 28, "Unsupported GRIB1 product section")
     _require_source(
         reader.position - 3 + pds_size < end - 4,
         "GRIB1 product section outside message",
     )
-    pds = length + reader.read(pds_size - 3)
+    pds = length + reader.read(min(pds_size, 512) - 3)
+    identity = (pds[3], pds[8])
+    if identity not in _GRIB1_PARAMS:
+        dropped[identity] += 1
+        reader.skip(end - 4 - reader.position)
+        return None
+    _require_source(52 <= pds_size <= 512, "Unsupported GRIB1 product section")
     if pds[4] != 98:
         deviations.add(f"centre={pds[4]} (expected 98)")
     _require_source(pds[7] == 128, "Expected GRIB1 grid definition without bitmap")
@@ -158,10 +166,6 @@ def _grib1(
     _require_source(
         hours == whole_hours(coord.lead_time),
         "GRIB1 forecast time differs from filename",
-    )
-    identity = (pds[3], pds[8])
-    _require_source(
-        identity in _GRIB1_PARAMS, f"Unsupported GRIB1 parameter {identity}"
     )
     gds_size = _uint(reader.read(3))
     _require_source(gds_size == 32, "Unsupported GRIB1 grid section")
@@ -200,9 +204,11 @@ def _grib2(
     discipline: int,
     coord: EcmwfFastSourceFileCoord,
     deviations: set[str],
-) -> tuple[str, int]:
+    dropped: Counter[tuple[int, ...]],
+) -> tuple[str, int] | None:
     sections: dict[int, bytes] = {}
     order = []
+    oversized_header = False
     while reader.position < end - 4:
         header = reader.read(5)
         size, number = (_uint(header[:4]), header[4])
@@ -217,13 +223,22 @@ def _grib2(
         if number == 7:
             reader.skip(size - 5)
         else:
-            _require_source(size <= 512, "Unsupported GRIB2 header size")
-            sections[number] = header + reader.read(size - 5)
+            prefix_size = min(size, 512)
+            sections[number] = header + reader.read(prefix_size - 5)
+            reader.skip(size - prefix_size)
+            oversized_header |= size > 512
     _require_source(
         order in ([1, 3, 4, 5, 6, 7], [1, 2, 3, 4, 5, 6, 7]),
         "Unexpected GRIB2 section sequence",
     )
     ref, grid, product, packing, bitmap = (sections[n] for n in (1, 3, 4, 5, 6))
+    _require_source(len(product) >= 11, "Unsupported GRIB2 product section")
+    raw_identity = (discipline, product[9], product[10])
+    if raw_identity not in ((0, 2, 2), (0, 2, 3), (0, 0, 0), (0, 1, 52), (0, 4, 7)):
+        dropped[raw_identity] += 1
+        return None
+    _require_source(not oversized_header, "Unsupported GRIB2 header size")
+    identity = _grib2_product(product, discipline, coord, deviations)
     _require_source(len(ref) == 21, "Unsupported GRIB2 identification")
     if (centre := _uint(ref[5:7])) != 98:
         deviations.add(f"centre={centre} (expected 98)")
@@ -265,7 +280,7 @@ def _grib2(
         "Only native CCSDS GRIB2 fields are supported",
     )
     _require_source(bitmap == b"\x00\x00\x00\x06\x06\xff", "Unsupported GRIB2 bitmap")
-    return _grib2_product(product, discipline, coord, deviations)
+    return identity
 
 
 def _grib2_product(
@@ -307,10 +322,6 @@ def _grib2_product(
             "GRIB2 forecast time differs from filename",
         )
     else:
-        _require_source(
-            identity in ((0, 1, 52), (0, 4, 7)),
-            f"Unsupported GRIB2 parameter {identity}",
-        )
         _require_source(product[22] == 1, "Expected accumulated surface field")
         _require_source(template == 11, "Expected accumulated surface field")
         _require_source(
@@ -345,6 +356,7 @@ def inventory(
     _require_source(file_size > 0, "Invalid source file size")
     messages = []
     deviations: set[str] = set()
+    dropped: Counter[tuple[int, ...]] = Counter()
     seen: set[tuple[str, int]] = set()
     while reader.position < file_size:
         offset = reader.position
@@ -363,13 +375,16 @@ def inventory(
         _require_source(
             reader.position + 4 < end <= file_size, "Invalid GRIB message length"
         )
-        param, member = (
-            _grib1(reader, end, coord, deviations)
+        field = (
+            _grib1(reader, end, coord, deviations, dropped)
             if edition == 1
-            else _grib2(reader, end, header[6], coord, deviations)
+            else _grib2(reader, end, header[6], coord, deviations, dropped)
         )
         assert reader.position == end - 4, "GRIB scanner did not reach trailer boundary"
         _require_source(reader.read(4) == b"7777", "Missing GRIB trailer")
+        if field is None:
+            continue
+        param, member = field
         identity = (param, member)
         _require_source(
             member in coord.members, f"Unexpected member {member} for {coord.family}"
@@ -387,6 +402,8 @@ def inventory(
     )
     if missing := expected - seen:
         deviations.add(f"missing fields={sorted(missing)}")
+    if dropped:
+        deviations.add(f"dropped unsupported fields={dict(sorted(dropped.items()))}")
     if deviations:
         log.error(
             f"Source discrepancies in {coord.key}: {'; '.join(sorted(deviations))}"
