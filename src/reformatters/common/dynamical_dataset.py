@@ -55,7 +55,6 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike, Timestamp
 from reformatters.common.virtual_region_job import VirtualRegionJob
-from reformatters.common.virtual_retention import retention_start, store_template
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
@@ -599,8 +598,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         keep_branch: str | None = None,
     ) -> None:
         """Orchestrate running RegionJob instances."""
-        if self.rolling_positions is not None:
-            self._assert_rolling_backfill_empty(self._open_existing_store())
         template_ds = self._get_template(append_dim_end)
         tmp_store = self._tmp_store()
 
@@ -697,6 +694,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         # the already-published store; an overwrite backfill must not corrupt it
         # (structural drift, trimming, or unrequested new arrays / expansion).
         overwrite = overwrite_chunks or overwrite_metadata
+        if self.rolling_positions is not None and not update_template_with_results:
+            self._assert_rolling_backfill_empty(self._open_existing_store())
+            assert not overwrite, "Rolling backfills do not support overwrite flags"
         if is_first and update_template_with_results:
             self._assert_no_structural_drift(template_ds)
         if is_first and overwrite:
@@ -959,22 +959,10 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 reformat_job_name=reformat_job_name,
                 job_reference_time=job_reference_time,
             )
-        primary_store = self.store_factory.primary_store()
-        get_template_fn = self._get_template
-        if self.rolling_positions is not None:
-            assert isinstance(primary_store, IcechunkStore)
-            start = retention_start(primary_store, self.template_config)
-
-            def bounded_template(end: DatetimeLike) -> xr.DataTree:
-                return self.template_config.get_template(
-                    max(start, pd.Timestamp(end)), start_time=start
-                )
-
-            get_template_fn = bounded_template
         jobs, template_ds = job_class.operational_update_jobs(
-            primary_store=primary_store,
+            primary_store=self.store_factory.primary_store(),
             tmp_store=tmp_store,
-            get_template_fn=get_template_fn,
+            get_template_fn=self._get_template,
             append_dim=self.template_config.append_dim,
             all_data_vars=self.template_config.data_vars,
             reformat_job_name=reformat_job_name,
@@ -984,17 +972,12 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 pd.Timestamp.now()
             ),
         )
-        if self.rolling_positions is not None:
-            jobs = [
-                job.model_copy(
-                    update={
-                        "rolling_positions": self.rolling_positions,
-                        "retention_template_config": self.template_config,
-                    }
-                )
-                for job in jobs
-            ]
-        return jobs, template_ds
+        if self.rolling_positions is None:
+            return jobs, template_ds
+        return [
+            job.model_copy(update={"rolling_positions": self.rolling_positions})
+            for job in jobs
+        ], template_ds
 
     def _virtual_validation_region_job(
         self,
@@ -1089,18 +1072,20 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         overwrite_chunks: bool,
         overwrite_metadata: bool,
     ) -> tuple[xr.DataTree, pd.Timestamp]:
-        """Resolve the backfill extent and reject unsafe writes.
-
-        Rolling stores must be empty. Archival stores require overwrite flags for
-        existing data and both flags plus an explicit end to extend that data.
-        """
+        """Resolve a backfill's template and append_dim_end and validate it is safe
+        to write. The end defaults to now for a new store and to the store's current
+        end for an existing store. A store is only created when no overwrite flag is
+        passed, only written into with one, never trimmed, and only extended by an
+        explicit append_dim_end with both overwrite flags."""
         overwrite = overwrite_chunks or overwrite_metadata
         append_dim = self.template_config.append_dim
         if self.rolling_positions is not None:
             self._assert_rolling_backfill_empty(existing_ds)
+            assert not overwrite, "Rolling backfills do not support overwrite flags"
+            existing_ds = None
 
-        if existing_ds is None or self.rolling_positions is not None:
-            assert not overwrite or existing_ds is not None, (
+        if existing_ds is None:
+            assert not overwrite, (
                 f"No existing store found for {self.dataset_id}. Remove "
                 "--overwrite-chunks/--overwrite-metadata to create a new store."
             )
@@ -1136,30 +1121,17 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         )
         return template_ds, resolved_end
 
-    def _assert_rolling_backfill_empty(self, existing_ds: xr.DataTree | None) -> None:
-        assert (
-            existing_ds is None
-            or existing_ds.sizes[self.template_config.append_dim] == 0
-        ), (
-            "Rolling backfills require a new empty store: main is populated. "
-            "Repair backfills and retries after publication are unsupported, "
-            "including with overwrite flags; use a fresh store for repair."
+    def _assert_rolling_backfill_empty(self, ds: xr.DataTree | None) -> None:
+        assert ds is None or ds.sizes[self.template_config.append_dim] == 0, (
+            "Rolling backfills require an empty store; repairs and retries after publication are unsupported"
         )
 
     def _assert_no_structural_drift(self, template_ds: xr.DataTree) -> None:
-        if self.rolling_positions is not None:
-            store = self.store_factory.primary_store()
-            assert isinstance(store, IcechunkStore)
-            template_ds = store_template(store, self.template_config)
-            existing_ds = xr.open_datatree(
-                store,  # ty: ignore[invalid-argument-type]
-                engine="zarr",
-                chunks=None,
-                decode_timedelta=True,
-                consolidated=False,
-            )
-        else:
-            existing_ds = self.store_factory.open_primary_datatree()
+        existing_ds = self.store_factory.open_primary_datatree()
+        append_dim = self.template_config.append_dim
+        if self.rolling_positions is not None and existing_ds.sizes[append_dim]:
+            first = existing_ds.coords[append_dim].values[0]
+            template_ds = template_ds.sel({append_dim: slice(first, None)})
         template_utils.assert_no_structural_drift_from_existing_store(
             template_ds,
             existing_ds,

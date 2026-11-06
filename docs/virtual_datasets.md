@@ -108,7 +108,7 @@ The count is a post-update target: a new position normally leaves one extra posi
 
 Backfills are supported only into new empty stores and do not trim their temporary branch. The first operational update performs cleanup. Repair backfills into populated rolling stores are refused; gaps outside the operational retry window remain until they roll off or the store is rebuilt, and completeness validation continues reporting them. See [backfill](backfill.md#rolling-virtual-stores).
 
-Completeness checks cover the committed rolling window and decode checks include its oldest position. Replica coordinate differences still fail validation, including transient differences during separate cleanup commits. Trimming affects the current snapshot; it does not expire Icechunk history or delete source objects.
+Completeness checks cover the committed rolling window; decode checks use the configured sampling policy. Replica coordinate differences still fail validation, including transient differences during separate cleanup commits. Trimming affects the current snapshot; it does not expire Icechunk history or delete source objects.
 
 ## Backfill: parallel on a pre-sized temp branch
 

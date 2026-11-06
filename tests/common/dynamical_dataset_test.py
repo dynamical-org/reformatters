@@ -2,6 +2,7 @@ import subprocess
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import Mock, patch
@@ -47,13 +48,11 @@ from reformatters.common.storage import (
     manifest_append_dim_split,
 )
 from reformatters.common.template_config import TemplateConfig
-from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
+from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRegionJob
 from tests.common.virtual_region_job_test import (
     VirtualTestDataset,
     VirtualTestRegionJob,
-    VirtualTestTemplateConfig,
-    _block_values,
     _create_template_ds,
     _main_store_bytes,
     _make_dataset,
@@ -1254,204 +1253,86 @@ def test_backfill_local_fails_in_wrong_environment(
         dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
 
 
-@pytest.mark.parametrize("positions", [0, -1, 1.5, False, True])
+@pytest.mark.parametrize("positions", [0, -1, 1.5, 2.0, False, True])
 def test_rolling_positions_must_be_positive(positions: float) -> None:
     with pytest.raises(ValidationError):
         ExampleVirtualDataset(rolling_positions=positions)  # ty: ignore[invalid-argument-type]
 
 
 def test_rolling_positions_requires_virtual_job() -> None:
-    with pytest.raises(
-        ValidationError, match="rolling_positions requires a VirtualRegionJob"
-    ):
-        ExampleDataset(rolling_positions=12)
-    assert ExampleVirtualDataset(rolling_positions=12).rolling_positions == 12
+    with pytest.raises(ValidationError, match="requires a VirtualRegionJob"):
+        ExampleDataset(rolling_positions=2)
+    assert ExampleVirtualDataset(rolling_positions=2).rolling_positions == 2
     assert ExampleDataset().rolling_positions is None
     assert ExampleVirtualDataset().rolling_positions is None
 
 
-class BoundedVirtualTestConfig(VirtualTestTemplateConfig):
-    def get_template(
-        self, end_time: DatetimeLike, *, start_time: DatetimeLike | None = None
-    ) -> xr.DataTree:
-        start = (
-            self.append_dim_start if start_time is None else pd.Timestamp(start_time)
-        )
-        labels = pd.date_range(
-            start, end_time, freq=self.append_dim_frequency, inclusive="left"
-        )
-        ds = _create_template_ds(len(labels)).to_dataset()
-        encodings = {name: var.encoding.copy() for name, var in ds.coords.items()}
-        ds = ds.assign_coords(
-            init_time=labels,
-            valid_time=(
-                ("init_time", "lead_time"),
-                labels.values[:, None] + ds.lead_time.values[None, :],
-            ),
-        )
-        for name, encoding in encodings.items():
-            ds[name].encoding = encoding
-        return xr.DataTree.from_dict({"/": ds})
-
-
-def _rolling_dataset(tmp_path: Path) -> VirtualTestDataset:
-    return _make_dataset(tmp_path).model_copy(
-        update={"rolling_positions": 2, "template_config": BoundedVirtualTestConfig()}
-    )
-
-
-@pytest.mark.parametrize("overwrite_chunks", [False, True])
-@pytest.mark.parametrize("overwrite_metadata", [False, True])
-def test_rolling_backfill_rejects_populated_main_even_with_overwrite(
-    tmp_path: Path, overwrite_chunks: bool, overwrite_metadata: bool
-) -> None:
-    dataset = _rolling_dataset(tmp_path)
-    with pytest.raises(AssertionError, match="main is populated"):
-        dataset._resolve_backfill_template(
-            _create_template_ds(4),
-            pd.Timestamp("2024-01-02"),
-            overwrite_chunks=overwrite_chunks,
-            overwrite_metadata=overwrite_metadata,
-        )
-
-
-@pytest.mark.parametrize("existing_size", [None, 0])
-def test_rolling_backfill_new_empty_store_keeps_full_requested_range(
-    tmp_path: Path, existing_size: int | None
-) -> None:
-    dataset = _rolling_dataset(tmp_path)
-    template, end = dataset._resolve_backfill_template(
-        None if existing_size is None else _create_template_ds(existing_size),
-        pd.Timestamp("2024-01-02"),
-        overwrite_chunks=False,
-        overwrite_metadata=False,
-    )
-    assert end == pd.Timestamp("2024-01-02")
-    assert template.sizes["init_time"] == 4
-    assert template.init_time.values[0] == np.datetime64("2024-01-01")
-
-
-@pytest.mark.parametrize("entry", ["backfill", "backfill_local", "backfill_kubernetes"])
-def test_rolling_backfill_rejects_before_processing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, entry: str
-) -> None:
-    dataset = _rolling_dataset(tmp_path)
-    monkeypatch.setattr(
-        VirtualTestDataset, "_open_existing_store", lambda self: _create_template_ds(4)
-    )
-    monkeypatch.setattr(VirtualTestDataset, "_can_run_in_kubernetes", lambda self: True)
-    get_jobs = Mock()
-    monkeypatch.setattr(VirtualTestRegionJob, "get_jobs", get_jobs)
-    setup = Mock()
-    monkeypatch.setattr(
-        dynamical_dataset.parallel_coordination, "parallel_setup", setup
-    )
-
-    def run() -> None:
-        if entry == "backfill":
-            dataset.backfill(
-                pd.Timestamp("2024-01-02"),
-                "repair",
-                worker_index=0,
-                workers_total=1,
-                overwrite_chunks=True,
-                overwrite_metadata=True,
-            )
-        elif entry == "backfill_local":
-            dataset.backfill_local(pd.Timestamp("2024-01-02"))
-        else:
-            dataset.backfill_kubernetes(
-                pd.Timestamp("2024-01-02"),
-                overwrite_chunks=True,
-                overwrite_metadata=True,
-            )
-
-    with pytest.raises(AssertionError, match="main is populated"):
-        run()
-    get_jobs.assert_not_called()
-    setup.assert_not_called()
-
-
-@pytest.mark.slow
-def test_rolling_planning_and_structural_guard_use_committed_origin(
-    tmp_path: Path,
-) -> None:
-    dataset = _rolling_dataset(tmp_path)
-    start = pd.Timestamp("2024-01-01T12:00")
-    committed = dataset.template_config.get_template(
-        pd.Timestamp("2024-01-02"), start_time=start
-    )
-    template_utils.write_metadata(committed, dataset.store_factory)
-    jobs, template = dataset._operational_update_jobs(
-        "rolling", tmp_path / "planning", job_fire_time=pd.Timestamp("2024-01-02T06:00")
-    )
-    assert template.sizes["init_time"] == 3
-    assert template.init_time.values[0] == start.to_datetime64()
-    (job,) = jobs
-    assert isinstance(job, VirtualRegionJob)
-    assert job.rolling_positions == 2
-    assert job.retention_template_config is dataset.template_config
-    assert job.region == slice(0, 3)
-    dataset._assert_no_structural_drift(template)
-    assert dataset._virtual_validation_region_job([], "rolling") is None
-
-
-@pytest.mark.parametrize("completed", [False, True])
-@pytest.mark.parametrize("positions", [None, 2])
-def test_virtual_loop_end_dispatches_before_replica_then_primary_trim(
+@pytest.mark.parametrize("existing_size", [None, 0, 2])
+@pytest.mark.parametrize("overwrite", [False, True])
+def test_rolling_backfill_admission(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    completed: bool,
+    existing_size: int | None,
+    overwrite: bool,
+) -> None:
+    dataset = _make_dataset(tmp_path).model_copy(update={"rolling_positions": 2})
+    existing = None if existing_size is None else _create_template_ds(existing_size)
+    monkeypatch.setattr(
+        VirtualTestDataset, "_get_template", lambda *args: _create_template_ds(4)
+    )
+    resolve = partial(
+        dataset._resolve_backfill_template,
+        existing,
+        pd.Timestamp("2024-01-02"),
+        overwrite_chunks=overwrite,
+        overwrite_metadata=overwrite,
+    )
+    if existing_size == 2 or overwrite:
+        with pytest.raises(AssertionError, match="Rolling backfills"):
+            resolve()
+    else:
+        template, end = resolve()
+        assert template.sizes["init_time"] == 4
+        assert end == pd.Timestamp("2024-01-02")
+
+
+@pytest.mark.parametrize("positions", [None, 2])
+def test_virtual_loop_dispatches_before_replica_then_primary_trim(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     positions: int | None,
 ) -> None:
-    dataset = _rolling_dataset(tmp_path).model_copy(
+    dataset = _make_dataset(tmp_path).model_copy(
         update={"rolling_positions": positions}
     )
     events: list[str] = []
     job = _make_region_job(
         _create_template_ds(4), region=slice(0, 4), processing_mode="update"
-    ).model_copy(
-        update={
-            "rolling_positions": positions,
-            "retention_template_config": dataset.template_config,
-        }
-    )
-    monkeypatch.setattr(
-        VirtualTestRegionJob, "refresh_metadata", lambda *args: events.append("refresh")
-    )
+    ).model_copy(update={"rolling_positions": positions})
+    monkeypatch.setattr(VirtualTestRegionJob, "refresh_metadata", Mock())
     monkeypatch.setattr(
         VirtualTestRegionJob,
         "process_virtual_worker_jobs",
-        Mock(side_effect=lambda *args, **kwargs: events.append("files") or completed),
+        lambda *args, **kwargs: events.append("files") or True,
     )
-    monkeypatch.setattr(
-        VirtualTestRegionJob,
-        "trim_retention",
-        lambda self, repo, branch: events.append(f"trim-{repo}"),
-    )
+    trim = Mock(side_effect=lambda repo, branch: events.append(f"trim-{repo}"))
+    monkeypatch.setattr(VirtualTestRegionJob, "trim_retention", trim)
     trigger = Mock()
     trigger.dispatch.side_effect = lambda unit: events.append("completion")
     monkeypatch.setattr(VirtualTestDataset, "materialized_update_triggers", (trigger,))
-    factory = Mock()
-    factory.k8s_secret_names.return_value = []
-    factory.icechunk_repos.return_value = [
-        ("replica-0", "replica"),
-        ("primary", "primary"),
-    ]
-    monkeypatch.setattr(VirtualTestDataset, "store_factory", factory)
+    monkeypatch.setattr(
+        storage.StoreFactory,
+        "icechunk_repos",
+        lambda *args, **kwargs: [("replica-0", "replica"), ("primary", "primary")],
+    )
     monkeypatch.setattr(Config, "env", Env.prod)
     monkeypatch.setenv("CRON_JOB_NAME", "test-virtual-dataset-update")
     dataset._run_virtual_operational_update([job], 0, 1)
-    expected = ["refresh", "files"]
-    if completed:
-        expected.append("completion")
-        trigger.dispatch.assert_called_once_with(pd.Timestamp("2024-01-01T18:00"))
-    if positions is not None:
-        expected.extend(["trim-replica", "trim-primary"])
-        factory.icechunk_repos.assert_called_once_with(sort="primary-last")
-    else:
-        factory.icechunk_repos.assert_not_called()
-    assert events == expected
+    assert events == ["files", "completion"] + (
+        ["trim-replica", "trim-primary"] if positions else []
+    )
+    trigger.dispatch.assert_called_once_with(pd.Timestamp("2024-01-01T18:00"))
+    assert trim.call_count == (2 if positions else 0)
 
 
 @pytest.mark.slow
@@ -1459,8 +1340,11 @@ def test_virtual_loop_end_dispatches_before_replica_then_primary_trim(
 def test_virtual_backfill_then_all_present_update_cleanup(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, positions: int | None
 ) -> None:
-    dataset = _rolling_dataset(tmp_path).model_copy(
+    dataset = _make_dataset(tmp_path).model_copy(
         update={"rolling_positions": positions}
+    )
+    monkeypatch.setattr(
+        VirtualTestDataset, "_get_template", lambda *args: _create_template_ds(4)
     )
     dataset.backfill(
         pd.Timestamp("2024-01-02"), "new-store", worker_index=0, workers_total=1
@@ -1480,17 +1364,9 @@ def test_virtual_backfill_then_all_present_update_cleanup(
     )
     dataset.update("cleanup")
     after = dataset.store_factory.open_primary_datatree().to_dataset()
-    expected_labels = pd.date_range("2024-01-01", periods=4, freq="6h")
-    if positions is not None:
-        expected_labels = expected_labels[-positions:]
-    np.testing.assert_array_equal(after.init_time.values, expected_labels.values)
-    for index, label in enumerate(expected_labels):
-        original_index = int((label - pd.Timestamp("2024-01-01")) / pd.Timedelta("6h"))
-        for lead in range(2):
-            np.testing.assert_array_equal(
-                after.temperature_2m.isel(init_time=index, lead_time=lead).values,
-                _block_values(original_index, lead),
-            )
+    xr.testing.assert_equal(
+        after, before.isel(init_time=slice(-positions, None)) if positions else before
+    )
     if positions is None:
         assert repo.lookup_branch("main") == snapshot
         assert metadata == {
@@ -1498,84 +1374,9 @@ def test_virtual_backfill_then_all_present_update_cleanup(
         }
     snapshot = repo.lookup_branch("main")
     dataset.update("already-clean")
-    assert repo.lookup_branch("main") == snapshot
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize("after_publication", [False, True])
-def test_rolling_new_store_backfill_retry(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, after_publication: bool
-) -> None:
-    dataset = _rolling_dataset(tmp_path)
-    target = (
-        icechunk.Repository
-        if after_publication
-        else dynamical_dataset.parallel_coordination
-    )
-    method = "delete_branch" if after_publication else "finalize"
-    original = getattr(target, method)
-    monkeypatch.setattr(
-        target, method, Mock(side_effect=RuntimeError("Worker interrupted"))
-    )
-    monkeypatch.setattr(
-        VirtualTestDataset, "_tmp_store", lambda self: tmp_path / "first-tmp.zarr"
-    )
-    with pytest.raises(RuntimeError, match="Worker interrupted"):
-        dataset.backfill(
-            pd.Timestamp("2024-01-02"), "new-store", worker_index=0, workers_total=1
-        )
-    repo = _primary_repo(dataset.store_factory)
-    snapshot = repo.lookup_branch("main")
-    monkeypatch.setattr(target, method, original)
-    monkeypatch.setattr(
-        VirtualTestDataset, "_tmp_store", lambda self: tmp_path / "retry-tmp.zarr"
-    )
-    if after_publication:
-        with pytest.raises(
-            AssertionError, match="retries after publication are unsupported"
-        ):
+    if positions is not None:
+        with pytest.raises(AssertionError, match="empty store"):
             dataset.backfill(
                 pd.Timestamp("2024-01-02"), "new-store", worker_index=0, workers_total=1
             )
-        assert repo.lookup_branch("main") == snapshot
-    else:
-        assert "_job_new-store" in repo.list_branches()
-        assert dataset._open_existing_store() is None
-        dataset.backfill(
-            pd.Timestamp("2024-01-02"), "new-store", worker_index=0, workers_total=1
-        )
-        assert "_job_new-store" not in repo.list_branches()
-    result = dataset.store_factory.open_primary_datatree().to_dataset()
-    assert result.sizes["init_time"] == 4
-    np.testing.assert_array_equal(
-        result.temperature_2m.isel(init_time=3, lead_time=1).values, _block_values(3, 1)
-    )
-
-
-@pytest.mark.parametrize("failures", [1, 5])
-def test_rolling_loop_end_retries_conflicts_five_times(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failures: int
-) -> None:
-    dataset = _rolling_dataset(tmp_path)
-    job = _make_region_job(
-        _create_template_ds(1), region=slice(0, 1), processing_mode="update"
-    )
-    monkeypatch.setattr(VirtualTestRegionJob, "refresh_metadata", Mock())
-    monkeypatch.setattr(
-        VirtualTestRegionJob, "process_virtual_worker_jobs", Mock(return_value=False)
-    )
-    trim = Mock(side_effect=[icechunk.ConflictError()] * failures + [None])
-    monkeypatch.setattr(VirtualTestRegionJob, "trim_retention", trim)
-    factory = Mock()
-    factory.k8s_secret_names.return_value = []
-    factory.icechunk_repos.return_value = [("primary", "primary")]
-    monkeypatch.setattr(VirtualTestDataset, "store_factory", factory)
-    monkeypatch.setattr("reformatters.common.retry.time.sleep", Mock())
-    if failures == 5:
-        with pytest.raises(icechunk.ConflictError):
-            dataset._run_virtual_operational_update([job], 0, 1)
-        assert trim.call_count == 5
-    else:
-        dataset._run_virtual_operational_update([job], 0, 1)
-        assert trim.call_count == 2
-    trim.assert_called_with("primary", "main")
+    assert repo.lookup_branch("main") == snapshot

@@ -122,39 +122,18 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
             self.append_dim_start, end, freq=self.append_dim_frequency, inclusive="left"
         )
 
-    def get_template(
-        self, end_time: DatetimeLike, *, start_time: DatetimeLike | None = None
-    ) -> xr.DataTree:
+    def get_template(self, end_time: DatetimeLike) -> xr.DataTree:
         """
         Returns the template as a DataTree, with append dim in all Zarr groups expanded to the given end time.
 
         Args:
             end_time (pd.Timestamp): End time (exclusive) for the append dimension
-            start_time: Optional grid-aligned lower bound (inclusive), in UTC.
 
         Returns:
             xr.DataTree: Template tree with dimension coordinates
         """
         on_disk = xr.open_datatree(self.template_path(), decode_timedelta=True)
-        if start_time is None:
-            new_append_coords = self.append_dim_coordinates(end_time)
-        else:
-            start = pd.Timestamp(start_time)
-            anchor = self.append_dim_start
-            end = pd.Timestamp(end_time)
-            if start.tzinfo is not None:
-                start = start.tz_convert(None)
-            if anchor.tzinfo is not None:
-                anchor = anchor.tz_convert(None)
-            if end.tzinfo is not None:
-                end = end.tz_convert(None)
-            assert start >= anchor, "Template start precedes configured origin"
-            assert (start - anchor) % self.append_dim_frequency == pd.Timedelta(0), (
-                "Template start is not on the append dimension grid"
-            )
-            new_append_coords = pd.date_range(
-                start, end, freq=self.append_dim_frequency, inclusive="left"
-            )
+        new_append_coords = self.append_dim_coordinates(end_time)
 
         nodes: dict[str, xr.Dataset] = {}
         for node in on_disk.subtree:

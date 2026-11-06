@@ -75,10 +75,10 @@ Parallelism beyond what the cluster can schedule starves it: operational update 
 
 ## Concurrency with operational updates
 
-### Rolling virtual stores
+For a backfill targeting `main`, an operational update that publishes mid-backfill makes an overwrite backfill's finalize fail loudly (the update wins; re-run the backfill). Do **not** suspend an active update cron to avoid this — that delays the production pipeline. Instead run the backfill between update fires, splitting a long history into several smaller `filter_start`/`filter_end` backfills. See "Concurrent jobs writing to the same dataset" in [parallel_processing.md](parallel_processing.md).
+
+## Rolling virtual stores
 
 A dataset with `rolling_positions` supports backfill only into new empty stores. Create a new version with the setting and compatible writer together; older writers continue using the previous version's namespace. Workers use the standard temporary branch protocol, without trimming. The first operational update trims the published store after its polling loop completes, so the backfilled store can initially exceed the configured position count.
 
 Repair backfills into populated rolling stores are refused. A retry after backfill publication is also refused without changing the published data; inspect that result and continue with operational updates rather than rerunning the backfill. The operational retry window can fill recent gaps; older gaps remain until they roll off or a new store is built. See [rolling retention](virtual_datasets.md#rolling-retention).
-
-For a backfill targeting `main`, an operational update that publishes mid-backfill makes an overwrite backfill's finalize fail loudly (the update wins; re-run the backfill). Do **not** suspend an active update cron to avoid this — that delays the production pipeline. Instead run the backfill between update fires, splitting a long history into several smaller `filter_start`/`filter_end` backfills. See "Concurrent jobs writing to the same dataset" in [parallel_processing.md](parallel_processing.md).
