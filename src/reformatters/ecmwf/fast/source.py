@@ -122,7 +122,7 @@ def listing_client() -> ListingClient:
 
 def list_prefix(
     prefix: str, client: ListingClient | None = None
-) -> Iterator[tuple[str, int, datetime]]:
+) -> Iterator[tuple[str, int, datetime, str | None]]:
     client = client if client is not None else listing_client()
     try:
         pages = client.get_paginator("list_objects_v2").paginate(
@@ -134,7 +134,7 @@ def list_prefix(
                 assert key.startswith(prefix), (
                     "S3 returned a key outside the requested prefix"
                 )
-                yield key, size, obj["LastModified"]
+                yield key, size, obj["LastModified"], obj.get("ETag")
     except ClientError as exc:
         response = exc.response
         if response.get("ResponseMetadata", {}).get("HTTPStatusCode") in (
@@ -155,7 +155,7 @@ def list_prefix(
 
 def list_prefix_or_defer(
     prefix: str, client: ListingClient
-) -> list[tuple[str, int, datetime]]:
+) -> list[tuple[str, int, datetime, str | None]]:
     try:
         return list(list_prefix(prefix, client))
     except _LIST_TRANSPORT_ERRORS:

@@ -1,5 +1,5 @@
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Buffer, Iterator
 from time import monotonic
 from typing import NamedTuple, assert_never
 
@@ -44,7 +44,7 @@ class Message(NamedTuple):
 
 
 class StreamReader:
-    def __init__(self, chunks: Iterator[bytes]) -> None:
+    def __init__(self, chunks: Iterator[Buffer]) -> None:
         self.chunks = chunks
         self.buffer = memoryview(b"")
         self.position = 0

@@ -105,6 +105,10 @@ def test_fixture_backfill_then_update_with_native_codec_snapshots(
     def discover(
         self: EcmwfFastRegionJob, pending: list[EcmwfFastSourceFileCoord]
     ) -> list[tuple[EcmwfFastSourceFileCoord, int]]:
+        self._listed_etags = self._listed_etags.copy()
+        for coord in pending:
+            meta = obstore.head(local, coord.key)
+            self._listed_etags[coord.key] = (meta["size"], meta["e_tag"])
         return [(c, (FIXTURES / c.key).stat().st_size) for c in pending]
 
     monkeypatch.setattr(EcmwfFastRegionJob, "discover_available", discover)
