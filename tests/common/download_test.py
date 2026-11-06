@@ -12,6 +12,7 @@ from reformatters.common import download as download_module
 from reformatters.common.download import (
     DOWNLOAD_DIR,
     _parse_multipart_byteranges,
+    byte_ranges_digest,
     download_to_disk,
     gcs_download_to_disk,
     gcs_store,
@@ -815,3 +816,33 @@ def test_source_access_preserves_transient_errors() -> None:
     with pytest.raises(GenericError) as caught, download_module.source_access():
         raise original
     assert caught.value is original
+
+
+def test_byte_ranges_digest_separates_concatenation_aliases() -> None:
+    first = byte_ranges_digest([1, 56], [234, 789])
+    second = byte_ranges_digest([1, 456], [23, 789])
+
+    assert first == "a9662326545754e7c13dc060bdee621ce2435d08a2585613cc790116bcb78194"
+    assert second == "0c2991ff21377dd494957c5133bd2e6ef964d5ed6c8c610cc91155ef0c4df153"
+    assert first != second
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        (([1], [234]), ([1], [235])),
+        (([1, 56], [23, 789]), ([56, 1], [789, 23])),
+        (([26428880434], [26430957076]), ([59075545422], [59077622064])),
+    ],
+)
+def test_distinct_byte_ranges_get_distinct_names(
+    first: tuple[list[int], list[int]], second: tuple[list[int], list[int]]
+) -> None:
+    first_path = get_local_path(
+        "dataset", "/source.grib2", f"-{byte_ranges_digest(*first)}"
+    )
+    second_path = get_local_path(
+        "dataset", "/source.grib2", f"-{byte_ranges_digest(*second)}"
+    )
+
+    assert first_path != second_path

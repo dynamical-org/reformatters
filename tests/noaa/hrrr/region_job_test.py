@@ -190,7 +190,7 @@ def test_region_job_download_file(
     )
     assert mock_http_download_to_disk.call_args_list[1].kwargs == {
         "byte_ranges": ([0, 200], [100, 350]),
-        "local_path_suffix": "-24863b9b",
+        "local_path_suffix": "-d596d3a0c59522deee1fecf786f0c37ce3981421bd0d4cc451127d7274bbfa2b",
     }
 
 

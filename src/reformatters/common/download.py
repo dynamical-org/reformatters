@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import hashlib
 import threading
 import time
 import uuid
@@ -42,6 +43,11 @@ The main functions which have (effectively) interchangeable interfaces are
 _DEFAULT_RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 _MAX_RETRIES = 16
 _RETRY_TIMEOUT_SECONDS = 300.0
+
+
+def byte_ranges_digest(starts: Sequence[int], ends: Sequence[int]) -> str:
+    ranges = ",".join(f"{start}-{end}" for start, end in zip(starts, ends, strict=True))
+    return hashlib.sha256(ranges.encode()).hexdigest()
 
 
 def http_download_to_disk(

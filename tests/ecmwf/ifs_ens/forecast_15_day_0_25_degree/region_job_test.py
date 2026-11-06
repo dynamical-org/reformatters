@@ -237,7 +237,10 @@ def test_region_job_download_file_open_data_prefers_gcs(
         == "https://storage.googleapis.com/ecmwf-open-data/20240401/00z/ifs/0p25/enfo/20240401000000-3h-enfo-ef.grib2"
     )
     assert dataset_id == "ecmwf-ifs-ens-forecast-15-day-0-25-degree"
-    assert kwargs["local_path_suffix"] == "-4f434771"
+    assert (
+        kwargs["local_path_suffix"]
+        == "-4f434771f28e050c2c482e2615a0a4ccc0c031519923456bb9d609cca1e639b1"
+    )
     assert kwargs["byte_ranges"] == ([0], [665525])
 
 
