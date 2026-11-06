@@ -98,7 +98,11 @@ class ValidationContext:
         assert self.region_job is not None, (
             "this check requires a virtual dataset's operational-window region job"
         )
-        return self.region_job
+        job = self.region_job
+        if getattr(job, "rolling_positions", None) is not None:
+            assert isinstance(self.store, IcechunkStore)
+            return job.for_store(self.store)
+        return job
 
     def known_var_paths(self) -> Sequence[str]:
         """The variable paths a check's include/exclude filters are validated against:

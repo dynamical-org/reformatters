@@ -76,3 +76,7 @@ Parallelism beyond what the cluster can schedule starves it: operational update 
 ## Concurrency with operational updates
 
 For a backfill targeting `main`, an operational update that publishes mid-backfill makes an overwrite backfill's finalize fail loudly (the update wins; re-run the backfill). Do **not** suspend an active update cron to avoid this — that delays the production pipeline. Instead run the backfill between update fires, splitting a long history into several smaller `filter_start`/`filter_end` backfills. See "Concurrent jobs writing to the same dataset" in [parallel_processing.md](parallel_processing.md).
+
+## Rolling virtual stores
+
+Rolling datasets accept backfills only into empty stores; the first operational update reduces them to the configured count. Repairs and retries after publication are refused. Gaps outside the operational repair window remain until they roll off or the store is rebuilt.

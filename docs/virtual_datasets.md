@@ -78,7 +78,7 @@ Each batch commits to replicas before the primary. A conflicting transaction ope
 
 `operational_update_window` bounds automatic repair of recent append-dim positions; it need not span the forecast lead-time horizon. Already-ingested files are filtered before source discovery, so shortening the window reduces source requests only for unfinished older positions. Positions outside the window require backfill to repair.
 
-`main` grows to the data ingested, without NaN-padding toward "now". Overlapping Jobs are safe: each commit attempt opens a fresh writable session, filters out files already ingested by another writer, and grows the append dim from that session's committed extent. Growing commits do not auto-rebase: any branch advance retries the batch against a fresh session, rechecking the resize invariant. Ordinary ticks within the existing extent keep automatic rebase for disjoint writes. Both paths retain same-session retries for ordinary I/O errors. If an update falls far behind, run a backfill to catch up rather than scaling a Job to multiple workers.
+`main` grows to the data ingested, without NaN-padding toward "now". Overlapping Jobs are safe: each commit attempt opens a fresh writable session, filters out files already ingested by another writer, and grows the append dim from that session's committed extent. Growing commits do not auto-rebase: any branch advance retries the batch against a fresh session, rechecking the resize invariant. Ordinary ticks within the existing extent keep automatic rebase for disjoint writes, except for rolling retention below. Both paths retain same-session retries for ordinary I/O errors. If an update falls far behind, run a backfill to catch up rather than scaling a Job to multiple workers.
 
 Before committing a resize, the writer checks every append-dim array in the session, including arrays outside its template. This check aborts growth that would leave stored arrays short, including when the writer's template omits a newly added variable. A writer with the complete template can grow all arrays together.
 
@@ -97,6 +97,12 @@ See [virtual polling](operational_update_timing.md#virtual-polling) for fire sel
 Serialize manual updates and backfills with scheduled and retry writers, including terminating pods; a CronJob policy provides no store-wide lock.
 
 Per-tick commit latency is dominated by the manifest read-modify-write of every array the tick's files touch (see [Manifest splitting](#manifest-splitting) for the cost model). Every icechunk repo sets `max_concurrent_manifest_fetches_during_commit` above its default so per-array manifest fetches overlap.
+
+## Rolling retention
+
+`rolling_positions=N` keeps the newest N append-dimension positions after each update. Ingestion or interrupted cleanup can temporarily leave more; this is a count, not a time limit. Before enabling it on an existing store, suspend scheduled updates and wait for all old writers to exit, then deploy the new writer and resume updates. After the first trim, do not disable `rolling_positions` or deploy a writer without rolling support: its metadata refresh can relabel the retained data.
+
+[Backfills](backfill.md#rolling-virtual-stores) require an empty store. Unrepairable gaps alert until they roll off. Trimming does not delete source files or Icechunk history.
 
 ## Backfill: parallel on a pre-sized temp branch
 

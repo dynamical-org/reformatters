@@ -8,7 +8,7 @@
     "license": "LicenseRef-Commercial",
     "spatial_domain": "Global",
     "spatial_resolution": "0.25 degrees (~20km)",
-    "time_domain": "Forecasts initialized 2026-11-01 00:00:00 UTC to Present",
+    "time_domain": "Most recent 12 forecast initializations",
     "time_resolution": "Forecasts initialized every 6 hours",
     "forecast_domain": "Forecast lead time 0-360 hours (0-15 days) ahead",
     "forecast_resolution": "6 hourly"

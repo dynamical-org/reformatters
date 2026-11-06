@@ -395,6 +395,7 @@ def refresh_store_metadata(
     tmp_store: Path,
     *,
     consolidated: bool,
+    align_append_dim: bool = False,
 ) -> None:
     """Rewrite attrs, encodings, and template-derived coordinate values on every
     existing store from the current template, trimmed to the store's committed extent
@@ -425,10 +426,18 @@ def refresh_store_metadata(
                 )
                 continue
 
+            start = (
+                template_ds.to_dataset()
+                .get_index(append_dim)
+                .get_loc(existing.to_dataset().get_index(append_dim)[0])
+                if align_append_dim
+                else 0
+            )
+            assert isinstance(start, int)
             trimmed = xr.DataTree.from_dict(
                 {
                     node.path: node.to_dataset(inherit=False).isel(
-                        {append_dim: slice(0, committed_size)},
+                        {append_dim: slice(start, start + committed_size)},
                     )
                     for node in template_ds.subtree
                 }

@@ -2,6 +2,7 @@ import subprocess
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import Mock, patch
@@ -50,8 +51,10 @@ from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRegionJob
 from tests.common.virtual_region_job_test import (
+    VirtualTestDataset,
     VirtualTestRegionJob,
     _create_template_ds,
+    _main_store_bytes,
     _make_dataset,
     _make_region_job,
     _primary_repo,
@@ -1248,3 +1251,132 @@ def test_backfill_local_fails_in_wrong_environment(
             dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
     else:
         dataset.backfill_local(append_dim_end=pd.Timestamp("2000-01-02"))
+
+
+@pytest.mark.parametrize("positions", [0, -1, 1.5, 2.0, False, True])
+def test_rolling_positions_must_be_positive(positions: float) -> None:
+    with pytest.raises(ValidationError):
+        ExampleVirtualDataset(rolling_positions=positions)  # ty: ignore[invalid-argument-type]
+
+
+def test_rolling_positions_requires_virtual_job() -> None:
+    with pytest.raises(ValidationError, match="requires a VirtualRegionJob"):
+        ExampleDataset(rolling_positions=2)
+    assert ExampleVirtualDataset(rolling_positions=2).rolling_positions == 2
+    assert ExampleDataset().rolling_positions is None
+    assert ExampleVirtualDataset().rolling_positions is None
+
+
+@pytest.mark.parametrize("existing_size", [None, 0, 2])
+@pytest.mark.parametrize("overwrite", [False, True])
+def test_rolling_backfill_admission(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    existing_size: int | None,
+    overwrite: bool,
+) -> None:
+    dataset = _make_dataset(tmp_path).model_copy(update={"rolling_positions": 2})
+    existing = None if existing_size is None else _create_template_ds(existing_size)
+    monkeypatch.setattr(
+        VirtualTestDataset, "_get_template", lambda *args: _create_template_ds(4)
+    )
+    resolve = partial(
+        dataset._resolve_backfill_template,
+        existing,
+        pd.Timestamp("2024-01-02"),
+        overwrite_chunks=overwrite,
+        overwrite_metadata=overwrite,
+    )
+    if existing_size == 2 or overwrite:
+        with pytest.raises(AssertionError, match="Rolling backfills"):
+            resolve()
+    else:
+        template, end = resolve()
+        assert template.sizes["init_time"] == 4
+        assert end == pd.Timestamp("2024-01-02")
+
+
+@pytest.mark.parametrize("positions", [None, 2])
+def test_virtual_loop_dispatches_before_replica_then_primary_trim(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    positions: int | None,
+) -> None:
+    dataset = _make_dataset(tmp_path).model_copy(
+        update={"rolling_positions": positions}
+    )
+    events: list[str] = []
+    job = _make_region_job(
+        _create_template_ds(4), region=slice(0, 4), processing_mode="update"
+    ).model_copy(update={"rolling_positions": positions})
+    monkeypatch.setattr(VirtualTestRegionJob, "refresh_metadata", Mock())
+    monkeypatch.setattr(
+        VirtualTestRegionJob,
+        "process_virtual_worker_jobs",
+        lambda *args, **kwargs: events.append("files") or True,
+    )
+    trim = Mock(side_effect=lambda repo, branch: events.append(f"trim-{repo}"))
+    monkeypatch.setattr(VirtualTestRegionJob, "trim_rolling_window", trim)
+    trigger = Mock()
+    trigger.dispatch.side_effect = lambda unit: events.append("completion")
+    monkeypatch.setattr(VirtualTestDataset, "materialized_update_triggers", (trigger,))
+    monkeypatch.setattr(
+        storage.StoreFactory,
+        "icechunk_repos",
+        lambda *args, **kwargs: [("replica-0", "replica"), ("primary", "primary")],
+    )
+    monkeypatch.setattr(Config, "env", Env.prod)
+    monkeypatch.setenv("CRON_JOB_NAME", "test-virtual-dataset-update")
+    dataset._run_virtual_operational_update([job], 0, 1)
+    assert events == ["files", "completion"] + (
+        ["trim-replica", "trim-primary"] if positions else []
+    )
+    trigger.dispatch.assert_called_once_with(pd.Timestamp("2024-01-01T18:00"))
+    assert trim.call_count == (2 if positions else 0)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("positions", [None, 2])
+def test_virtual_backfill_then_all_present_update_cleanup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, positions: int | None
+) -> None:
+    dataset = _make_dataset(tmp_path).model_copy(
+        update={"rolling_positions": positions}
+    )
+    monkeypatch.setattr(
+        VirtualTestDataset, "_get_template", lambda *args: _create_template_ds(4)
+    )
+    dataset.backfill(
+        pd.Timestamp("2024-01-02"), "new-store", worker_index=0, workers_total=1
+    )
+    before = dataset.store_factory.open_primary_datatree().to_dataset()
+    assert before.sizes["init_time"] == 4
+    repo = _primary_repo(dataset.store_factory)
+    snapshot = repo.lookup_branch("main")
+    metadata = {
+        key: _main_store_bytes(dataset.store_factory, key)
+        for key in ("zarr.json", "init_time/zarr.json", "temperature_2m/zarr.json")
+    }
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda cls, tz=None: pd.Timestamp("2024-01-02", tz=tz)),
+    )
+    dataset.update("cleanup")
+    after = dataset.store_factory.open_primary_datatree().to_dataset()
+    xr.testing.assert_equal(
+        after, before.isel(init_time=slice(-positions, None)) if positions else before
+    )
+    if positions is None:
+        assert repo.lookup_branch("main") == snapshot
+        assert metadata == {
+            key: _main_store_bytes(dataset.store_factory, key) for key in metadata
+        }
+    snapshot = repo.lookup_branch("main")
+    dataset.update("already-clean")
+    if positions is not None:
+        with pytest.raises(AssertionError, match="empty store"):
+            dataset.backfill(
+                pd.Timestamp("2024-01-02"), "new-store", worker_index=0, workers_total=1
+            )
+    assert repo.lookup_branch("main") == snapshot

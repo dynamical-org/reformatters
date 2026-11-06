@@ -6,6 +6,7 @@ import time
 from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypeVar
 
@@ -17,7 +18,7 @@ import xarray as xr
 import zarr.errors
 from icechunk.store import IcechunkStore
 from kubernetes import client
-from pydantic import Field, computed_field, model_validator
+from pydantic import Field, PositiveInt, computed_field, model_validator
 
 from reformatters.common import (
     kubernetes,
@@ -42,6 +43,7 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileResult,
 )
+from reformatters.common.retry import retry
 from reformatters.common.staging import staging_cronjob_name
 from reformatters.common.storage import (
     DatasetFormat,
@@ -72,6 +74,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     primary_storage_config: StorageConfig
     replica_storage_configs: Sequence[StorageConfig] = Field(default_factory=tuple)
     icechunk_virtual_config: IcechunkVirtualConfig | None = None
+    rolling_positions: PositiveInt | None = None
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(seconds=30)
     validation_monitor_schedule: ClassVar[str | None] = None
     validation_monitor_margin: ClassVar[timedelta | None] = None
@@ -691,6 +694,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         # the already-published store; an overwrite backfill must not corrupt it
         # (structural drift, trimming, or unrequested new arrays / expansion).
         overwrite = overwrite_chunks or overwrite_metadata
+        if self.rolling_positions is not None and not update_template_with_results:
+            self._assert_rolling_backfill_empty(self._open_existing_store())
+            assert not overwrite, "Rolling backfills do not support overwrite flags"
         if is_first and update_template_with_results:
             self._assert_no_structural_drift(template_ds)
         if is_first and overwrite:
@@ -828,6 +834,13 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 unit = job.template_ds.to_dataset().get_index(job.append_dim)[-1]
                 for trigger in self.materialized_update_triggers:
                     trigger.dispatch(pd.Timestamp(unit))
+        if self.rolling_positions is not None:
+            for _, repo in self.store_factory.icechunk_repos(sort="primary-last"):
+                retry(
+                    partial(job.trim_rolling_window, repo, "main"),
+                    max_attempts=5,
+                    retryable_exceptions=(icechunk.ConflictError,),
+                )
 
     def validate_dataset(
         self,
@@ -946,7 +959,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 reformat_job_name=reformat_job_name,
                 job_reference_time=job_reference_time,
             )
-        return job_class.operational_update_jobs(
+        jobs, template_ds = job_class.operational_update_jobs(
             primary_store=self.store_factory.primary_store(),
             tmp_store=tmp_store,
             get_template_fn=self._get_template,
@@ -959,6 +972,12 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 pd.Timestamp.now()
             ),
         )
+        if self.rolling_positions is None:
+            return jobs, template_ds
+        return [
+            job.model_copy(update={"rolling_positions": self.rolling_positions})
+            for job in jobs
+        ], template_ds
 
     def _virtual_validation_region_job(
         self,
@@ -1060,6 +1079,10 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         explicit append_dim_end with both overwrite flags."""
         overwrite = overwrite_chunks or overwrite_metadata
         append_dim = self.template_config.append_dim
+        if self.rolling_positions is not None:
+            self._assert_rolling_backfill_empty(existing_ds)
+            assert not overwrite, "Rolling backfills do not support overwrite flags"
+            existing_ds = None
 
         if existing_ds is None:
             assert not overwrite, (
@@ -1098,10 +1121,20 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         )
         return template_ds, resolved_end
 
+    def _assert_rolling_backfill_empty(self, ds: xr.DataTree | None) -> None:
+        assert ds is None or ds.sizes[self.template_config.append_dim] == 0, (
+            "Rolling backfills require an empty store; repairs and retries after publication are unsupported"
+        )
+
     def _assert_no_structural_drift(self, template_ds: xr.DataTree) -> None:
+        existing_ds = self.store_factory.open_primary_datatree()
+        append_dim = self.template_config.append_dim
+        if self.rolling_positions is not None and existing_ds.sizes[append_dim]:
+            first = existing_ds.coords[append_dim].values[0]
+            template_ds = template_ds.sel({append_dim: slice(first, None)})
         template_utils.assert_no_structural_drift_from_existing_store(
             template_ds,
-            self.store_factory.open_primary_datatree(),
+            existing_ds,
             self.template_config.append_dim,
         )
 
@@ -1125,6 +1158,10 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
 
     @model_validator(mode="after")
     def _validate_virtual_storage(self) -> Self:
+        if self.rolling_positions is not None and not issubclass(
+            self.region_job_class, VirtualRegionJob
+        ):
+            raise ValueError("rolling_positions requires a VirtualRegionJob")
         # A virtual region job emits chunk refs into icechunk and needs the source
         # containers registered, so the virtual config is mandatory for it.
         if (
