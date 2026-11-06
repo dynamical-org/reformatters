@@ -92,7 +92,7 @@ def ranged_job(
     data = source_bytes("ifs")
     job._last_modified[coord.key] = LAST_MODIFIED
     job._listed_etags[coord.key] = (len(data), ETAG)
-    monkeypatch.setattr(region_job, "MAX_RANGE_CHUNK", (len(data) + 3) // 4)
+    monkeypatch.setattr(region_job, "TARGET_RANGE_CHUNK", (len(data) + 3) // 4)
     monkeypatch.setattr(
         region_job, "s3_store_from_secret", lambda *args, **kwargs: STORE
     )
@@ -110,9 +110,20 @@ def getter(
     return get
 
 
-@pytest.mark.parametrize("size", [1, 64 * 1024**2, 64 * 1024**2 + 1, 620_000_003])
-def test_balanced_64mib_partition_contract(
-    size: int, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("size", "expected_count"),
+    [
+        (1, 1),
+        (64 * 1024**2, 1),
+        (64 * 1024**2 + 1, 2),
+        (620_000_003, 10),
+        (640 * 1024**2, 10),
+        (640 * 1024**2 + 1, 10),
+        (3 * 1024**3, 10),
+    ],
+)
+def test_balanced_range_partition_and_request_cap(
+    size: int, expected_count: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls = []
 
@@ -134,15 +145,19 @@ def test_balanced_64mib_partition_contract(
         )
 
     monkeypatch.setattr(region_job.obstore, "get", get)
-    assert len(list(region_job._ranged_chunks(STORE, "key", size, ETAG))) == (
-        size + 64 * 1024**2 - 1
-    ) // (64 * 1024**2)
+    assert (
+        len(list(region_job._ranged_chunks(STORE, "key", size, ETAG))) == expected_count
+    )
+    assert len(calls) == expected_count
     intervals = sorted(calls)
     assert intervals[0][0] == 0
     assert intervals[-1][1] == size
     assert all(a[1] == b[0] for a, b in pairwise(intervals))
     lengths = [end - start for start, end in intervals]
-    assert max(lengths) <= 64 * 1024**2
+    if size <= 640 * 1024**2:
+        assert max(lengths) <= 64 * 1024**2
+    else:
+        assert max(lengths) > 64 * 1024**2
     assert max(lengths) - min(lengths) <= 1
 
 
@@ -223,7 +238,9 @@ def test_transient_sibling_cannot_mask_part_three_fatal(
     fatal: type[Exception],
 ) -> None:
     job, coord, data = ranged_job
-    count = (len(data) + region_job.MAX_RANGE_CHUNK - 1) // region_job.MAX_RANGE_CHUNK
+    count = (
+        len(data) + region_job.TARGET_RANGE_CHUNK - 1
+    ) // region_job.TARGET_RANGE_CHUNK
     gate = Barrier(count, timeout=5)
     calls = []
     owners: list[weakref.ReferenceType[Payload]] = []
@@ -367,7 +384,7 @@ def test_native_local_fixture_refs_equal_serial_and_ranged(
             source_params=frozenset({"2t"}),
             source_members=tuple(row["members"]),
         )
-        monkeypatch.setattr(region_job, "MAX_RANGE_CHUNK", (row["bytes"] + 3) // 4)
+        monkeypatch.setattr(region_job, "TARGET_RANGE_CHUNK", (row["bytes"] + 3) // 4)
         with caplog.at_level("WARNING"):
             serial = job.file_refs(coord, row["bytes"])
         update = job.model_copy(update={"processing_mode": "update"})
@@ -393,7 +410,7 @@ def test_range_boundary_inside_grib_header(
     coord = coord.model_copy(update={"source_params": frozenset({"2t", "10u", "10v"})})
     owners: list[weakref.ReferenceType[Payload]] = []
     job._listed_etags[coord.key] = (len(data), ETAG)
-    monkeypatch.setattr(region_job, "MAX_RANGE_CHUNK", (len(data) + 3) // 4)
+    monkeypatch.setattr(region_job, "TARGET_RANGE_CHUNK", (len(data) + 3) // 4)
     monkeypatch.setattr(region_job.obstore, "get", getter(data, owners))
     messages = inventory(StreamReader(iter([data])), len(data), coord)
     assert any(
@@ -552,7 +569,7 @@ def test_single_range_conditional_206_covers_whole_file(
             monkeypatch.setattr(
                 region_job, "s3_store_from_secret", lambda *a, **kw: store
             )
-            monkeypatch.setattr(region_job, "MAX_RANGE_CHUNK", 64 * 1024**2)
+            monkeypatch.setattr(region_job, "TARGET_RANGE_CHUNK", 64 * 1024**2)
             assert len(job.file_refs(coord, len(data))) == 7
         finally:
             server.shutdown()

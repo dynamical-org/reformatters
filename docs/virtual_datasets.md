@@ -70,8 +70,6 @@ Every ref from a source file, plus any append-dim expansion its positions requir
 
 This invariant is also what lets the filter probe a single representative cell per file: if its representative cell is present, all of the accepted refs from that file were committed together. This does not imply that the source contained every expected message.
 
-A reader assembling a file from concurrent requests must pin every request and retry to one strong version token and validate each response before inventory.
-
 Each batch commits to replicas before the primary. A conflicting transaction opens a fresh writable session on the same repository, filters out complete files, and recomputes any expansion before recommitting. Retries are bounded to five attempts per repository; a primary conflict does not replay an already committed replica. Explicit `overwrite_chunks` backfills bypass filtering.
 
 ## Operational updates

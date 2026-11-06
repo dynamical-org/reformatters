@@ -53,72 +53,7 @@ from .template_config import FastModel, lead_hours
 log = get_logger(__name__)
 
 
-MAX_RANGE_CHUNK = 64 * 1024**2
-
-
-def _ranged_chunks(
-    store: ObjectStore, key: str, size: int, etag: str | None
-) -> Generator[Buffer]:
-    if not etag or etag.startswith("W/"):
-        raise SourceContractError("Source listing lacks a strong ETag")
-    count = (size + MAX_RANGE_CHUNK - 1) // MAX_RANGE_CHUNK
-    assert count > 0
-    buffers: list[Buffer] = [b""] * count
-    futures: list[Future[None]] = []
-    errors: list[BaseException] = []
-
-    def fetch(index: int) -> None:
-        start, end = size * index // count, size * (index + 1) // count
-        response = payload = None
-        try:
-            response = obstore.get(
-                store, key, options={"range": (start, end), "if_match": etag}
-            )
-            if response.range != (start, end):
-                raise SourceContractError("Source returned a different range")
-            if response.meta["size"] != size:
-                raise SourceContractError("Source size differs from listing")
-            if response.meta["e_tag"] != etag:
-                raise SourceContractError("Source ETag differs from pinned version")
-            payload = response.bytes()
-            if len(payload) < end - start:
-                raise InterruptedGribStreamError("Source range body was truncated")
-            if len(payload) > end - start:
-                raise SourceContractError(
-                    "Source range body exceeds requested interval"
-                )
-            buffers[index] = payload
-        finally:
-            response = payload = None
-
-    try:
-        with ThreadPoolExecutor(count) as pool:
-            futures.extend(pool.submit(fetch, index) for index in range(count))
-        for future in futures:
-            error = future.exception()
-            if error is not None:
-                errors.append(error)
-        for error in errors:
-            if isinstance(
-                error,
-                (
-                    AssertionError,
-                    SourceAccessError,
-                    PermissionDeniedError,
-                    UnauthenticatedError,
-                ),
-            ) or not isinstance(error, Exception):
-                raise error
-        for error in errors:
-            if not isinstance(error, (InterruptedGribStreamError, GenericError)):
-                raise error
-        if errors:
-            raise errors[0]
-        yield from buffers
-    finally:
-        buffers.clear()
-        futures.clear()
-        errors.clear()
+TARGET_RANGE_CHUNK = 64 * 1024**2
 
 
 class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord]):
@@ -367,3 +302,68 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
             for message in messages
             if message.param in variables and message.member in members
         ]
+
+
+def _ranged_chunks(
+    store: ObjectStore, key: str, size: int, etag: str | None
+) -> Generator[Buffer]:
+    if not etag or etag.startswith("W/"):
+        raise SourceContractError("Source listing lacks a strong ETag")
+    count = min(10, (size + TARGET_RANGE_CHUNK - 1) // TARGET_RANGE_CHUNK)
+    assert count > 0
+    buffers: list[Buffer] = [b""] * count
+    futures: list[Future[None]] = []
+    errors: list[BaseException] = []
+
+    def fetch(index: int) -> None:
+        start, end = size * index // count, size * (index + 1) // count
+        response = payload = None
+        try:
+            response = obstore.get(
+                store, key, options={"range": (start, end), "if_match": etag}
+            )
+            if response.range != (start, end):
+                raise SourceContractError("Source returned a different range")
+            if response.meta["size"] != size:
+                raise SourceContractError("Source size differs from listing")
+            if response.meta["e_tag"] != etag:
+                raise SourceContractError("Source ETag differs from pinned version")
+            payload = response.bytes()
+            if len(payload) < end - start:
+                raise InterruptedGribStreamError("Source range body was truncated")
+            if len(payload) > end - start:
+                raise SourceContractError(
+                    "Source range body exceeds requested interval"
+                )
+            buffers[index] = payload
+        finally:
+            response = payload = None
+
+    try:
+        with ThreadPoolExecutor(count) as pool:
+            futures.extend(pool.submit(fetch, index) for index in range(count))
+        for future in futures:
+            error = future.exception()
+            if error is not None:
+                errors.append(error)
+        for error in errors:
+            if isinstance(
+                error,
+                (
+                    AssertionError,
+                    SourceAccessError,
+                    PermissionDeniedError,
+                    UnauthenticatedError,
+                ),
+            ) or not isinstance(error, Exception):
+                raise error
+        for error in errors:
+            if not isinstance(error, (InterruptedGribStreamError, GenericError)):
+                raise error
+        if errors:
+            raise errors[0]
+        yield from buffers
+    finally:
+        buffers.clear()
+        futures.clear()
+        errors.clear()
