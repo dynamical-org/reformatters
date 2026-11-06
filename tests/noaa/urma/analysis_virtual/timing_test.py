@@ -43,10 +43,12 @@ CUTOFF = FIRE + pd.Timedelta("61min26s")
 
 
 class TimingTemplateConfig(NoaaUrmaAnalysisVirtualTemplateConfig):
-    def get_template(self, end_time: DatetimeLike) -> xr.DataTree:
+    def get_template(
+        self, end_time: DatetimeLike, *, start_time: DatetimeLike | None = None
+    ) -> xr.DataTree:
         template = NoaaRtmaAnalysisVirtualTemplateConfig(
             append_dim_start=self.append_dim_start
-        ).get_template(end_time)
+        ).get_template(end_time, start_time=start_time)
         ds = template.dataset[["temperature_2m"]]
         ds.attrs = self.dataset_attributes.model_dump(exclude_none=True)
         return xr.DataTree(ds)

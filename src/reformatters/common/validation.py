@@ -98,7 +98,14 @@ class ValidationContext:
         assert self.region_job is not None, (
             "this check requires a virtual dataset's operational-window region job"
         )
-        return self.region_job
+        job = self.region_job
+        if getattr(job, "rolling_positions", None) is not None:
+            assert isinstance(self.store, IcechunkStore)
+            job = job.for_store(self.store)
+            job = job.model_copy(
+                update={"region": slice(0, self.ds.sizes[self.append_dim])}
+            )
+        return job
 
     def known_var_paths(self) -> Sequence[str]:
         """The variable paths a check's include/exclude filters are validated against:
@@ -914,6 +921,20 @@ async def _list_shards(store: Store, var: str) -> set[str]:
     return {key.split(f"{var}/c/")[-1] async for key in store.list_prefix(f"{var}")}
 
 
+def _bounded_source_file_coords(
+    region_job: VirtualRegionJob[Any, Any], ds: xr.Dataset
+) -> Sequence[SourceFileCoord]:
+    index = ds.get_index(region_job.append_dim)
+    if len(index) == 0:
+        return []
+    lower, upper = index.min(), index.max()
+    return [
+        coord
+        for coord in region_job.source_file_coords()
+        if lower <= coord.out_loc()[region_job.append_dim] <= upper
+    ]
+
+
 class CheckVirtualManifestCompleteness(VariableSelection, Validator):
     """Assert each recent append-dim position is sufficiently present in the manifest.
 
@@ -967,10 +988,21 @@ class CheckVirtualManifestCompleteness(VariableSelection, Validator):
         append_dim = region_job.append_dim
         self.validate_var_names([var.path for var in region_job.data_vars])
 
-        ingested_through = context.ds.get_index(append_dim).max()
+        index = context.ds.get_index(append_dim)
+        if len(index) == 0 and region_job.rolling_positions is not None:
+            return ValidationResult(
+                passed=False,
+                checked_count=0,
+                message=f"Dataset has no {append_dim} positions to check for completeness",
+            )
+        ingested_through = index.max()
         candidates = [
             coord
-            for coord in region_job.source_file_coords()
+            for coord in (
+                _bounded_source_file_coords(region_job, context.ds)
+                if getattr(region_job, "rolling_positions", None) is not None
+                else region_job.source_file_coords()
+            )
             if coord.out_loc()[append_dim] <= ingested_through
             and self._carries_selected_var(coord, region_job)
         ]
@@ -1053,6 +1085,8 @@ class CheckVirtualDecodeHealth(Validator):
     A variable fails if any sampled chunk errors or all of its sampled chunks decode
     entirely NaN. Fails — never silently passes — when no references are present.
 
+    Rolling windows additionally sample their oldest present position.
+
     `allow_all_nan_vars` explicitly names variables that may legitimately carry their
     missing state across every sampled chunk. They still fail on decode errors or missing
     sampled chunk references.
@@ -1098,7 +1132,11 @@ class CheckVirtualDecodeHealth(Validator):
                 f"Known variable paths: {sorted(context.known_var_paths())}"
             )
         append_dim = region_job.append_dim
-        candidates = region_job.source_file_coords()
+        candidates = (
+            _bounded_source_file_coords(region_job, ds)
+            if getattr(region_job, "rolling_positions", None) is not None
+            else region_job.source_file_coords()
+        )
         if not candidates:
             return ValidationResult(
                 passed=False,
@@ -1115,7 +1153,10 @@ class CheckVirtualDecodeHealth(Validator):
             )
 
         present_positions = sorted({c.out_loc()[append_dim] for c in present})
-        targets = self._select_targets(present_positions)
+        targets = self._select_targets(
+            present_positions,
+            rolling=getattr(region_job, "rolling_positions", None) is not None,
+        )
         to_decode = self._sample_leads(
             [c for c in present if c.out_loc()[append_dim] in targets]
         )
@@ -1177,11 +1218,14 @@ class CheckVirtualDecodeHealth(Validator):
             passed=True, message=message, checked_count=decoded_refs
         )
 
-    def _select_targets(self, present_positions: Sequence[Any]) -> set[Any]:
+    def _select_targets(
+        self, present_positions: Sequence[Any], *, rolling: bool = False
+    ) -> set[Any]:
+        boundary_targets = {present_positions[0]} if rolling else set()
         if isinstance(self.positions, int):
-            return set(present_positions[-self.positions :])
+            return set(present_positions[-self.positions :]) | boundary_targets
         if self.max_positions and len(present_positions) > self.max_positions:
-            return {
+            return boundary_targets | {
                 present_positions[i]
                 for i in np.unique(
                     np.linspace(0, len(present_positions) - 1, self.max_positions)

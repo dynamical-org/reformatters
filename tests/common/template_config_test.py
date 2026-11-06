@@ -288,6 +288,27 @@ def test_string_coordinate_template_roundtrip(
     )
 
 
+@pytest.mark.parametrize("empty", [False, True])
+def test_bounded_template(
+    string_coordinate_config: StringCoordinateConfig, empty: bool
+) -> None:
+    config = string_coordinate_config
+    start = pd.Timestamp("2024-01-03", tz="UTC")
+    end = start if empty else start + pd.Timedelta("2D")
+    bounded = config.get_template(end, start_time=start)
+    expected = config.get_template(end).sel(time=slice(start.tz_localize(None), None))
+    xr.testing.assert_identical(bounded, expected)
+    np.testing.assert_equal(bounded.temperature.encoding, expected.temperature.encoding)
+
+
+@pytest.mark.parametrize("start", ["2023-12-31", "2024-01-02T12:00:00"])
+def test_bounded_template_rejects_invalid_start(
+    string_coordinate_config: StringCoordinateConfig, start: str
+) -> None:
+    with pytest.raises(AssertionError, match="Template start"):
+        string_coordinate_config.get_template("2024-01-04", start_time=start)
+
+
 @pytest.mark.parametrize(
     "labels", [STATISTICS[::-1], [*STATISTICS[:-1], "p99"], STATISTICS[:-1]]
 )

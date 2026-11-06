@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import cache, cached_property, partial
 from itertools import groupby
 from pathlib import Path
-from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, cast
+from typing import Any, ClassVar, Final, Generic, Literal, NamedTuple, Self, cast
 
 import icechunk
 import numpy as np
@@ -31,7 +31,14 @@ from reformatters.common.region_job import (
     SourceFileResult,
 )
 from reformatters.common.retry import exponential_backoff_time, retry
+from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, Timestamp
+from reformatters.common.virtual_retention import (
+    retention_start,
+    store_template,
+    trim_retention,
+)
+from reformatters.common.zarr import copy_zarr_metadata
 
 log = get_logger(__name__)
 
@@ -78,6 +85,8 @@ class VirtualRegionJob(
 
     # Updates wait for source files as the provider publishes them, backfills check once
     processing_mode: Literal["backfill", "update"] = "backfill"
+    rolling_positions: int | None = None
+    retention_template_config: TemplateConfig[Any] | None = None
 
     # Stop polling after this time, leaving unpublished files to the next fire.
     poll_deadline: Timestamp = pd.Timestamp.max
@@ -233,6 +242,35 @@ class VirtualRegionJob(
         Probes ref existence (store.exists) - never reads or decodes a chunk, which
         would trigger a download + decode.
         """
+        mapper = self.for_store(store)
+        return mapper._filter_already_present(  # noqa: SLF001
+            mapper._retained_coords(candidates),  # noqa: SLF001
+            store,
+        )
+
+    def _retained_coords(
+        self, candidates: Sequence[SOURCE_FILE_COORD]
+    ) -> list[SOURCE_FILE_COORD]:
+        if self.rolling_positions is None:
+            return list(candidates)
+        assert self.retention_template_config is not None
+        labels = self.template_ds.to_dataset().get_index(self.append_dim)
+        origin = (
+            labels[0]
+            if len(labels)
+            else self.retention_template_config.append_dim_start
+        )
+        return [
+            coord
+            for coord in candidates
+            if self._append_label(coord.out_loc()) >= origin
+        ]
+
+    def _filter_already_present(
+        self,
+        candidates: Sequence[SOURCE_FILE_COORD],
+        store: IcechunkStore,
+    ) -> list[SOURCE_FILE_COORD]:
         group = zarr.open_group(store, mode="r")
         rep_vars = [self.representative_var(coord) for coord in candidates]
         indices = self._resolve_chunk_keys(
@@ -257,6 +295,25 @@ class VirtualRegionJob(
 
         present = _exists_many(store, [key for _, key in keyed if key is not None])
         return [coord for coord, key in keyed if key is None or not present[key]]
+
+    def for_store(self, store: IcechunkStore) -> Self:
+        if self.rolling_positions is None:
+            return self
+        assert self.retention_template_config is not None
+        return self._with_template(
+            store_template(store, self.retention_template_config)
+        )
+
+    def _with_template(self, template: xr.DataTree) -> Self:
+        job = self.model_copy(update={"template_ds": template})
+        job.__dict__.pop("_multi_chunk_dim_first_labels", None)
+        return job
+
+    def _append_label(self, location: Mapping[Dim, CoordinateValue]) -> Timestamp:
+        value = location[self.append_dim]
+        assert isinstance(value, (pd.Timestamp, str)), "Expected an append time label"
+        label = pd.Timestamp(value)
+        return label.tz_convert(None) if label.tzinfo is not None else label
 
     # ----- Common write-loop machinery: subclasses do not implement these -----
 
@@ -394,17 +451,23 @@ class VirtualRegionJob(
 
         primary_repo, replica_repos = store_factory.icechunk_primary_and_replica_repos()
         readonly_store = primary_repo.readonly_session(branch_name).store
-        remaining = [
-            coord
-            for job in jobs
-            for coord in (
-                job.source_file_coords()
-                if overwrite_chunks
-                else job.filter_already_present(
-                    job.source_file_coords(), readonly_store
+        remaining = []
+        for job in jobs:
+            candidates = job.source_file_coords()
+            if job.rolling_positions is None:
+                remaining.extend(
+                    candidates
+                    if overwrite_chunks
+                    else job.filter_already_present(candidates, readonly_store)
                 )
-            )
-        ]
+            else:
+                mapper = job.for_store(readonly_store)
+                candidates = mapper._retained_coords(candidates)  # noqa: SLF001
+                remaining.extend(
+                    candidates
+                    if overwrite_chunks
+                    else mapper._filter_already_present(candidates, readonly_store)  # noqa: SLF001
+                )
         # An all-already-present worker writes nothing; an empty icechunk commit
         # would raise, so skip the write loop entirely.
         if remaining:
@@ -478,10 +541,22 @@ class VirtualRegionJob(
         finally:
             if (close := getattr(ref_iterator, "close", None)) is not None:
                 close()
+        eligible = list(remaining)
+        if self.rolling_positions is not None:
+            assert self.retention_template_config is not None
+            start = retention_start(
+                primary_repo.readonly_session(branch).store,
+                self.retention_template_config,
+            )
+            eligible = [
+                coord
+                for coord in remaining
+                if self._append_label(coord.out_loc()) >= start
+            ]
         return (
             self.processing_mode == "update"
-            and bool(remaining)
-            and all(id(coord) in processed for coord in remaining)
+            and bool(eligible)
+            and all(id(coord) in processed for coord in eligible)
             and pd.Timestamp.now() < self.poll_deadline
         )
 
@@ -497,9 +572,41 @@ class VirtualRegionJob(
         prepare_start = time.monotonic()
         # Reopen on conflict so filtering and extent use the new snapshot.
         session = repo.writable_session(branch)
+        mapper = self
+        if self.rolling_positions is not None:
+            config = self.retention_template_config
+            assert config is not None
+            planned_labels = self.template_ds.to_dataset().get_index(self.append_dim)
+            for coord, refs in file_refs_batch:
+                label = self._append_label(coord.out_loc())
+                assert label in planned_labels, (
+                    "Source label is outside the planned window"
+                )
+                assert all(self._append_label(ref.out_loc) == label for ref in refs), (
+                    "Reference append labels must match their source coordinate"
+                )
+            end = (
+                max(self._append_label(coord.out_loc()) for coord, _ in file_refs_batch)
+                + config.append_dim_frequency
+            )
+            mapper = self._with_template(store_template(session.store, config, end=end))
+            retained_ids = {
+                id(coord)
+                for coord in mapper._retained_coords(  # noqa: SLF001
+                    [coord for coord, _ in file_refs_batch]
+                )
+            }
+            file_refs_batch = [
+                (coord, refs)
+                for coord, refs in file_refs_batch
+                if id(coord) in retained_ids
+            ]
         if not overwrite_chunks:
-            remaining = self.filter_already_present(
-                [coord for coord, _ in file_refs_batch], session.store
+            candidates = [coord for coord, _ in file_refs_batch]
+            remaining = (
+                self.filter_already_present(candidates, session.store)
+                if self.rolling_positions is None
+                else mapper._filter_already_present(candidates, session.store)  # noqa: SLF001
             )
             remaining_ids = {id(coord) for coord in remaining}
             file_refs_batch = [
@@ -511,11 +618,11 @@ class VirtualRegionJob(
             return
 
         refs = [ref for _, file_refs in file_refs_batch for ref in file_refs]
-        current_size = self._committed_append_dim_size(session.store)
-        needed_size = self._needed_append_dim_size(refs)
+        current_size = mapper._committed_append_dim_size(session.store)  # noqa: SLF001
+        needed_size = mapper._needed_append_dim_size(refs)  # noqa: SLF001
         resized = needed_size > current_size
         if resized:
-            self.sync_dims_to([session.store], needed_size)
+            mapper.sync_dims_to([session.store], needed_size)
             mismatched_sizes = {
                 path: size
                 for path, array in zarr.open_group(session.store, mode="r").members(
@@ -533,7 +640,7 @@ class VirtualRegionJob(
 
         emit_start = time.monotonic()
         prepare_s = emit_start - prepare_start
-        self._emit_refs([session.store], refs)
+        mapper._emit_refs([session.store], refs)  # noqa: SLF001
         emit_s = time.monotonic() - emit_start
 
         now = pd.Timestamp.now(tz="UTC")
@@ -542,7 +649,7 @@ class VirtualRegionJob(
             f"Update at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}",
             session.store,
             [],
-            allow_rebase=not resized,
+            allow_rebase=self.rolling_positions is None and not resized,
         )
         if pipeline_batch_id is not None:
             log_virtual_event(
@@ -561,6 +668,17 @@ class VirtualRegionJob(
             f"arrays={len({ref.data_var.path for ref in refs})} "
             f"prepare={prepare_s:.1f}s resized={resized}"
         )
+
+    def trim_retention(self, repo: icechunk.Repository, branch: str) -> None:
+        assert self.rolling_positions is not None
+        assert self.retention_template_config is not None
+        session = repo.writable_session(branch)
+        if trim_retention(
+            session, self.retention_template_config, self.rolling_positions
+        ):
+            storage.commit_if_icechunk(
+                "Trim virtual retention", session.store, [], allow_rebase=False
+            )
 
     def _assert_probe_chunk_covered(
         self, coord: SOURCE_FILE_COORD, file_refs: Sequence[VirtualRef]
@@ -697,6 +815,15 @@ class VirtualRegionJob(
         append dim is never sized past ingested data. Commits only when something
         actually changed, so an in-sync store adds no history noise.
         """
+        if self.rolling_positions is not None:
+            primary, replicas = store_factory.icechunk_primary_and_replica_repos()
+            for repo in (*replicas, primary):
+                retry(
+                    partial(self._refresh_rolling_metadata, repo, tmp_store),
+                    max_attempts=5,
+                    retryable_exceptions=(icechunk.ConflictError,),
+                )
+            return
         # consolidated_metadata=False matches how sync_dims_to's appends serialize group
         # docs: embedded consolidated metadata carries every array's shape, which changes
         # on each append and would force a refresh commit per fire.
@@ -707,6 +834,41 @@ class VirtualRegionJob(
             tmp_store,
             consolidated=self.consolidated_metadata,
         )
+
+    def _refresh_rolling_metadata(
+        self, repo: icechunk.Repository, tmp_store: Path
+    ) -> None:
+        assert self.retention_template_config is not None
+        session = repo.writable_session("main")
+        template = store_template(session.store, self.retention_template_config)
+        if template.sizes[self.append_dim] == 0:
+            return
+        existing = xr.open_datatree(
+            session.store,  # ty: ignore[invalid-argument-type]
+            engine="zarr",
+            chunks=None,
+            decode_timedelta=True,
+            consolidated=False,
+        )
+        template_utils.assert_safe_overwrite(
+            template,
+            existing,
+            self.append_dim,
+            allow_new_arrays=True,
+            allow_expansion=False,
+        )
+        template_utils.write_metadata(template, tmp_store, mode="w", consolidated=False)
+        copy_zarr_metadata(
+            template,
+            tmp_store,
+            session.store,
+            skip_unchanged=True,
+            exclude_coord_value_chunks=template_utils.store_written_coords(template),
+        )
+        if session.has_uncommitted_changes:
+            storage.commit_if_icechunk(
+                "Refresh metadata from template", session.store, [], allow_rebase=False
+            )
 
     def sync_dims_to(
         self, stores: Sequence[IcechunkStore], needed_append_dim_size: int
@@ -757,12 +919,13 @@ class VirtualRegionJob(
 
     def read_ingested_through(self, store: IcechunkStore) -> Timestamp | None:
         """The newest append-dim label `store` covers, or None when it is empty."""
-        size = self._committed_append_dim_size(store)
+        mapper = self.for_store(store)
+        size = mapper._committed_append_dim_size(store)  # noqa: SLF001
         if size == 0:
             return None
         return cast(
             "Timestamp",
-            self.template_ds.to_dataset().get_index(self.append_dim)[size - 1],
+            mapper.template_ds.to_dataset().get_index(self.append_dim)[size - 1],
         )
 
     def _committed_append_dim_size(self, store: IcechunkStore) -> int:
