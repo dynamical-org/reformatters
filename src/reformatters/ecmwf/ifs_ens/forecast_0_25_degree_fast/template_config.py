@@ -19,7 +19,7 @@ class EcmwfIfsEnsForecast025DegreeFastTemplateConfig(EcmwfFastTemplateConfig):
             license="LicenseRef-Commercial",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~20km)",
-            time_domain="Most recent 12 forecast initializations; updates may temporarily expose more",
+            time_domain="Most recent 12 forecast initializations",
             time_resolution="Forecasts initialized every 6 hours",
             forecast_domain="Forecast lead time 0-360 hours (0-15 days) ahead",
             forecast_resolution="0-90 hours: hourly, 93-144 hours: 3 hourly, 150-360 hours: 6 hourly",

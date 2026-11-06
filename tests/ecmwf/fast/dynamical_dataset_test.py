@@ -23,8 +23,8 @@ def test_registered_ids_and_separate_source_output_access() -> None:
     for dataset in DATASETS:
         assert dataset.rolling_positions == 12
         assert (
-            "12 forecast initializations"
-            in dataset.template_config.dataset_attributes.time_domain
+            dataset.template_config.dataset_attributes.time_domain
+            == "Most recent 12 forecast initializations"
         )
         assert dataset.primary_storage_config.format == DatasetFormat.ICECHUNK
         assert dataset.primary_storage_config.k8s_secret_name == OUTPUT_SECRET
