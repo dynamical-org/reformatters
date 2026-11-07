@@ -5,8 +5,8 @@
 The full test suite runs on amd64 and arm64. Each architecture splits the work
 into four suites defined in `code-quality.yml` as explicit path lists and their
 complements, so every test, including slow tests, runs in exactly one suite and
-a new test directory is covered automatically (under `tests/noaa` by `noaa-b`,
-elsewhere by `other-b`). Rebalance the lists
+a new test directory is covered automatically: inside a listed path by that
+suite, otherwise by the complement suite for its tree. Rebalance the lists
 from the per-test timings each test job uploads as an artifact. Ruff,
 formatting, and ty run in the `other-b` suite on each architecture.
 
