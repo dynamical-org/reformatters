@@ -1,7 +1,7 @@
 import math
 from collections.abc import Iterable
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 import xarray as xr
@@ -12,6 +12,7 @@ from reformatters.common import (
 )
 from reformatters.common import shared_memory_utils
 from reformatters.common.iterating import shard_slice_indexers
+from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim
 
 
@@ -122,4 +123,47 @@ def patch_write_first_shard_only(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(
         materialized_region_job_module, "write_shards", _first_shard_only_write_shards
+    )
+
+
+def patch_template_to_variables(
+    monkeypatch: pytest.MonkeyPatch,
+    template_config_type: type[TemplateConfig[Any]],
+    wanted: Iterable[str],
+) -> None:
+    """Shrink a template config's template and data_vars to the variables named by
+    bare name or `group/name`, dropping groups left empty. Composes with an earlier
+    get_template patch on the same type."""
+    names = set(wanted)
+    original_get_template = template_config_type.get_template
+    original_data_vars = template_config_type.data_vars.fget
+    assert original_data_vars is not None
+
+    def selected(path: str, name: str) -> bool:
+        return name in names or path in names
+
+    def trimmed_get_template(self: TemplateConfig[Any], end_time: Any) -> xr.DataTree:  # noqa: ANN401
+        nodes = {}
+        for node in original_get_template(self, end_time).subtree:
+            prefix = node.path.strip("/")
+            keep = [
+                name
+                for name in map(str, node.data_vars)
+                if selected(f"{prefix}/{name}" if prefix else name, name)
+            ]
+            if keep or node.path == "/":
+                nodes[node.path] = node.to_dataset().drop_vars(
+                    [name for name in node.data_vars if name not in keep]
+                )
+        return xr.DataTree.from_dict(nodes)
+
+    monkeypatch.setattr(template_config_type, "get_template", trimmed_get_template)
+    monkeypatch.setattr(
+        template_config_type,
+        "data_vars",
+        property(
+            lambda self: [
+                v for v in original_data_vars(self) if selected(v.path, v.name)
+            ]
+        ),
     )

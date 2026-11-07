@@ -18,6 +18,7 @@ from reformatters.noaa.hrrr.forecast_18_hour_virtual.region_job import (
     NoaaHrrrForecast18HourVirtualRegionJob,
 )
 from reformatters.noaa.hrrr.hrrr_config_models import NoaaHrrrDataVar
+from tests.chunk_utils import patch_template_to_variables
 from tests.common.dynamical_dataset_test import assert_configured_validators
 
 _Y, _X = 635, 1062
@@ -73,6 +74,9 @@ def test_backfill_local_and_operational_update(
         type(dataset.template_config),
         "get_template",
         lambda self, end_time: original_get_template(end_time).isel(lead_time=[0, 6]),
+    )
+    patch_template_to_variables(
+        monkeypatch, type(dataset.template_config), _FILTER_VARS
     )
 
     dataset.backfill_local(
