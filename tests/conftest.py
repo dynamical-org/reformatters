@@ -3,7 +3,6 @@ import faulthandler
 import multiprocessing
 import os
 import sys
-import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -66,30 +65,6 @@ _SPLIT_BY_PARAM_FILES = (
     "tests/noaa/rtma_ru/analysis_virtual/dynamical_dataset_test.py",
     "tests/noaa/urma/analysis_virtual/dynamical_dataset_test.py",
 )
-
-
-class _TimelineRecorder:
-    """Appends one line per test phase to a file, for reconstructing per-worker
-    timelines from CI runs."""
-
-    def __init__(self, path: str) -> None:
-        self.path = path
-        self.worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
-
-    def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
-        with open(self.path, "a") as f:
-            f.write(
-                f"{time.time():.3f}\t{self.worker}\t{report.when}\t{report.duration:.3f}\t{report.outcome}\t{report.nodeid}\n"
-            )
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    path = os.environ.get("PYTEST_TIMELINE_FILE")
-    is_xdist_controller = not hasattr(config, "workerinput") and bool(
-        config.getoption("numprocesses", default=0)
-    )
-    if path is not None and not is_xdist_controller:
-        config.pluginmanager.register(_TimelineRecorder(path))
 
 
 def pytest_xdist_make_scheduler(
