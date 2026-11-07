@@ -59,8 +59,9 @@ class GoogleWeathernext3ForecastVirtualDataset(
         ]
 
     def _min_present_fraction(self) -> tuple[float, ...]:
-        # Synoptic inits can still be filling when four later hourly inits are due.
         if self.region_job_class.init_frequency == pd.Timedelta("1h"):
+            # Temporary allowance: Nov 2026 synoptic source tails reached init + 11h23m,
+            # with ingestion complete by init + 11h39m.
             return (0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
         return (1.0,)
 
