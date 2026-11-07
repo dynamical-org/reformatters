@@ -10,6 +10,7 @@ from zarr.abc.store import Store
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat, StorageConfig
 from reformatters.noaa.gfs.forecast import NoaaGfsForecastDataset
+from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
@@ -38,8 +39,8 @@ def test_backfill_local_and_operational_update(
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
-        lambda self, end_time: orig_get_template(end_time).sel(
-            lead_time=slice("0h", "3h")
+        lambda self, end_time: shrink_chunks_and_shards(
+            orig_get_template(end_time).sel(lead_time=slice("0h", "3h"))
         ),
     )
 
@@ -51,6 +52,7 @@ def test_backfill_local_and_operational_update(
         "categorical_freezing_rain_surface",  # average over window
     ]
 
+    patch_write_shards_containing(monkeypatch, [{"latitude": 0, "longitude": 0}])
     # 1. Backfill archive
     dataset.backfill_local(
         append_dim_end=init_time_end, filter_variable_names=filter_variable_names

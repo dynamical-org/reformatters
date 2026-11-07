@@ -1,8 +1,9 @@
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
 
+import pandas as pd
 import pytest
 import xarray as xr
 from zarr.abc.store import Store
@@ -166,4 +167,56 @@ def patch_template_to_variables(
                 v for v in original_data_vars(self) if selected(v.path, v.name)
             ]
         ),
+    )
+
+
+def patch_write_shards_containing(
+    monkeypatch: pytest.MonkeyPatch, cells: Sequence[Mapping[str, float]]
+) -> None:
+    """Only write the shards that contain a cell the test reads.
+
+    Each cell maps dimension names to the coordinate labels the test selects with
+    `.sel(..., method="nearest")`, e.g. {"latitude": 0, "longitude": 0}. A dimension a
+    cell omits matches every shard. A shard is written when it contains at least one cell.
+
+    Replaces write_shards rather than write_shard_to_zarr because the latter is pickled
+    for ProcessPoolExecutor and a local function can't be.
+    """
+    orig_write_shard_to_zarr = shared_memory_utils.write_shard_to_zarr
+
+    def _selective_write_shards(
+        processing_region_da_template: xr.DataArray,
+        shared_buffer: object,
+        append_dim: AppendDim,
+        output_region_ds: xr.Dataset,
+        store: Store | Path,
+        cpu_process_executor: object,
+    ) -> None:
+        da = output_region_ds[processing_region_da_template.name]
+        cell_positions = [
+            {
+                dim: da.get_index(dim)
+                .get_indexer(pd.Index([label]), method="nearest")
+                .item()
+                for dim, label in cell.items()
+            }
+            for cell in cells
+        ]
+        for indexer in shard_slice_indexers(da):
+            shard = dict(zip(da.dims, indexer, strict=True))
+            if any(
+                all(shard[dim].start <= i < shard[dim].stop for dim, i in cell.items())
+                for cell in cell_positions
+            ):
+                orig_write_shard_to_zarr(
+                    processing_region_da_template,
+                    shared_buffer.name,  # ty: ignore[unresolved-attribute]
+                    append_dim,
+                    output_region_ds,
+                    store,
+                    indexer,
+                )
+
+    monkeypatch.setattr(
+        materialized_region_job_module, "write_shards", _selective_write_shards
     )

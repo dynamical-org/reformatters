@@ -9,10 +9,11 @@ from reformatters.common import validation
 from reformatters.ecmwf.aifs_ens.forecast.dynamical_dataset import (
     EcmwfAifsEnsForecastDataset,
 )
-from tests.chunk_utils import shrink_chunks_and_shards
+from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
+    assert_update_fails_validation,
 )
 
 
@@ -54,6 +55,7 @@ def test_backfill_local_and_operational_update(
             }
         ),
     )
+    patch_write_shards_containing(monkeypatch, [{"latitude": 0, "longitude": 0}])
     dataset.backfill_local(append_dim_end=pd.Timestamp("2025-07-02T06:00:00"))
 
     ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
@@ -93,7 +95,7 @@ def test_backfill_local_and_operational_update(
         "now",
         Mock(return_value=pd.Timestamp("2025-07-02T12:00:00")),
     )
-    dataset.update("test-update")
+    assert_update_fails_validation(dataset, "test-update", "CheckExpectedShards")
 
     updated_ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
     np.testing.assert_array_equal(
