@@ -428,9 +428,14 @@ def test_range_boundary_inside_grib_header(
     "cls",
     [EcmwfIfsEnsForecast025DegreeFastRegionJob, EcmwfAifsEnsForecastFastRegionJob],
 )
-def test_five_file_slots_drain_queued_work_at_cutoff_without_queued_payloads(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cls: type[EcmwfFastRegionJob]
+@pytest.mark.parametrize("capacity", [2, 5])
+def test_byte_budget_drains_queued_work_at_cutoff_without_queued_payloads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cls: type[EcmwfFastRegionJob],
+    capacity: int,
 ) -> None:
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", str(2 * capacity))
     job = make_job(tmp_path, cls).model_copy(
         update={
             "processing_mode": "update",
@@ -463,7 +468,7 @@ def test_five_file_slots_drain_queued_work_at_cutoff_without_queued_payloads(
             admitted.append(coord)
             active += 1
             peak = max(peak, active)
-            if active == 5:
+            if active == capacity:
                 full.set()
         try:
             assert release.wait(5)
@@ -482,15 +487,15 @@ def test_five_file_slots_drain_queued_work_at_cutoff_without_queued_payloads(
         result = driver.submit(lambda: list(job.process_virtual_refs(coords)))
         try:
             assert full.wait(5)
-            assert len(admitted) == len(owners) == 5
-            assert sum(owner() is not None for owner in owners) == 5
+            assert len(admitted) == len(owners) == capacity
+            assert sum(owner() is not None for owner in owners) == capacity
         finally:
             release.set()
         batches = result.result(timeout=5)
     assert len(batches) == 1
     assert {id(coord) for coord, _ in batches[0]} == {id(coord) for coord in coords}
     assert len(admitted) == 12
-    assert peak == 5
+    assert peak == capacity
     assert len(sweeps) == 1
     assert all(owner() is None for owner in owners)
 
