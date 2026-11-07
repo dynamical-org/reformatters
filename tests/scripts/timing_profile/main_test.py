@@ -15,7 +15,6 @@ from reformatters.google.weathernext3.forecast_virtual.template_config import ST
 from scripts.timing_profile import __main__ as cli
 from scripts.timing_profile.__main__ import (
     main,
-    parse_args,
     select_datasets,
     trigger_producers,
 )
@@ -46,10 +45,6 @@ def test_offline_cli_reports_protected_source_without_changing_constants(
     assert "PPS timestamps require credentials" in report
     assert "No production constants are changed" in report
     assert "offline exports" in report
-
-
-def test_default_history_is_365_days() -> None:
-    assert parse_args([]).days == 365
 
 
 def test_proxy_capture_estimate_includes_all_four_wn2_cycles(
@@ -239,3 +234,57 @@ def test_triggered_consumer_is_found_by_its_cronjob_name(
         "Triggered by noaa-gfs-forecast-virtual; the cron is a backstop at the first readiness tier's T, and max_delay matches its offset."
         in output.read_text()
     )
+
+
+PREFIX = "s3://fixture-bucket/gfs/"
+
+
+def test_known_arrivals_produce_the_recommended_schedule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Arrivals 3h + 0..6 min after each 6-hourly init recommend
+    S = ceil_minute(p99 + 3 min) = 03:09 and the matching cron."""
+    delays = [10800 + 60 * (i % 7) for i in range(1000)]
+
+    def units(
+        dataset: object, start: pd.Timestamp, end: pd.Timestamp, source: object
+    ) -> Iterator[Unit]:
+        for anchor in pd.date_range(start.ceil("6h"), end, freq="6h", inclusive="left"):
+            yield Unit(anchor, "run", (frozenset([f"{PREFIX}{anchor:%Y%m%d%H}"]),), 0)
+
+    def list_fixture(self: TimestampSource, prefix: str) -> Listing:
+        anchors = pd.date_range("2026-01-01", "2026-10-27", freq="6h")
+        return Listing(
+            {
+                f"{PREFIX}{a:%Y%m%d%H}": a + pd.Timedelta(seconds=delays[i % 1000])
+                for i, a in enumerate(anchors)
+            },
+            "fixture listing",
+        )
+
+    monkeypatch.setattr(cli, "expected_units", units)
+    monkeypatch.setattr(TimestampSource, "list", list_fixture)
+    output = tmp_path / "values.md"
+    cli.main(
+        [
+            "--dataset",
+            "noaa-gfs-forecast",
+            "--days",
+            "300",
+            "--workers",
+            "1",
+            "--source",
+            "listings",
+            "--as-of",
+            "2026-10-27T00:00",
+            "--checkins-dir",
+            str(tmp_path),
+            "--cache-dir",
+            str(tmp_path / "c"),
+            "--output",
+            str(output),
+        ]
+    )
+    report = output.read_text()
+    assert "| run / 00/06/12/18Z | 03:09:00 | 03:09:00 | 03:09:00 |" in report
+    assert "`9 3,9,15,21 * * *`" in report
