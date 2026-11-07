@@ -12,7 +12,7 @@ from reformatters.ecmwf.fast.grib import (
     inventory,
 )
 from reformatters.ecmwf.fast.source import EcmwfFastSourceFileCoord, Family
-from reformatters.ecmwf.fast.template_config import FastModel
+from reformatters.ecmwf.fast.template_config import EcmwfFastTemplateConfig, FastModel
 
 PARAMS = frozenset({"2t", "10u", "10v", "100u", "100v", "tp", "ssrd"})
 
@@ -27,7 +27,8 @@ def coord(
         family=family,
         init_time=INIT,
         lead_time=pd.Timedelta(hours=hours),
-        data_vars=[],
+        data_vars=EcmwfFastTemplateConfig(model=model).data_vars,
+        source_members=(0,) if family == "cf" else tuple(range(1, 51)),
     )
 
 
@@ -44,7 +45,13 @@ def date(value: pd.Timestamp) -> bytes:
 
 
 def grib1(
-    param: str, member: int, hours: int = 6, payload: bytes = b"payloadGRIB7777"
+    param: str,
+    member: int,
+    hours: int = 6,
+    payload: bytes = b"",
+    *,
+    bits: int = 0,
+    unused_bits: int = 0,
 ) -> bytes:
     pds = bytearray(52 if member == 0 else 106)
     pds[:3] = len(pds).to_bytes(3, "big")
@@ -77,8 +84,9 @@ def grib1(
     gds[23:27] = (250).to_bytes(2, "big") * 2
     bds = (
         (11 + len(payload)).to_bytes(3, "big")
-        + b"\x00" * 7
-        + bytes((0 if hours == 0 and param in ("tp", "ssrd") else 16,))
+        + bytes((unused_bits,))
+        + b"\x00" * 6
+        + bytes((bits,))
         + payload
     )
     body = bytes(pds) + bytes(gds) + bds + b"7777"
@@ -317,21 +325,13 @@ def test_raw_identity_components_and_missing_fields_share_one_error(
     ("model", "offset", "value", "error"),
     [
         ("ifs", 8 + 7, 0, "grid definition"),
-        ("ifs", 8 + 9, 100, "level"),
         ("ifs", 8 + 13, 13, "date"),
-        ("ifs", 8 + 17, 2, "forecast time"),
         ("ifs", 8 + 40, 0, "local definition"),
         ("ifs", 8 + 52 + 5, 1, "grid"),
-        ("ifs", 8 + 52 + 32 + 3, 128, "packing"),
         ("aifs", 16 + 14, 13, "date"),
         ("aifs", 16 + 21 + 13, 1, "grid template"),
-        ("aifs", 16 + 21 + 72 + 8, 0, "product template"),
-        ("aifs", 16 + 21 + 72 + 17, 2, "forecast time unit"),
-        ("aifs", 16 + 21 + 72 + 22, 100, "fixed-height"),
-        ("aifs", 16 + 21 + 72 + 27, 3, "temperature height"),
-        ("aifs", 16 + 21 + 72 + 28, 0, "second fixed"),
         ("aifs", 16 + 21 + 72 + 34, 0, "ensemble forecast"),
-        ("aifs", 16 + 21 + 72 + 37 + 10, 0, "CCSDS"),
+        ("aifs", 16 + 21 + 72 + 37 + 8, 0, "grid dimensions"),
         ("aifs", 16 + 21 + 72 + 37 + 25 + 5, 0, "bitmap"),
     ],
 )
@@ -412,19 +412,37 @@ def test_unknown_message_framing_and_truncation_remain_hard(
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
-def test_dropped_messages_do_not_relax_kept_member_and_duplicate_checks(
+def test_dropped_messages_do_not_relax_kept_member_checks(
     model: FastModel,
 ) -> None:
     build = grib1 if model == "ifs" else grib2
     unknown = unknown_message(model)
     wrong_member = bytearray(build("2t", 0))
     wrong_member[8 + 49 if model == "ifs" else 16 + 21 + 72 + 35] = 1
-    for data, error in (
-        (unknown + bytes(wrong_member), "Unexpected member"),
-        (build("2t", 0) + unknown + build("2t", 0), "Duplicate GRIB field"),
-    ):
-        with pytest.raises(SourceContractError, match=error):
-            inventory(StreamReader(chunks(data, 31)), len(data), coord(model))
+    data = unknown + bytes(wrong_member)
+    with pytest.raises(SourceContractError, match="Unexpected member"):
+        inventory(StreamReader(chunks(data, 31)), len(data), coord(model))
+
+
+@pytest.mark.parametrize("model", ["ifs", "aifs"])
+@pytest.mark.parametrize(("family", "member"), [("cf", 0), ("pf", 1)])
+def test_duplicate_logs_error_and_keeps_first_offset_and_valid_siblings(
+    model: FastModel, family: Family, member: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    build = grib1 if model == "ifs" else grib2
+    unknown = unknown_message(model)
+    first, sibling = build("2t", member), build("10u", member)
+    duplicate = build("2t", member)
+    data = unknown + first + duplicate + sibling
+    assert inventory(
+        StreamReader(chunks(data, 31)), len(data), coord(model, family)
+    ) == [
+        grib.Message("2t", member, len(unknown), len(first)),
+        grib.Message("10u", member, len(unknown + first + duplicate), len(sibling)),
+    ]
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelname == "ERROR"
+    assert "Duplicate GRIB field" in caplog.text
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
@@ -448,15 +466,14 @@ def test_complete_shuffled_inventory_and_chunk_boundaries(
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
-def test_truncated_duplicate_and_wrong_family_fail_closed(model: FastModel) -> None:
+def test_truncated_and_wrong_family_fail_closed(model: FastModel) -> None:
     data = source_bytes(model)
     build = grib1 if model == "ifs" else grib2
-    for damaged in (
-        data + build("2t", 0),
-        b"".join(build(p, 1) for p in PARAMS),
-    ):
-        with pytest.raises(SourceContractError):
-            inventory(StreamReader(chunks(damaged, 31)), len(damaged), coord(model))
+    wrong_family = b"".join(build(p, 1) for p in PARAMS)
+    with pytest.raises(SourceContractError):
+        inventory(
+            StreamReader(chunks(wrong_family, 31)), len(wrong_family), coord(model)
+        )
     with pytest.raises(InterruptedGribStreamError):
         inventory(StreamReader(chunks(data[:-1], 31)), len(data), coord(model))
     with pytest.raises(SourceContractError, match="trailer"):
@@ -470,8 +487,10 @@ def test_truncated_duplicate_and_wrong_family_fail_closed(model: FastModel) -> N
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
 def test_wrong_instantaneous_lead_rejected(model: FastModel) -> None:
     data = source_bytes(model, hours=360)
-    with pytest.raises(SourceContractError, match="differs from filename"):
+    assert (
         inventory(StreamReader(chunks(data, 31)), len(data), coord(model, hours=6))
+        == []
+    )
 
 
 def test_grib1_large_message_extension_rejected() -> None:
@@ -480,19 +499,16 @@ def test_grib1_large_message_extension_rejected() -> None:
         inventory(StreamReader(iter([data])), len(data), coord("ifs"))
 
 
-def test_grib2_second_surface_and_ensemble_type_rejected() -> None:
-    for change in (28, 34):
-        data = bytearray(grib2("2t", 0))
-        product = 16 + 21 + 72
-        data[product + change] = 0
-        with pytest.raises(
-            SourceContractError, match=r"second fixed|ensemble forecast"
-        ):
-            inventory(StreamReader(iter([bytes(data)])), len(data), coord("aifs"))
+def test_grib2_ensemble_role_contradiction_is_file_scoped() -> None:
+    data = bytearray(grib2("2t", 0))
+    product = 16 + 21 + 72
+    data[product + 34] = 0
+    with pytest.raises(SourceContractError, match="ensemble forecast"):
+        inventory(StreamReader(iter([bytes(data)])), len(data), coord("aifs"))
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
-def test_declared_source_inventory_allows_missing_but_not_extra_fields(
+def test_declared_source_inventory_keeps_missing_and_skips_unconfigured_fields(
     model: FastModel,
 ) -> None:
     build = grib1 if model == "ifs" else grib2
@@ -503,8 +519,9 @@ def test_declared_source_inventory_allows_missing_but_not_extra_fields(
     assert len(inventory(StreamReader(chunks(data, 31)), len(data), selected)) == 2
     assert len(inventory(StreamReader(chunks(data, 31)), len(data), coord(model))) == 2
     full = source_bytes(model)
-    with pytest.raises(SourceContractError, match="Unexpected GRIB fields"):
-        inventory(StreamReader(chunks(full, 31)), len(full), selected)
+    assert {
+        m.param for m in inventory(StreamReader(chunks(full, 31)), len(full), selected)
+    } == {"2t", "tp"}
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])

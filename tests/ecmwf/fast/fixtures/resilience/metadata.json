@@ -1,0 +1,489 @@
+[
+  {
+    "file": "ifs_tp_20261104T000000Z_6h_member0.grib",
+    "model": "ifs",
+    "family": "cf",
+    "param": "tp",
+    "member": 0,
+    "init_time": "2026-11-04T00:00:00",
+    "lead_hours": 6,
+    "source_key": "dyn_a2_ifs-ens-cf_od_oper_fc_20261104T000000Z_20261104T060000Z_6h",
+    "source_offset": 7787232,
+    "length": 2076588,
+    "sha256": "611d2926a758afc43ab8b19cbf04b74125e06d297d56f748efa72accd29a92c3",
+    "shape": [
+      721,
+      1440
+    ],
+    "variable": "total_precipitation_run_total_surface",
+    "native_units": "m",
+    "gribberish_units": "m",
+    "gdal_units": "[m]",
+    "output_units": "kg m-2",
+    "packing": {
+      "edition": 1,
+      "type": "grid_simple",
+      "bits_per_value": 16,
+      "binary_scale_factor": -18,
+      "decimal_scale_factor": 0,
+      "reference_value": 0.0,
+      "reference_value_hex": "00000000"
+    },
+    "filters": [
+      {
+        "name": "scale_offset",
+        "configuration": {
+          "scale": 0.001
+        }
+      }
+    ],
+    "minimum": 0.0,
+    "maximum": 246.60873413085938,
+    "zero_count": 340086,
+    "snapshots": [
+      {
+        "row": 0,
+        "column": 0,
+        "value": 0.03814697265625
+      },
+      {
+        "row": 180,
+        "column": 360,
+        "value": 1.617431640625
+      },
+      {
+        "row": 360,
+        "column": 720,
+        "value": 0.0457763671875
+      },
+      {
+        "row": 540,
+        "column": 1080,
+        "value": 0.026702880859375
+      },
+      {
+        "row": 720,
+        "column": 1439,
+        "value": 0.03814697265625
+      },
+      {
+        "row": 7,
+        "column": 22,
+        "value": 0.0
+      },
+      {
+        "row": 294,
+        "column": 402,
+        "value": 246.60873413085938
+      }
+    ],
+    "oracle": {
+      "library": "rasterio/GDAL",
+      "rasterio_version": "1.5.2",
+      "gdal_version": "3.12.2",
+      "grib_normalize_units": "NO",
+      "max_raw_absolute_error": 0.0,
+      "max_template_absolute_error": 0.0,
+      "comparison": "exact whole-array equality"
+    }
+  },
+  {
+    "file": "ifs_ssrd_20261104T000000Z_6h_member0.grib",
+    "model": "ifs",
+    "family": "cf",
+    "param": "ssrd",
+    "member": 0,
+    "init_time": "2026-11-04T00:00:00",
+    "lead_hours": 6,
+    "source_key": "dyn_a2_ifs-ens-cf_od_oper_fc_20261104T000000Z_20261104T060000Z_6h",
+    "source_offset": 3634056,
+    "length": 2076588,
+    "sha256": "e718f82017332eb1929e8839aac0e13db89fc88b36c24686ac79bf763d923dc5",
+    "shape": [
+      721,
+      1440
+    ],
+    "variable": "downward_short_wave_radiation_run_total_surface",
+    "native_units": "J m-2",
+    "gribberish_units": "J m-2",
+    "gdal_units": "[W*s/m^2]",
+    "output_units": "W s m-2",
+    "packing": {
+      "edition": 1,
+      "type": "grid_simple",
+      "bits_per_value": 16,
+      "binary_scale_factor": 9,
+      "decimal_scale_factor": 0,
+      "reference_value": 0.0,
+      "reference_value_hex": "00000000"
+    },
+    "filters": [],
+    "minimum": 0.0,
+    "maximum": 20944896.0,
+    "zero_count": 310573,
+    "snapshots": [
+      {
+        "row": 0,
+        "column": 0,
+        "value": 0.0
+      },
+      {
+        "row": 180,
+        "column": 360,
+        "value": 0.0
+      },
+      {
+        "row": 360,
+        "column": 720,
+        "value": 11776.0
+      },
+      {
+        "row": 540,
+        "column": 1080,
+        "value": 8487424.0
+      },
+      {
+        "row": 720,
+        "column": 1439,
+        "value": 5140992.0
+      },
+      {
+        "row": 464,
+        "column": 1240,
+        "value": 20944896.0
+      }
+    ],
+    "oracle": {
+      "library": "rasterio/GDAL",
+      "rasterio_version": "1.5.2",
+      "gdal_version": "3.12.2",
+      "grib_normalize_units": "NO",
+      "max_raw_absolute_error": 0.0,
+      "max_template_absolute_error": 0.0,
+      "comparison": "exact whole-array equality"
+    }
+  },
+  {
+    "file": "ifs_10u_20261104T000000Z_6h_member0.grib",
+    "model": "ifs",
+    "family": "cf",
+    "param": "10u",
+    "member": 0,
+    "init_time": "2026-11-04T00:00:00",
+    "lead_hours": 6,
+    "source_key": "dyn_a2_ifs-ens-cf_od_oper_fc_20261104T000000Z_20261104T060000Z_6h",
+    "source_offset": 9863820,
+    "length": 1557468,
+    "sha256": "dd54500b5fb6f0def3781076ef5f0823d15d60fcdae66b5f1e326a0ab409d987",
+    "shape": [
+      721,
+      1440
+    ],
+    "variable": "wind_u_10m",
+    "native_units": "m s-1",
+    "gribberish_units": "m s-1",
+    "gdal_units": "[m/s]",
+    "output_units": "m s-1",
+    "packing": {
+      "edition": 1,
+      "type": "grid_simple",
+      "bits_per_value": 12,
+      "binary_scale_factor": -6,
+      "decimal_scale_factor": 0,
+      "reference_value": -32.954498291015625,
+      "reference_value_hex": "c220f45a"
+    },
+    "filters": [],
+    "minimum": -32.954498291015625,
+    "maximum": 24.186126708984375,
+    "zero_count": 0,
+    "snapshots": [
+      {
+        "row": 0,
+        "column": 0,
+        "value": -1.485748291015625
+      },
+      {
+        "row": 180,
+        "column": 360,
+        "value": -2.938873291015625
+      },
+      {
+        "row": 360,
+        "column": 720,
+        "value": 0.779876708984375
+      },
+      {
+        "row": 540,
+        "column": 1080,
+        "value": 4.608001708984375
+      },
+      {
+        "row": 720,
+        "column": 1439,
+        "value": -1.970123291015625
+      },
+      {
+        "row": 259,
+        "column": 1275,
+        "value": -32.954498291015625
+      },
+      {
+        "row": 78,
+        "column": 710,
+        "value": 24.186126708984375
+      }
+    ],
+    "oracle": {
+      "library": "rasterio/GDAL",
+      "rasterio_version": "1.5.2",
+      "gdal_version": "3.12.2",
+      "grib_normalize_units": "NO",
+      "max_raw_absolute_error": 0.0,
+      "max_template_absolute_error": 0.0,
+      "comparison": "exact whole-array equality"
+    }
+  },
+  {
+    "file": "aifs_tp_20261104T000000Z_6h_member0.grib",
+    "model": "aifs",
+    "family": "cf",
+    "param": "tp",
+    "member": 0,
+    "init_time": "2026-11-04T00:00:00",
+    "lead_hours": 6,
+    "source_key": "dyn_a1_aifs-ens_ai_enfo_cf_20261104T000000Z_20261104T060000Z_6h",
+    "source_offset": 1507015,
+    "length": 752401,
+    "sha256": "da48cc15cd548f6d7f539a43d41f7106b0152851464b07415196a3da931de743",
+    "shape": [
+      721,
+      1440
+    ],
+    "variable": "total_precipitation_run_total_surface",
+    "native_units": "kg m-2",
+    "gribberish_units": "kgm-2",
+    "gdal_units": "[kg/(m^2*s)]",
+    "output_units": "kg m-2",
+    "packing": {
+      "edition": 2,
+      "type": "grid_ccsds",
+      "data_representation_template": 42,
+      "bits_per_value": 16,
+      "binary_scale_factor": -9,
+      "decimal_scale_factor": 0,
+      "reference_value": 0.0,
+      "ccsds_flags": 14,
+      "ccsds_block_size": 32,
+      "ccsds_reference_sample_interval": 128
+    },
+    "filters": [],
+    "minimum": 0.0,
+    "maximum": 68.298828125,
+    "zero_count": 415888,
+    "snapshots": [
+      {
+        "row": 0,
+        "column": 0,
+        "value": 0.0
+      },
+      {
+        "row": 180,
+        "column": 360,
+        "value": 0.5390625
+      },
+      {
+        "row": 360,
+        "column": 720,
+        "value": 0.0
+      },
+      {
+        "row": 540,
+        "column": 1080,
+        "value": 0.07421875
+      },
+      {
+        "row": 720,
+        "column": 1439,
+        "value": 0.0546875
+      },
+      {
+        "row": 370,
+        "column": 1043,
+        "value": 68.298828125
+      }
+    ],
+    "oracle": {
+      "library": "rasterio/GDAL",
+      "rasterio_version": "1.5.2",
+      "gdal_version": "3.12.2",
+      "grib_normalize_units": "NO",
+      "max_raw_absolute_error": 0.0,
+      "max_template_absolute_error": 0.0,
+      "comparison": "exact whole-array equality"
+    }
+  },
+  {
+    "file": "aifs_ssrd_20261104T000000Z_6h_member0.grib",
+    "model": "aifs",
+    "family": "cf",
+    "param": "ssrd",
+    "member": 0,
+    "init_time": "2026-11-04T00:00:00",
+    "lead_hours": 6,
+    "source_key": "dyn_a1_aifs-ens_ai_enfo_cf_20261104T000000Z_20261104T060000Z_6h",
+    "source_offset": 0,
+    "length": 885529,
+    "sha256": "185c7a3947256a53ca381aadd61eaf218862d6b6051aebf48790c8430e4e95be",
+    "shape": [
+      721,
+      1440
+    ],
+    "variable": "downward_short_wave_radiation_run_total_surface",
+    "native_units": "J m-2",
+    "gribberish_units": "Wm-2",
+    "gdal_units": "[W/(m^2)]",
+    "output_units": "W s m-2",
+    "packing": {
+      "edition": 2,
+      "type": "grid_ccsds",
+      "data_representation_template": 42,
+      "bits_per_value": 16,
+      "binary_scale_factor": 9,
+      "decimal_scale_factor": 0,
+      "reference_value": 0.0,
+      "ccsds_flags": 14,
+      "ccsds_block_size": 32,
+      "ccsds_reference_sample_interval": 128
+    },
+    "filters": [],
+    "minimum": 0.0,
+    "maximum": 21641728.0,
+    "zero_count": 319282,
+    "snapshots": [
+      {
+        "row": 0,
+        "column": 0,
+        "value": 0.0
+      },
+      {
+        "row": 180,
+        "column": 360,
+        "value": 0.0
+      },
+      {
+        "row": 360,
+        "column": 720,
+        "value": 4608.0
+      },
+      {
+        "row": 540,
+        "column": 1080,
+        "value": 11475456.0
+      },
+      {
+        "row": 720,
+        "column": 1439,
+        "value": 7113216.0
+      },
+      {
+        "row": 497,
+        "column": 1206,
+        "value": 21641728.0
+      }
+    ],
+    "oracle": {
+      "library": "rasterio/GDAL",
+      "rasterio_version": "1.5.2",
+      "gdal_version": "3.12.2",
+      "grib_normalize_units": "NO",
+      "max_raw_absolute_error": 0.0,
+      "max_template_absolute_error": 0.0,
+      "comparison": "exact whole-array equality"
+    }
+  },
+  {
+    "file": "aifs_10u_20261104T000000Z_6h_member0.grib",
+    "model": "aifs",
+    "family": "cf",
+    "param": "10u",
+    "member": 0,
+    "init_time": "2026-11-04T00:00:00",
+    "lead_hours": 6,
+    "source_key": "dyn_a1_aifs-ens_ai_enfo_cf_20261104T000000Z_20261104T060000Z_6h",
+    "source_offset": 3082687,
+    "length": 809410,
+    "sha256": "11a652cdfe61dcdbf8c6ce2c5bc69d64b927ed6e779d71f937ec583174377583",
+    "shape": [
+      721,
+      1440
+    ],
+    "variable": "wind_u_10m",
+    "native_units": "m s-1",
+    "gribberish_units": "ms-1",
+    "gdal_units": "[m/s]",
+    "output_units": "m s-1",
+    "packing": {
+      "edition": 2,
+      "type": "grid_ccsds",
+      "data_representation_template": 42,
+      "bits_per_value": 12,
+      "binary_scale_factor": -6,
+      "decimal_scale_factor": 0,
+      "reference_value": -23.30742073059082,
+      "ccsds_flags": 14,
+      "ccsds_block_size": 32,
+      "ccsds_reference_sample_interval": 128
+    },
+    "filters": [],
+    "minimum": -23.30742073059082,
+    "maximum": 22.30195426940918,
+    "zero_count": 0,
+    "snapshots": [
+      {
+        "row": 0,
+        "column": 0,
+        "value": 1.7238292694091797
+      },
+      {
+        "row": 180,
+        "column": 360,
+        "value": -3.2761707305908203
+      },
+      {
+        "row": 360,
+        "column": 720,
+        "value": 0.020704269409179688
+      },
+      {
+        "row": 540,
+        "column": 1080,
+        "value": 4.44257926940918
+      },
+      {
+        "row": 720,
+        "column": 1439,
+        "value": 2.9894542694091797
+      },
+      {
+        "row": 257,
+        "column": 1273,
+        "value": -23.30742073059082
+      },
+      {
+        "row": 79,
+        "column": 707,
+        "value": 22.30195426940918
+      }
+    ],
+    "oracle": {
+      "library": "rasterio/GDAL",
+      "rasterio_version": "1.5.2",
+      "gdal_version": "3.12.2",
+      "grib_normalize_units": "NO",
+      "max_raw_absolute_error": 0.0,
+      "max_template_absolute_error": 0.0,
+      "comparison": "exact whole-array equality"
+    }
+  }
+]

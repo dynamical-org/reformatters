@@ -194,11 +194,14 @@ class EcmwfFastTemplateConfig(EcmwfAifsSingleCommonTemplateConfig[EcmwfDataVar])
         for name, param, long_name, units, standard_name in quantities:
             accumulated = param in ("tp", "ssrd")
             filters = []
+            source_units = "J m-2" if param == "ssrd" else units
             if param == "2t":
+                source_units = "K"
                 filters = [ScaleOffset(offset=-273.15, scale=1.0).to_dict()]
             elif param == "tp":
                 match self.model:
                     case "ifs":
+                        source_units = "m"
                         filters = [ScaleOffset(offset=0.0, scale=0.001).to_dict()]
                     case "aifs":
                         filters = []
@@ -235,6 +238,7 @@ class EcmwfFastTemplateConfig(EcmwfAifsSingleCommonTemplateConfig[EcmwfDataVar])
                         grib_comment="",
                         grib_element="",
                         grib_description="",
+                        source_units=source_units,
                         keep_mantissa_bits="no-rounding",
                     ),
                 )

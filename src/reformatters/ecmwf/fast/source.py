@@ -70,7 +70,7 @@ class EcmwfFastSourceFileCoord(InitLeadSourceFileCoord):
     source_params: frozenset[str] = frozenset(
         {"2t", "10u", "10v", "100u", "100v", "tp", "ssrd"}
     )
-    source_members: tuple[int, ...] | None = None
+    source_members: tuple[int, ...]
 
     @property
     def prefix(self) -> str:
@@ -85,9 +85,15 @@ class EcmwfFastSourceFileCoord(InitLeadSourceFileCoord):
 
     @property
     def members(self) -> Sequence[int]:
-        if self.source_members is not None:
-            return self.source_members
-        return range(1) if self.family == "cf" else range(1, 51)
+        return self.source_members
+
+    def source_unit(self, param: str) -> str | None:
+        for var in self.data_vars:
+            if var.internal_attrs.grib_index_param == param:
+                units = var.internal_attrs.source_units
+                assert units is not None, f"Missing configured source units for {param}"
+                return units
+        return None
 
     def get_url(self) -> str:
         return SOURCE_PREFIX + self.key

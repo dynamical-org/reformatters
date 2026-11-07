@@ -71,6 +71,7 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
     ) -> Sequence[EcmwfFastSourceFileCoord]:
         leads = set(pd.to_timedelta(processing_region_ds.lead_time.values))
         members = set(processing_region_ds.ensemble_member.values)
+        source_members = tuple(int(m) for m in self.template_ds.ensemble_member.values)
         return [
             EcmwfFastSourceFileCoord(
                 model=self.model,
@@ -78,12 +79,17 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                 init_time=init,
                 lead_time=lead,
                 data_vars=data_var_group,
+                source_members=family_members,
             )
             for init in pd.to_datetime(processing_region_ds.init_time.values)
             for hours in lead_hours(self.model, init.hour)
             if (lead := pd.Timedelta(hours=hours)) in leads
             for family in ("cf", "pf")
-            if members.intersection((0,) if family == "cf" else range(1, 51))
+            if members.intersection(
+                family_members := tuple(
+                    m for m in source_members if (m == 0) == (family == "cf")
+                )
+            )
         ]
 
     def discover_available(
