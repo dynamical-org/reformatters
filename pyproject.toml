@@ -137,7 +137,7 @@ reformatters = ["py.typed"]
 [tool.pytest.ini_options]
 pythonpath = "src/reformatters"
 testpaths = ["tests/"]
-addopts = "-n auto --dist loadfile --max-worker-restart=0"  # see pytest_xdist_auto_num_workers in conftest.py
+addopts = "-n auto --dist loadfile --no-loadscope-reorder --max-worker-restart=0"  # see conftest.py: worker count and scheduling
 markers = [
     "slow: slow running tests.",
     "skip_set_local_zarr_store_base_path: opt out of automatically writing zarrs to a tmp directory during tests",

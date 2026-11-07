@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from pathlib import Path
+from types import SimpleNamespace
 
 import dask.array
 import icechunk
@@ -10,6 +11,7 @@ import zarr
 import zarr.storage
 from zarr.abc.store import Store
 
+from reformatters.common import retry as retry_module
 from reformatters.common import template_utils
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 
@@ -315,6 +317,8 @@ def test_refresh_conflict_retries_are_bounded(
     repo = _repo(2)
     factory, sessions = _factory(monkeypatch, repo)
     appended = _append_during_validation(monkeypatch, repo, range(3, 10))
+    sleeps: list[float] = []
+    monkeypatch.setattr(retry_module, "time", SimpleNamespace(sleep=sleeps.append))
 
     with pytest.raises(icechunk.ConflictError):
         template_utils.refresh_store_metadata(
@@ -327,6 +331,7 @@ def test_refresh_conflict_retries_are_bounded(
 
     assert appended == list(range(3, 8))
     assert len(sessions) == 5
+    assert len(sleeps) == 4
     _assert_contents(repo.readonly_session("main").store, 7, fixed=False)
 
 
