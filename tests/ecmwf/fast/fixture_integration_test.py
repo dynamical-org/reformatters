@@ -32,6 +32,7 @@ VARIABLES = ("temperature_2m",)
 def test_fixture_backfill_then_update_with_native_codec_snapshots(
     model: FastModel, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", "7000000000")
     cls = (
         EcmwfIfsEnsForecast025DegreeFastDataset
         if model == "ifs"

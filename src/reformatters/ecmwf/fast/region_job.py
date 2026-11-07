@@ -1,8 +1,8 @@
+import os
 import time
 from collections.abc import Buffer, Generator, Iterator, Sequence
 from concurrent.futures import (
     FIRST_COMPLETED,
-    FIRST_EXCEPTION,
     Future,
     ThreadPoolExecutor,
     wait,
@@ -47,6 +47,7 @@ from .source import (
     EcmwfFastSourceFileCoord,
     list_prefix_or_defer,
     listing_client,
+    warn_unexpected_file_size,
 )
 from .template_config import FastModel, lead_hours
 
@@ -56,11 +57,27 @@ log = get_logger(__name__)
 TARGET_RANGE_CHUNK = 64 * 1024**2
 
 
+def _update_byte_budget() -> int | None:
+    value = os.getenv("WORKER_MEMORY_REQUEST_BYTES")
+    if value is None:
+        log.warning(
+            "WORKER_MEMORY_REQUEST_BYTES is absent; update byte admission is unlimited"
+        )
+        return None
+    assert value.isdecimal(), (
+        "WORKER_MEMORY_REQUEST_BYTES must be a positive integer byte count"
+    )
+    memory_bytes = int(value)
+    assert memory_bytes > 0, (
+        "WORKER_MEMORY_REQUEST_BYTES must be a positive integer byte count"
+    )
+    return memory_bytes // 2
+
+
 class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord]):
     model: ClassVar[FastModel]
     retain_failed_files: ClassVar[bool] = True
     operational_update_window: ClassVar[Timedelta] = pd.Timedelta("24h")
-    update_download_concurrency: ClassVar[int] = 5
     _listed_etags: dict[str, tuple[int, str | None]] = PrivateAttr(default_factory=dict)
     _last_modified: dict[str, datetime] = PrivateAttr(default_factory=dict)
 
@@ -117,31 +134,48 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                         available[key] = (coord, size)
                         self._last_modified[key] = last_modified
                         self._listed_etags[key] = (size, etag)
+                        warn_unexpected_file_size(coord, size)
         return list(available.values())
 
-    def process_virtual_refs(  # noqa: PLR0912
+    def process_virtual_refs(  # noqa: PLR0912, PLR0915
         self, remaining: Sequence[EcmwfFastSourceFileCoord]
     ) -> Iterator[Sequence[tuple[EcmwfFastSourceFileCoord, Sequence[VirtualRef]]]]:
-        """Yield finished whole files while polling; drain admitted work at cutoff."""
+        """Yield finished whole files while polling; drain discovered work at cutoff."""
         if self.processing_mode == "backfill":
             yield from super().process_virtual_refs(remaining)
             return
         pending = list(remaining)
-        futures: dict[Future[list[VirtualRef]], EcmwfFastSourceFileCoord] = {}
+        budget = _update_byte_budget()
+        queued: dict[int, tuple[EcmwfFastSourceFileCoord, int]] = {}
+        futures: dict[
+            Future[list[VirtualRef]], tuple[EcmwfFastSourceFileCoord, int]
+        ] = {}
+        batch: list[tuple[EcmwfFastSourceFileCoord, Sequence[VirtualRef]]] = []
         next_sweep = time.monotonic()
         first_sweep = True
-        pool = ThreadPoolExecutor(self.update_download_concurrency)
+        pool = ThreadPoolExecutor(self.download_concurrency)
         try:
             while pending:
-                for future in futures:
+                removed = set()
+                for future in list(futures):
                     if future.done():
-                        future.result()
+                        refs = future.result()
+                        coord, _ = futures.pop(future)
+                        if refs:
+                            batch.append((coord, refs))
+                        if refs or not self.retain_failed_files:
+                            removed.add(id(coord))
+                pending = [coord for coord in pending if id(coord) not in removed]
                 cutoff = not first_sweep and pd.Timestamp.now() >= self.poll_deadline
                 if not cutoff and (first_sweep or time.monotonic() >= next_sweep):
                     sweep_start = time.monotonic()
-                    in_flight = {id(coord) for coord in futures.values()}
+                    in_flight = {id(coord) for coord, _ in futures.values()}
                     available = self.discover_available(
-                        [coord for coord in pending if id(coord) not in in_flight]
+                        [
+                            coord
+                            for coord in pending
+                            if id(coord) not in in_flight and id(coord) not in queued
+                        ]
                     )
                     received_at = pd.Timestamp.now(tz="UTC").isoformat()
                     log_virtual_event(
@@ -159,27 +193,31 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                             received_at=received_at,
                             bytes=size,
                         )
-                        futures[pool.submit(self._ready_file_refs, coord, size)] = coord
+                        queued[id(coord)] = (coord, size)
                     next_sweep = sweep_start + self.tick_interval.total_seconds()
                     first_sweep = False
                 cutoff = pd.Timestamp.now() >= self.poll_deadline
-                if cutoff and futures:
-                    wait(futures, return_when=FIRST_EXCEPTION)
-                completed = [
-                    (futures.pop(future), future.result())
-                    for future in list(futures)
-                    if future.done()
-                ]
-                batch = [(coord, refs) for coord, refs in completed if refs]
-                removed = {
-                    id(coord)
-                    for coord, refs in completed
-                    if refs or not self.retain_failed_files
-                }
-                pending = [coord for coord in pending if id(coord) not in removed]
-                if batch:
+                reserved_bytes = sum(size for _, size in futures.values())
+                while queued and len(futures) < self.download_concurrency:
+                    coord, size = next(iter(queued.values()))
+                    if budget is not None and reserved_bytes + size > budget:
+                        if futures:
+                            break
+                        log.error(
+                            f"Source file {coord.key} exceeds update byte budget "
+                            f"({size} > {budget} bytes); admitting it alone"
+                        )
+                    futures[pool.submit(self._ready_file_refs, coord, size)] = (
+                        coord,
+                        size,
+                    )
+                    reserved_bytes += size
+                    del queued[id(coord)]
+                drained = not queued and not futures
+                if batch and (not cutoff or drained):
                     yield batch
-                if not pending or cutoff:
+                    batch = []
+                if not pending or (cutoff and drained):
                     if pending:
                         log.info(
                             f"Poll deadline reached with {len(pending)} source files "
@@ -187,6 +225,9 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                             f"(first: {pending[0].get_url()})"
                         )
                     return
+                if cutoff:
+                    wait(futures, return_when=FIRST_COMPLETED)
+                    continue
                 timeout = max(
                     0.0,
                     min(
@@ -200,6 +241,8 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                     time.sleep(timeout)
         finally:
             pool.shutdown(wait=True, cancel_futures=True)
+            futures.clear()
+            queued.clear()
 
     def _ready_file_refs(
         self, coord: EcmwfFastSourceFileCoord, file_size: int

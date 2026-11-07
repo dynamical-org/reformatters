@@ -257,3 +257,47 @@ def test_listing_preserves_opaque_etag(client: MagicMock, etag: str | None) -> N
     assert list(source.list_prefix("prefix-", client)) == [
         ("prefix-a", 42, modified, etag)
     ]
+
+
+@pytest.mark.parametrize(
+    ("model", "family", "lead_hours", "observed_min", "observed_max"),
+    [
+        ("ifs", "cf", 0, 8_825_796, 8_825_796),
+        ("ifs", "cf", 6, 12_978_756, 12_978_756),
+        ("ifs", "pf", 0, 441_308_700, 441_308_700),
+        ("ifs", "pf", 6, 648_956_700, 648_956_700),
+        ("aifs", "cf", 0, 4_735_151, 7_298_105),
+        ("aifs", "cf", 6, 4_735_151, 7_298_105),
+        ("aifs", "pf", 0, 241_072_732, 360_683_165),
+        ("aifs", "pf", 6, 241_072_732, 360_683_165),
+    ],
+)
+def test_size_warnings_cover_observed_endpoints_and_exact_band_boundaries(
+    caplog: pytest.LogCaptureFixture,
+    model: FastModel,
+    family: Family,
+    lead_hours: int,
+    observed_min: int,
+    observed_max: int,
+) -> None:
+    coord = EcmwfFastSourceFileCoord(
+        model=model,
+        family=family,
+        init_time=pd.Timestamp("2026-11-06"),
+        lead_time=pd.Timedelta(hours=lead_hours),
+        source_members=(0,) if family == "cf" else tuple(range(1, 51)),
+        data_vars=[],
+    )
+    lower_inside = (3 * observed_min + 3) // 4
+    upper_inside = 5 * observed_max // 4
+    for size in (observed_min, observed_max, lower_inside, upper_inside):
+        source.warn_unexpected_file_size(coord, size)
+    assert caplog.records == []
+    for size in (lower_inside - 1, upper_inside + 1):
+        source.warn_unexpected_file_size(coord, size)
+    assert len(caplog.records) == 2
+    assert all(
+        r.levelname == "ERROR" and coord.key in r.getMessage() for r in caplog.records
+    )
+    assert str(lower_inside - 1) in caplog.records[0].getMessage()
+    assert str(upper_inside + 1) in caplog.records[1].getMessage()

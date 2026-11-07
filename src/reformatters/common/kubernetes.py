@@ -169,6 +169,16 @@ class Job(pydantic.BaseModel):
                                         },
                                     },
                                     {
+                                        "name": "WORKER_MEMORY_REQUEST_BYTES",
+                                        "valueFrom": {
+                                            "resourceFieldRef": {
+                                                "containerName": "worker",
+                                                "resource": "requests.memory",
+                                                "divisor": "1",
+                                            }
+                                        },
+                                    },
+                                    {
                                         "name": "WORKERS_TOTAL",
                                         "value": f"{self.workers_total}",
                                     },

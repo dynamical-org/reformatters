@@ -1,7 +1,7 @@
 import json
 import time
 from collections.abc import Callable, Generator, Sequence
-from concurrent.futures import FIRST_EXCEPTION, Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
 from typing import ClassVar, cast
@@ -74,6 +74,7 @@ class ManualPool:
         coord: EcmwfFastSourceFileCoord,
         size: int,
     ) -> Future[list[VirtualRef]]:
+        assert sum(not future.done() for future, _ in self.tasks) < self.workers
         future: Future[list[VirtualRef]] = Future()
         self.tasks.append((future, lambda: fn(coord, size)))
         return future
@@ -96,8 +97,18 @@ class ManualPool:
 @pytest.fixture
 def manual_pool(monkeypatch: pytest.MonkeyPatch) -> ManualPool:
     pool = ManualPool(64)
-    monkeypatch.setattr(region_job, "ThreadPoolExecutor", lambda workers: pool)
+
+    def create(workers: int) -> ManualPool:
+        pool.workers = workers
+        return pool
+
+    monkeypatch.setattr(region_job, "ThreadPoolExecutor", create)
     return pool
+
+
+@pytest.fixture(autouse=True)
+def worker_memory_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", "7000000000")
 
 
 @pytest.mark.parametrize("past_deadline", [False, True])
@@ -105,12 +116,14 @@ def test_cutoff_drains_every_submission_in_one_yield(
     monkeypatch: pytest.MonkeyPatch, manual_pool: ManualPool, past_deadline: bool
 ) -> None:
     job = make_job(70)
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", str(2 * BLOCK_NBYTES))
     coords = list(job.source_file_coords())
     now = pd.Timestamp("2026-11-05")
     deadline = now + pd.Timedelta(seconds=-1 if past_deadline else 2)
     job = job.model_copy(update={"poll_deadline": deadline})
     clock = 0.0
     sweeps: list[float] = []
+    completed = 0
 
     def discover(
         self: PipelineJob, pending: list[EcmwfFastSourceFileCoord]
@@ -125,11 +138,11 @@ def test_cutoff_drains_every_submission_in_one_yield(
     def wait(
         futures: object, timeout: float | None = None, return_when: str = ""
     ) -> None:
-        nonlocal clock, now
-        if return_when == FIRST_EXCEPTION:
-            assert len(manual_pool.tasks) == len(coords)
-            for i in range(len(coords)):
-                manual_pool.complete(i)
+        nonlocal clock, now, completed
+        if timeout is None:
+            assert len(manual_pool.tasks) == completed + 1
+            manual_pool.complete(completed)
+            completed += 1
         else:
             assert timeout is not None
             clock += timeout
@@ -146,6 +159,7 @@ def test_cutoff_drains_every_submission_in_one_yield(
     assert sweeps == ([0] if past_deadline else [0, 1])
     assert len(batches) == 1
     assert [id(c) for c, _ in batches[0]] == [id(c) for c in coords]
+    assert completed == len(coords)
     assert manual_pool.closed
 
 
@@ -247,6 +261,7 @@ def test_backfill_delegates_to_shared_sweep_loop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     job = make_job().model_copy(update={"processing_mode": "backfill"})
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", "invalid")
     coords = job.source_file_coords()
     shared_loop = Mock(return_value=iter([]))
     monkeypatch.setattr(VirtualRegionJob, "process_virtual_refs", shared_loop)
@@ -270,7 +285,7 @@ def test_fatal_failure_cancels_unstarted_work(
     with pytest.raises(type(failure), match=str(failure)):
         list(job.process_virtual_refs(job.source_file_coords()))
     assert manual_pool.closed
-    assert len(manual_pool.tasks) == 70
+    assert len(manual_pool.tasks) == job.download_concurrency
     assert all(f.cancelled() for f, _ in manual_pool.tasks[1:])
 
 
@@ -397,7 +412,7 @@ def test_writer_failure_and_iterator_close_cancel_queued_work(
         assert [c for c, _ in next(iterator)] == [coords[0]]
         iterator.close()
     assert manual_pool.closed
-    assert len(manual_pool.tasks) == 70
+    assert len(manual_pool.tasks) == job.download_concurrency + 1
     assert all(f.cancelled() for f, _ in manual_pool.tasks[1:])
 
 
@@ -445,4 +460,217 @@ def test_file_events_include_skipped_files_but_batches_only_contain_ready_refs(
         event["ready_at"] >= receipt["received_at"]
         for event, receipt in zip(ready, discovered, strict=True)
     )
+    assert manual_pool.closed
+
+
+@pytest.mark.parametrize(
+    ("request_bytes", "expected"),
+    [("7000000000", 3_500_000_000), ("7516192768", 3_758_096_384), ("7", 3), ("1", 0)],
+)
+def test_budget_is_half_the_injected_byte_count(
+    monkeypatch: pytest.MonkeyPatch, request_bytes: str, expected: int
+) -> None:
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", request_bytes)
+    assert region_job._update_byte_budget() == expected
+
+
+@pytest.mark.parametrize("value", ["", "7G", "7Gi", "1.5", "-1", "0", " 123", "1_000"])
+def test_invalid_memory_request_fails_before_discovery(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", value)
+    discover = Mock()
+    monkeypatch.setattr(PipelineJob, "discover_available", discover)
+    with pytest.raises(AssertionError, match="positive integer byte count"):
+        list(make_job().process_virtual_refs(make_job().source_file_coords()))
+    discover.assert_not_called()
+
+
+def test_absent_local_request_warns_once_and_uses_default_pool_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+    manual_pool: ManualPool,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.delenv("WORKER_MEMORY_REQUEST_BYTES")
+    monkeypatch.setattr(
+        PipelineJob, "download_concurrency", EcmwfFastRegionJob.download_concurrency
+    )
+    job = make_job(35).model_copy(update={"poll_deadline": pd.Timestamp.min})
+    coords = job.source_file_coords()
+    waves = []
+
+    def wait(futures: object, **kwargs: object) -> None:
+        active = [i for i, (f, _) in enumerate(manual_pool.tasks) if not f.done()]
+        waves.append(len(active))
+        for i in active:
+            manual_pool.complete(i)
+
+    monkeypatch.setattr(region_job, "wait", wait)
+    batches = list(job.process_virtual_refs(coords))
+    assert waves == [64, 6]
+    assert manual_pool.workers == 64
+    assert [c for batch in batches for c, _ in batch] == list(coords)
+    warnings = [
+        r for r in caplog.records if "byte admission is unlimited" in r.getMessage()
+    ]
+    assert len(warnings) == 1
+
+
+@pytest.mark.parametrize(
+    ("sizes", "expected_waves", "oversize_count"),
+    [
+        ([4, 6, 1], [[0, 1], [1, 2], [2]], 0),
+        ([4, 7, 1], [[0], [1, 2], [2]], 0),
+        ([4, 11, 1], [[0], [1], [2]], 1),
+        ([11, 1, 1], [[0], [1, 2], [2]], 1),
+    ],
+)
+def test_byte_admission_preserves_fifo_exact_fit_and_oversize_alone(
+    monkeypatch: pytest.MonkeyPatch,
+    manual_pool: ManualPool,
+    caplog: pytest.LogCaptureFixture,
+    sizes: list[int],
+    expected_waves: list[list[int]],
+    oversize_count: int,
+) -> None:
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", "20")
+    job = make_job(2).model_copy(update={"poll_deadline": pd.Timestamp.min})
+    coords = list(job.source_file_coords())[:3]
+    discover = Mock(return_value=list(zip(coords, sizes, strict=True)))
+    monkeypatch.setattr(PipelineJob, "discover_available", discover)
+    waves = []
+
+    def wait(futures: object, **kwargs: object) -> None:
+        active = [i for i, (f, _) in enumerate(manual_pool.tasks) if not f.done()]
+        assert sum(sizes[i] for i in active) <= 10 or len(active) == 1
+        waves.append(active)
+        manual_pool.complete(active[0])
+
+    monkeypatch.setattr(region_job, "wait", wait)
+    batches = list(job.process_virtual_refs(coords))
+    assert waves == expected_waves
+    assert len(batches) == 1
+    assert [c for c, _ in batches[0]] == coords
+    assert [refs[0].length for _, refs in batches[0]] == sizes
+    discover.assert_called_once_with(coords)
+    errors = [r for r in caplog.records if "admitting it alone" in r.getMessage()]
+    assert len(errors) == oversize_count
+
+
+def test_sibling_completion_releases_bytes_before_slow_file_finishes(
+    monkeypatch: pytest.MonkeyPatch, manual_pool: ManualPool
+) -> None:
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", "20")
+    job = make_job(2).model_copy(update={"poll_deadline": pd.Timestamp.min})
+    coords = list(job.source_file_coords())[:3]
+    monkeypatch.setattr(
+        PipelineJob,
+        "discover_available",
+        Mock(return_value=list(zip(coords, [4, 6, 6], strict=True))),
+    )
+    completions = iter([1, 2, 0])
+    waves = []
+
+    def wait(futures: object, **kwargs: object) -> None:
+        active = [i for i, (f, _) in enumerate(manual_pool.tasks) if not f.done()]
+        waves.append(active)
+        manual_pool.complete(next(completions))
+
+    monkeypatch.setattr(region_job, "wait", wait)
+    batches = list(job.process_virtual_refs(coords))
+    assert waves == [[0, 1], [0, 2], [0]]
+    assert [c for c, _ in batches[0]] == [coords[1], coords[2], coords[0]]
+
+
+def test_queued_observation_survives_last_modified_suppression_and_cutoff(
+    monkeypatch: pytest.MonkeyPatch, manual_pool: ManualPool
+) -> None:
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", "20")
+    now = pd.Timestamp("2026-11-06")
+    job = make_job(2).model_copy(update={"poll_deadline": now + pd.Timedelta("2s")})
+    coords = list(job.source_file_coords())
+    observations = list(zip(coords[:3], [6, 6, 4], strict=True))
+    candidates = []
+    clock = 0.0
+    waits = 0
+
+    def discover(
+        self: PipelineJob, pending: list[EcmwfFastSourceFileCoord]
+    ) -> list[tuple[EcmwfFastSourceFileCoord, int]]:
+        candidates.append(list(pending))
+        with monkeypatch.context() as listing_patch:
+            listing_patch.setattr(region_job, "ThreadPoolExecutor", ThreadPoolExecutor)
+            return EcmwfFastRegionJob.discover_available(self, pending)
+
+    monkeypatch.setattr(PipelineJob, "discover_available", discover)
+    monkeypatch.setattr(region_job, "listing_client", object)
+    monkeypatch.setattr(
+        region_job,
+        "list_prefix_or_defer",
+        lambda prefix, client: [
+            (c.key, size, pd.Timestamp("2026-11-06T00:00Z"), '"listed"')
+            for c, size in observations
+            if c.prefix == prefix
+        ],
+    )
+
+    def wait(futures: object, timeout: float | None = None, **kwargs: object) -> None:
+        nonlocal now, clock, waits
+        waits += 1
+        if timeout is not None:
+            clock += timeout
+            now += pd.Timedelta(seconds=timeout)
+        if waits > 1:
+            active = [i for i, (f, _) in enumerate(manual_pool.tasks) if not f.done()]
+            manual_pool.complete(active[0])
+
+    monkeypatch.setattr(region_job, "wait", wait)
+    monkeypatch.setattr(region_job.time, "monotonic", lambda: clock)
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls, *a, **kw: now))
+    batches = list(job.process_virtual_refs(coords))
+    assert candidates == [coords, [coords[3]]]
+    assert len(batches) == 1
+    assert [id(c) for c, _ in batches[0]] == [id(c) for c in coords[:3]]
+    assert job._listed_etags == {c.key: (size, '"listed"') for c, size in observations}
+    assert job.discover_available(coords[:3]) == []
+    assert manual_pool.closed
+
+
+@pytest.mark.parametrize("skip_first", [False, True])
+def test_failed_or_skipped_file_releases_entire_budget(
+    monkeypatch: pytest.MonkeyPatch, manual_pool: ManualPool, skip_first: bool
+) -> None:
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", str(2 * BLOCK_NBYTES))
+    job = make_job().model_copy(update={"poll_deadline": pd.Timestamp.min})
+    coords = job.source_file_coords()
+    file_refs = PipelineJob.file_refs
+    attempts = []
+
+    def refs(
+        self: PipelineJob, coord: EcmwfFastSourceFileCoord, size: int
+    ) -> list[VirtualRef]:
+        attempts.append(coord)
+        if coord is coords[0]:
+            if skip_first:
+                return []
+            raise SourceAccessError("auth")
+        return file_refs(self, coord, size)
+
+    def wait(futures: object, **kwargs: object) -> None:
+        active = [i for i, (f, _) in enumerate(manual_pool.tasks) if not f.done()]
+        assert len(active) == 1
+        manual_pool.complete(active[0])
+
+    monkeypatch.setattr(PipelineJob, "file_refs", refs)
+    monkeypatch.setattr(region_job, "wait", wait)
+    if skip_first:
+        batches = list(job.process_virtual_refs(coords))
+        assert [c for batch in batches for c, _ in batch] == [coords[1]]
+    else:
+        with pytest.raises(SourceAccessError, match="auth"):
+            list(job.process_virtual_refs(coords))
+        assert attempts == [coords[0]]
+        monkeypatch.setattr(PipelineJob, "file_refs", file_refs)
+        batches = list(job.process_virtual_refs(coords))
+        assert [c for batch in batches for c, _ in batch] == list(coords)
     assert manual_pool.closed
