@@ -120,4 +120,4 @@ jobs:
       - name: Test admission on a real API server
         env:
           REFORMATTERS_ADMISSION_TEST_ASSETS: ${{ runner.temp }}/controller-tools/envtest
-        run: uv run pytest -n 0 tests/common/kubernetes_security_integration_test.py
+        run: uv run pytest -n 0 tests/common/kubernetes_security_integration_test.py && exit 1
