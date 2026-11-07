@@ -1,0 +1,457 @@
+{
+  "categorical_precipitation_type_surface": {
+    "attrs": {
+      "comment": "0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13=Hail (less than 5 mm); 14=Hail (greater than or equal to 5 mm); 15-191=Reserved; 192-254=Reserved for local use; 255=Missing",
+      "ensemble_statistic": null,
+      "flag_meanings": "no_precipitation rain thunderstorm freezing_rain mixed_ice snow wet_snow mixture_of_rain_and_snow ice_pellets graupel hail drizzle freezing_drizzle hail_less_than_5mm hail_greater_than_or_equal_to_5mm missing",
+      "flag_values": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        255
+      ],
+      "long_name": "Precipitation type",
+      "short_name": "ptype",
+      "standard_name": null,
+      "step_type": "instant",
+      "units": "1"
+    },
+    "encoding": {
+      "calendar": null,
+      "chunks": [
+        1,
+        85,
+        51,
+        32,
+        32
+      ],
+      "compressors": [
+        {
+          "configuration": {
+            "blocksize": 0,
+            "clevel": 3,
+            "cname": "zstd",
+            "shuffle": "shuffle",
+            "typesize": 4
+          },
+          "name": "blosc"
+        }
+      ],
+      "dtype": "float32",
+      "fill_value": NaN,
+      "filters": null,
+      "serializer": null,
+      "shards": [
+        1,
+        85,
+        51,
+        320,
+        320
+      ],
+      "units": null
+    },
+    "group": 1,
+    "internal_attrs": {
+      "date_available": "2024-11-13T00:00:00",
+      "deaccumulate_to_rate": false,
+      "deaccumulation_invalid_below_threshold_rate": null,
+      "grib_comment": "Precipitation type [0=No precipitation; 1=Rain; 2=Thunderstorm; 3=Freezing rain; 4=Mixed/ice; 5=Snow; 6=Wet snow; 7=Mixture of rain and snow; 8=Ice pellets; 9=Graupel; 10=Hail; 11=Drizzle; 12=Freezing drizzle; 13=Hail (less than 5 mm); 14=Hail (greater than or equal to 5 mm); 15-191=Reserved; 192-254=Reserved for local use; 255=Missing]",
+      "grib_description": "0[-] SFC=\"Ground or water surface\"",
+      "grib_element": "PTYPE",
+      "grib_index_level_type": "sfc",
+      "grib_index_level_value": NaN,
+      "grib_index_param": "ptype",
+      "grib_index_param_lead_time_overrides": [],
+      "hour_0_values_override": null,
+      "init_time_scale_factors": [],
+      "keep_mantissa_bits": "no-rounding",
+      "mars": null,
+      "scale_factor": null,
+      "source_fill_value": null,
+      "window_reset_frequency": "P292Y171DT23H47M16.854774S"
+    },
+    "name": "categorical_precipitation_type_surface"
+  },
+  "precipitation_surface": {
+    "attrs": {
+      "comment": "Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
+      "ensemble_statistic": null,
+      "flag_meanings": null,
+      "flag_values": null,
+      "long_name": "Precipitation rate",
+      "short_name": "prate",
+      "standard_name": "precipitation_flux",
+      "step_type": "avg",
+      "units": "kg m-2 s-1"
+    },
+    "encoding": {
+      "calendar": null,
+      "chunks": [
+        1,
+        85,
+        51,
+        32,
+        32
+      ],
+      "compressors": [
+        {
+          "configuration": {
+            "blocksize": 0,
+            "clevel": 3,
+            "cname": "zstd",
+            "shuffle": "shuffle",
+            "typesize": 4
+          },
+          "name": "blosc"
+        }
+      ],
+      "dtype": "float32",
+      "fill_value": NaN,
+      "filters": null,
+      "serializer": null,
+      "shards": [
+        1,
+        85,
+        51,
+        320,
+        320
+      ],
+      "units": null
+    },
+    "group": 1,
+    "internal_attrs": {
+      "date_available": null,
+      "deaccumulate_to_rate": true,
+      "deaccumulation_invalid_below_threshold_rate": -7e-05,
+      "grib_comment": "(prodType 0, cat 1, subcat 193) [-]",
+      "grib_description": "0[-] SFC=\"Ground or water surface\"",
+      "grib_element": "unknown",
+      "grib_index_level_type": "sfc",
+      "grib_index_level_value": NaN,
+      "grib_index_param": "tp",
+      "grib_index_param_lead_time_overrides": [],
+      "hour_0_values_override": null,
+      "init_time_scale_factors": [],
+      "keep_mantissa_bits": 7,
+      "mars": {
+        "add_offset": null,
+        "grib_comment": "Total precipitation [m]",
+        "grib_element": "TP",
+        "grib_index_param": null,
+        "scale_factor": null
+      },
+      "scale_factor": 1000.0,
+      "source_fill_value": null,
+      "window_reset_frequency": "P292Y171DT23H47M16.854774S"
+    },
+    "name": "precipitation_surface"
+  },
+  "pressure_reduced_to_mean_sea_level": {
+    "attrs": {
+      "comment": null,
+      "ensemble_statistic": null,
+      "flag_meanings": null,
+      "flag_values": null,
+      "long_name": "Pressure reduced to MSL",
+      "short_name": "prmsl",
+      "standard_name": "air_pressure_at_mean_sea_level",
+      "step_type": "instant",
+      "units": "Pa"
+    },
+    "encoding": {
+      "calendar": null,
+      "chunks": [
+        1,
+        85,
+        51,
+        32,
+        32
+      ],
+      "compressors": [
+        {
+          "configuration": {
+            "blocksize": 0,
+            "clevel": 3,
+            "cname": "zstd",
+            "shuffle": "shuffle",
+            "typesize": 4
+          },
+          "name": "blosc"
+        }
+      ],
+      "dtype": "float32",
+      "fill_value": NaN,
+      "filters": null,
+      "serializer": null,
+      "shards": [
+        1,
+        85,
+        51,
+        320,
+        320
+      ],
+      "units": null
+    },
+    "group": 1,
+    "internal_attrs": {
+      "date_available": null,
+      "deaccumulate_to_rate": false,
+      "deaccumulation_invalid_below_threshold_rate": null,
+      "grib_comment": "Pressure [Pa]",
+      "grib_description": "0[-] MSL=\"Mean sea level\"",
+      "grib_element": "PRES",
+      "grib_index_level_type": "sfc",
+      "grib_index_level_value": NaN,
+      "grib_index_param": "msl",
+      "grib_index_param_lead_time_overrides": [],
+      "hour_0_values_override": null,
+      "init_time_scale_factors": [],
+      "keep_mantissa_bits": 11,
+      "mars": {
+        "add_offset": null,
+        "grib_comment": null,
+        "grib_element": "MSL",
+        "grib_index_param": null,
+        "scale_factor": null
+      },
+      "scale_factor": null,
+      "source_fill_value": null,
+      "window_reset_frequency": "P292Y171DT23H47M16.854774S"
+    },
+    "name": "pressure_reduced_to_mean_sea_level"
+  },
+  "pressure_surface": {
+    "attrs": {
+      "comment": null,
+      "ensemble_statistic": null,
+      "flag_meanings": null,
+      "flag_values": null,
+      "long_name": "Surface pressure",
+      "short_name": "sp",
+      "standard_name": "surface_air_pressure",
+      "step_type": "instant",
+      "units": "Pa"
+    },
+    "encoding": {
+      "calendar": null,
+      "chunks": [
+        1,
+        85,
+        51,
+        32,
+        32
+      ],
+      "compressors": [
+        {
+          "configuration": {
+            "blocksize": 0,
+            "clevel": 3,
+            "cname": "zstd",
+            "shuffle": "shuffle",
+            "typesize": 4
+          },
+          "name": "blosc"
+        }
+      ],
+      "dtype": "float32",
+      "fill_value": NaN,
+      "filters": null,
+      "serializer": null,
+      "shards": [
+        1,
+        85,
+        51,
+        320,
+        320
+      ],
+      "units": null
+    },
+    "group": 1,
+    "internal_attrs": {
+      "date_available": null,
+      "deaccumulate_to_rate": false,
+      "deaccumulation_invalid_below_threshold_rate": null,
+      "grib_comment": "Pressure [Pa]",
+      "grib_description": "0[-] SFC=\"Ground or water surface\"",
+      "grib_element": "PRES",
+      "grib_index_level_type": "sfc",
+      "grib_index_level_value": NaN,
+      "grib_index_param": "sp",
+      "grib_index_param_lead_time_overrides": [],
+      "hour_0_values_override": null,
+      "init_time_scale_factors": [],
+      "keep_mantissa_bits": 11,
+      "mars": {
+        "add_offset": null,
+        "grib_comment": null,
+        "grib_element": "SP",
+        "grib_index_param": null,
+        "scale_factor": null
+      },
+      "scale_factor": null,
+      "source_fill_value": null,
+      "window_reset_frequency": "P292Y171DT23H47M16.854774S"
+    },
+    "name": "pressure_surface"
+  },
+  "temperature_2m": {
+    "attrs": {
+      "comment": null,
+      "ensemble_statistic": null,
+      "flag_meanings": null,
+      "flag_values": null,
+      "long_name": "2 metre temperature",
+      "short_name": "2t",
+      "standard_name": "air_temperature",
+      "step_type": "instant",
+      "units": "degree_Celsius"
+    },
+    "encoding": {
+      "calendar": null,
+      "chunks": [
+        1,
+        85,
+        51,
+        32,
+        32
+      ],
+      "compressors": [
+        {
+          "configuration": {
+            "blocksize": 0,
+            "clevel": 3,
+            "cname": "zstd",
+            "shuffle": "shuffle",
+            "typesize": 4
+          },
+          "name": "blosc"
+        }
+      ],
+      "dtype": "float32",
+      "fill_value": NaN,
+      "filters": null,
+      "serializer": null,
+      "shards": [
+        1,
+        85,
+        51,
+        320,
+        320
+      ],
+      "units": null
+    },
+    "group": 1,
+    "internal_attrs": {
+      "date_available": null,
+      "deaccumulate_to_rate": false,
+      "deaccumulation_invalid_below_threshold_rate": null,
+      "grib_comment": "Temperature [C]",
+      "grib_description": "2[m] HTGL=\"Specified height level above ground\"",
+      "grib_element": "TMP",
+      "grib_index_level_type": "sfc",
+      "grib_index_level_value": NaN,
+      "grib_index_param": "2t",
+      "grib_index_param_lead_time_overrides": [],
+      "hour_0_values_override": null,
+      "init_time_scale_factors": [],
+      "keep_mantissa_bits": 7,
+      "mars": {
+        "add_offset": -273.15,
+        "grib_comment": "2 metre temperature [K]",
+        "grib_element": "2T",
+        "grib_index_param": null,
+        "scale_factor": null
+      },
+      "scale_factor": null,
+      "source_fill_value": null,
+      "window_reset_frequency": "P292Y171DT23H47M16.854774S"
+    },
+    "name": "temperature_2m"
+  },
+  "wind_v_10m": {
+    "attrs": {
+      "comment": null,
+      "ensemble_statistic": null,
+      "flag_meanings": null,
+      "flag_values": null,
+      "long_name": "10 metre V wind component",
+      "short_name": "10v",
+      "standard_name": "northward_wind",
+      "step_type": "instant",
+      "units": "m s-1"
+    },
+    "encoding": {
+      "calendar": null,
+      "chunks": [
+        1,
+        85,
+        51,
+        32,
+        32
+      ],
+      "compressors": [
+        {
+          "configuration": {
+            "blocksize": 0,
+            "clevel": 3,
+            "cname": "zstd",
+            "shuffle": "shuffle",
+            "typesize": 4
+          },
+          "name": "blosc"
+        }
+      ],
+      "dtype": "float32",
+      "fill_value": NaN,
+      "filters": null,
+      "serializer": null,
+      "shards": [
+        1,
+        85,
+        51,
+        320,
+        320
+      ],
+      "units": null
+    },
+    "group": 1,
+    "internal_attrs": {
+      "date_available": null,
+      "deaccumulate_to_rate": false,
+      "deaccumulation_invalid_below_threshold_rate": null,
+      "grib_comment": "v-component of wind [m/s]",
+      "grib_description": "10[m] HTGL=\"Specified height level above ground\"",
+      "grib_element": "VGRD",
+      "grib_index_level_type": "sfc",
+      "grib_index_level_value": NaN,
+      "grib_index_param": "10v",
+      "grib_index_param_lead_time_overrides": [],
+      "hour_0_values_override": null,
+      "init_time_scale_factors": [],
+      "keep_mantissa_bits": 6,
+      "mars": {
+        "add_offset": null,
+        "grib_comment": null,
+        "grib_element": "10V",
+        "grib_index_param": null,
+        "scale_factor": null
+      },
+      "scale_factor": null,
+      "source_fill_value": null,
+      "window_reset_frequency": "P292Y171DT23H47M16.854774S"
+    },
+    "name": "wind_v_10m"
+  }
+}
