@@ -132,6 +132,16 @@ def test_as_kubernetes_object_comprehensive() -> None:
                                 },
                             },
                             {
+                                "name": "WORKER_MEMORY_REQUEST_BYTES",
+                                "valueFrom": {
+                                    "resourceFieldRef": {
+                                        "containerName": "worker",
+                                        "resource": "requests.memory",
+                                        "divisor": "1",
+                                    }
+                                },
+                            },
+                            {
                                 "name": "WORKERS_TOTAL",
                                 "value": "4",
                             },
@@ -916,3 +926,32 @@ def test_retry_job_name_is_anchored_and_length_safe() -> None:
     assert len(f"{first}-2147483646") <= 63
     assert first != second
     assert (True, first) == retry_job_name("a" * 62 + "b")
+
+
+@pytest.mark.parametrize("memory", ["7G", "7Gi"])
+def test_worker_memory_request_is_exposed_as_bytes_via_downward_api(
+    memory: str,
+) -> None:
+    job = Job(
+        command=["update"],
+        image="img:v1",
+        dataset_id="weather-data",
+        cpu="1",
+        memory=memory,
+        workers_total=1,
+        parallelism=1,
+    )
+    worker = job.as_kubernetes_object()["spec"]["template"]["spec"]["containers"][0]
+    assert worker["name"] == "worker"
+    assert worker["resources"]["requests"]["memory"] == memory
+    env = next(e for e in worker["env"] if e["name"] == "WORKER_MEMORY_REQUEST_BYTES")
+    assert env == {
+        "name": "WORKER_MEMORY_REQUEST_BYTES",
+        "valueFrom": {
+            "resourceFieldRef": {
+                "containerName": "worker",
+                "resource": "requests.memory",
+                "divisor": "1",
+            }
+        },
+    }

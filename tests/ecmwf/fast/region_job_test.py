@@ -41,6 +41,11 @@ from tests.ecmwf.fast.grib_test import PARAMS, chunks, grib1, grib2, source_byte
 LAST_MODIFIED = pd.Timestamp("2026-11-04T00:00Z")
 
 
+@pytest.fixture(autouse=True)
+def worker_memory_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WORKER_MEMORY_REQUEST_BYTES", "7000000000")
+
+
 def make_job(
     tmp_path: Path, cls: type[EcmwfFastRegionJob], hour: int = 0
 ) -> EcmwfFastRegionJob:
@@ -734,3 +739,27 @@ def test_subset_backfill_uses_full_template_member_and_declared_parameter_scope(
     assert len(source.data_vars) == 1
     assert source.source_unit("2t") is None
     assert source.source_unit("10u") == "m s-1"
+
+
+def test_size_warning_occurs_once_per_changed_listing_without_filtering(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    job = make_job(tmp_path, EcmwfIfsEnsForecast025DegreeFastRegionJob)
+    coord = job.source_file_coords()[0]
+    modified = LAST_MODIFIED
+    monkeypatch.setattr(region_job, "listing_client", object)
+    monkeypatch.setattr(
+        region_job,
+        "list_prefix_or_defer",
+        lambda prefix, client: [(coord.key, 1, modified, '"test"')],
+    )
+    assert job.discover_available([coord]) == [(coord, 1)]
+    assert job.discover_available([coord]) == []
+    assert job.discover_available([coord]) == []
+    assert len(caplog.records) == 1
+    modified += pd.Timedelta("1s")
+    assert job.discover_available([coord]) == [(coord, 1)]
+    assert len(caplog.records) == 2
+    assert all("Unexpected source file size" in r.getMessage() for r in caplog.records)

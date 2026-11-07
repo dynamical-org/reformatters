@@ -352,7 +352,7 @@ def test_backfill_streams_at_existing_concurrency(
     assert len(job.file_refs(coord, len(data))) == 7
     get.assert_called_once_with(STORE, coord.key)
     assert cls.download_concurrency == 64
-    assert cls.update_download_concurrency == 5
+    assert not hasattr(cls, "update_download_concurrency")
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])

@@ -1,5 +1,5 @@
 from collections.abc import Iterator, Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import cache
 from typing import Literal, Protocol
 
@@ -38,6 +38,19 @@ _LIST_TRANSPORT_ERRORS = (
 )
 
 type Family = Literal["cf", "pf"]
+
+OBSERVED_FILE_SIZE_BYTES: dict[
+    tuple[FastModel, Family, bool | None], tuple[int, int]
+] = {
+    ("ifs", "cf", True): (8_825_796, 8_825_796),
+    ("ifs", "cf", False): (12_978_756, 12_978_756),
+    ("ifs", "pf", True): (441_308_700, 441_308_700),
+    ("ifs", "pf", False): (648_956_700, 648_956_700),
+    ("aifs", "cf", None): (4_735_151, 7_298_105),
+    ("aifs", "pf", None): (241_072_732, 360_683_165),
+}
+FILE_SIZE_WARNING_MIN_FACTOR = 0.75
+FILE_SIZE_WARNING_MAX_FACTOR = 1.25
 
 
 class ListingClient(Protocol):
@@ -104,6 +117,20 @@ class EcmwfFastSourceFileCoord(InitLeadSourceFileCoord):
             "lead_time": self.lead_time,
             "ensemble_member": min(self.members),
         }
+
+
+def warn_unexpected_file_size(coord: EcmwfFastSourceFileCoord, size: int) -> None:
+    lead_zero = coord.lead_time == timedelta(0) if coord.model == "ifs" else None
+    observed_min, observed_max = OBSERVED_FILE_SIZE_BYTES[
+        coord.model, coord.family, lead_zero
+    ]
+    lower = FILE_SIZE_WARNING_MIN_FACTOR * observed_min
+    upper = FILE_SIZE_WARNING_MAX_FACTOR * observed_max
+    if not lower <= size <= upper:
+        log.error(
+            f"Unexpected source file size for {coord.key}: {size} bytes, "
+            f"expected {lower}..{upper} bytes"
+        )
 
 
 @cache
