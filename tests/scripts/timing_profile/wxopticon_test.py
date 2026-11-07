@@ -1,6 +1,8 @@
 import json
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -8,6 +10,7 @@ import pandas as pd
 import pytest
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
+from reformatters.common import retry as retry_module
 from reformatters.common.kubernetes import ReformatCronJob
 from scripts.timing_profile.__main__ import measure_source
 from scripts.timing_profile.datasets import Unit, expected_units
@@ -65,6 +68,30 @@ def source_with_transport(
     source.close()
     source.client = httpx.Client(transport=httpx.MockTransport(handler))
     return source
+
+
+@pytest.fixture
+def recorded_sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Record the retry backoff sleeps instead of waiting them out."""
+    recorded: list[float] = []
+    monkeypatch.setattr(retry_module, "time", SimpleNamespace(sleep=recorded.append))
+    return recorded
+
+
+def counting(
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> tuple[Callable[[httpx.Request], httpx.Response], Counter[str]]:
+    requests: Counter[str] = Counter()
+
+    def counted(request: httpx.Request) -> httpx.Response:
+        requests[request.url.path.rsplit("/", 1)[-1]] += 1
+        return handler(request)
+
+    return counted, requests
+
+
+# TimestampSource.get retries a failing GET max_attempts=8 times, sleeping between attempts.
+EXHAUSTED_ATTEMPTS = 8
 
 
 def test_bundles_preserve_artifact_timestamps_provenance_and_cumulative_completion() -> (
@@ -168,7 +195,7 @@ def test_daily_capture_freezes_events_and_absent_shards(
     "case", ["schema", "json", "http", "inferred", "batch", "mirror"]
 )
 def test_unusable_history_falls_back_without_inventing_file_evidence(
-    tmp_path: Path, case: str
+    tmp_path: Path, case: str, recorded_sleeps: list[float]
 ) -> None:
     row = event("a", 60)
     if case == "schema":
@@ -185,17 +212,21 @@ def test_unusable_history_falls_back_without_inventing_file_evidence(
             artifact["url"] = artifact["url"].replace(
                 "noaa-gfs-bdp-pds", "another-mirror"
             )
-    source = source_with_transport(
-        tmp_path,
+    handler, requests = counting(
         lambda request: httpx.Response(
             503 if case == "http" else 200,
             text="invalid" if case == "json" else json.dumps(row),
-        ),
+        )
     )
+    source = source_with_transport(tmp_path, handler)
     unit = Unit(ANCHOR, "run", (frozenset([ROOT + "a", ROOT + "a.idx"]),), 0)
     objects, _ = WxopticonSource(source).measure("noaa-gfs-forecast", [unit])
     source.close()
     assert not all(canonical_url(url) in objects for file in unit.files for url in file)
+    attempts_per_url = EXHAUSTED_ATTEMPTS if case == "http" else 1
+    assert requests
+    assert all(n == attempts_per_url for n in requests.values())
+    assert len(recorded_sleeps) == (attempts_per_url - 1) * len(requests)
 
 
 def test_product_mapping_uses_primary_mirror_and_preserves_hourly_coverage() -> None:
@@ -343,18 +374,21 @@ def test_source_selection_is_per_unit_and_retains_unresolved_units(
 
 
 @pytest.mark.parametrize("failure", ["http", "schema"])
-def test_failed_day_does_not_discard_other_days(tmp_path: Path, failure: str) -> None:
+def test_failed_day_does_not_discard_other_days(
+    tmp_path: Path, failure: str, recorded_sleeps: list[float]
+) -> None:
     first = event("a", 60)
     second = event("b", 60)
     second["schema_version"] = 5
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def respond(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("2026-10-20.jsonl"):
             return httpx.Response(200, text=json.dumps(first))
         return httpx.Response(
             503 if failure == "http" else 200, text=json.dumps(second)
         )
 
+    handler, requests = counting(respond)
     source = source_with_transport(tmp_path, handler)
     units = [
         Unit(ANCHOR, "run", (frozenset([ROOT + "a", ROOT + "a.idx"]),), 0),
@@ -372,6 +406,12 @@ def test_failed_day_does_not_discard_other_days(tmp_path: Path, failure: str) ->
     assert not any(
         canonical_url(url) in objects for file in units[1].files for url in file
     )
+    failed = {name: n for name, n in requests.items() if name != "2026-10-20.jsonl"}
+    assert requests["2026-10-20.jsonl"] == 1
+    attempts_per_url = EXHAUSTED_ATTEMPTS if failure == "http" else 1
+    assert failed
+    assert all(n == attempts_per_url for n in failed.values())
+    assert len(recorded_sleeps) == (attempts_per_url - 1) * len(failed)
 
 
 def test_unsupported_grouped_products_do_not_download_history(tmp_path: Path) -> None:

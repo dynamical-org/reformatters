@@ -8,6 +8,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from xdist.remote import Producer
+from xdist.scheduler import LoadFileScheduling
+from xdist.scheduler.protocol import Scheduling
 
 faulthandler.enable()
 
@@ -43,13 +46,41 @@ def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """
     Order files containing slow tests first so xdist's loadfile scheduler
-    starts them immediately. A slow file picked up late by an otherwise
-    free worker extends the total run time of the suite.
+    starts them immediately (addopts disables xdist's default re-sort by test
+    count, which would otherwise override this order). A slow file picked up
+    late by an otherwise free worker extends the total run time of the suite.
     """
     files_with_slow_tests = {
         item.path for item in items if item.get_closest_marker("slow") is not None
     }
     items.sort(key=lambda item: item.path not in files_with_slow_tests)
+
+
+# Files whose tests take minutes in total and whose module-scoped fixtures are
+# per parameter, so each parameter's tests can run on a different worker without
+# repeating fixture setup. Splitting them keeps one file from becoming the tail.
+_SPLIT_BY_PARAM_FILES = (
+    "tests/common/common_template_config_subclasses_test.py",
+    "tests/noaa/refs/dynamical_dataset_test.py",
+    "tests/noaa/rtma_ru/analysis_virtual/dynamical_dataset_test.py",
+    "tests/noaa/urma/analysis_virtual/dynamical_dataset_test.py",
+)
+
+
+def pytest_xdist_make_scheduler(
+    config: pytest.Config, log: Producer
+) -> Scheduling | None:
+    if config.getoption("dist") != "loadfile":
+        return None
+
+    class LoadFileSplitByParam(LoadFileScheduling):
+        def _split_scope(self, nodeid: str) -> str:
+            path, _, name = nodeid.partition("::")
+            if path in _SPLIT_BY_PARAM_FILES and "[" in name:
+                return f"{path}::{name[name.find('[') :]}"
+            return path
+
+    return LoadFileSplitByParam(config, log)
 
 
 @pytest.fixture(autouse=True)
