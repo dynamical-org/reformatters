@@ -74,7 +74,19 @@ jobs:
         run: uv run ty check
 
       - name: Run Pytest
-        run: uv run pytest -p no:sugar --verbose --durations=50 ${{ matrix.pytest_args }}
+        env:
+          PYTEST_TIMELINE_FILE: ${{ runner.temp }}/pytest-timeline.tsv
+        run: uv run pytest -p no:sugar --verbose --durations=50 --junitxml="$RUNNER_TEMP/junit.xml" ${{ matrix.pytest_args }}
+
+      - name: Upload test timings
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-timings-${{ matrix.arch }}-${{ matrix.suite }}
+          path: |
+            ${{ runner.temp }}/pytest-timeline.tsv
+            ${{ runner.temp }}/junit.xml
+          if-no-files-found: warn
 
   quality:
     name: Code Quality
