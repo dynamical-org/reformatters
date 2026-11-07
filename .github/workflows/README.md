@@ -10,9 +10,10 @@ suite, otherwise by the complement suite for its tree. Rebalance the lists
 from the `--durations` output in the test job logs. Ruff, formatting, and ty
 run in the `other-b` suite on each architecture.
 
-The required `Code Quality` check waits for all ten test jobs. Its gate
-job runs even if a test job fails or is cancelled, and passes only when the
-matrix result is `success`. Production deploys
+The required `Code Quality` check waits for all ten test jobs and the
+Kubernetes admission job. Its gate job runs even if one of them fails or is
+cancelled, and passes only when both the matrix result and the admission
+result are `success`. Production deploys
 require a successful Code Quality workflow for a main-branch push.
 Staging uses two test partitions (`tests/noaa` and the rest), and its deploy
 job requires both.
