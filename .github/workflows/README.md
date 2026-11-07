@@ -3,15 +3,18 @@
 ## Code Quality
 
 The full test suite runs on amd64 and arm64. Each architecture splits the work
-into `tests/noaa` and the remaining tests (`--ignore=tests/noaa`); together they
-include every test, including slow tests. Ruff, formatting, and ty run in the
-remaining-tests partition on each architecture.
+into four suites defined in `code-quality.yml` as explicit path lists and their
+complements, so every test, including slow tests, runs in exactly one suite and
+a new test directory is picked up by the catch-all suite. Rebalance the lists
+from the per-test timings each test job uploads as an artifact. Ruff,
+formatting, and ty run in the `other-b` suite on each architecture.
 
-The required `Code Quality` check waits for all four test partitions. Its gate
+The required `Code Quality` check waits for all eight test jobs. Its gate
 job runs even if a test job fails or is cancelled, and passes only when the
 matrix result is `success`. Production deploys
 require a successful Code Quality workflow for a main-branch push.
-Staging uses the same two test partitions, and its deploy job requires both.
+Staging uses two test partitions (`tests/noaa` and the rest), and its deploy
+job requires both.
 
 ## Manual Kubernetes Operations Workflows
 
