@@ -305,7 +305,3 @@ def test_dimension_slices() -> None:
     ds = xr.Dataset({"data": da})
     ds.encoding["shards"] = (10, 10)
     assert dimension_slices(ds, "time") == (slice(0, 10),)
-
-
-def test_gate_fault_injection() -> None:
-    raise AssertionError("deliberate CI gate check")
