@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -65,11 +64,10 @@ def test_urma_operations_storage_and_validators(tmp_path: Path) -> None:
 
 
 @pytest.mark.slow
-def test_local_full_dataset_reads_all_fields_and_times_validators(
+def test_local_full_dataset_reads_all_fields_and_passes_validators(
     tmp_path: Path,
     source_fixture: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
-    record_property: Callable[[str, object], None],
 ) -> None:
     dataset = make_dataset(tmp_path, source_fixture["time"])
     time = pd.Timestamp(source_fixture["time"])
