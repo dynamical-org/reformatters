@@ -483,7 +483,7 @@ def assert_manifest_and_decode_health(
     )
     complete = validation.CheckVirtualManifestCompleteness().check(context)
     assert complete.passed, complete.message
-    healthy = validation.CheckVirtualDecodeHealth(sampled_leads=6, max_workers=1).check(
+    healthy = validation.CheckVirtualDecodeHealth(sampled_leads=6, max_workers=2).check(
         context
     )
     assert healthy.passed, healthy.message
