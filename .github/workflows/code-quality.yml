@@ -22,21 +22,23 @@ jobs:
 
     strategy:
       fail-fast: false
-      # Four suites per architecture, balanced by measured cost. Each suite is a
+      # Five suites per architecture, balanced by measured cost. Each suite is a
       # positive path list or the complement of the others, so every test runs
       # in exactly one suite and a new test directory is covered automatically.
       matrix:
         arch: [amd64, arm64]
-        suite: [noaa-a, noaa-b, other-a, other-b]
+        suite: [noaa-a, noaa-b, noaa-c, other-a, other-b]
         include:
           - arch: amd64
             runner: ubuntu-24.04
           - arch: arm64
             runner: ubuntu-24.04-arm
           - suite: noaa-a
-            pytest_args: tests/noaa/refs tests/noaa/urma tests/noaa/rtma_ru tests/noaa/rtma tests/noaa/rrfs tests/noaa/rrfs_ens tests/noaa/mrms
+            pytest_args: tests/noaa/refs tests/noaa/urma tests/noaa/rtma tests/noaa/mrms
           - suite: noaa-b
-            pytest_args: tests/noaa --ignore=tests/noaa/refs --ignore=tests/noaa/urma --ignore=tests/noaa/rtma_ru --ignore=tests/noaa/rtma --ignore=tests/noaa/rrfs --ignore=tests/noaa/rrfs_ens --ignore=tests/noaa/mrms
+            pytest_args: tests/noaa/gefs tests/noaa/rtma_ru tests/noaa/rrfs tests/noaa/rrfs_ens
+          - suite: noaa-c
+            pytest_args: tests/noaa --ignore=tests/noaa/refs --ignore=tests/noaa/urma --ignore=tests/noaa/rtma --ignore=tests/noaa/mrms --ignore=tests/noaa/gefs --ignore=tests/noaa/rtma_ru --ignore=tests/noaa/rrfs --ignore=tests/noaa/rrfs_ens
           - suite: other-a
             pytest_args: tests/common tests/scripts
           - suite: other-b

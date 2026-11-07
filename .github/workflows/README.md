@@ -3,14 +3,14 @@
 ## Code Quality
 
 The full test suite runs on amd64 and arm64. Each architecture splits the work
-into four suites defined in `code-quality.yml` as explicit path lists and their
+into five suites defined in `code-quality.yml` as explicit path lists and their
 complements, so every test, including slow tests, runs in exactly one suite and
 a new test directory is covered automatically: inside a listed path by that
 suite, otherwise by the complement suite for its tree. Rebalance the lists
 from the per-test timings each test job uploads as an artifact. Ruff,
 formatting, and ty run in the `other-b` suite on each architecture.
 
-The required `Code Quality` check waits for all eight test jobs. Its gate
+The required `Code Quality` check waits for all ten test jobs. Its gate
 job runs even if a test job fails or is cancelled, and passes only when the
 matrix result is `success`. Production deploys
 require a successful Code Quality workflow for a main-branch push.
