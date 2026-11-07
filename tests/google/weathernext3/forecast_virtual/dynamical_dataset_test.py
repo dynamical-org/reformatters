@@ -49,7 +49,9 @@ def test_update_reserves_time_for_inline_validation(
         if isinstance(check, validation.CheckVirtualManifestCompleteness)
     ]
     assert completeness.min_present_fraction == (
-        (0.0, 0.0, 1.0) if dataset.template_config.horizon_hours == 48 else (1.0,)
+        (0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+        if dataset.template_config.horizon_hours == 48
+        else (1.0,)
     )
     assert not update.suspend
     assert update.concurrency_policy == "Allow"
