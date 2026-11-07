@@ -1,8 +1,18 @@
 import math
 from collections.abc import Iterable
+from pathlib import Path
 from typing import cast
 
+import pytest
 import xarray as xr
+from zarr.abc.store import Store
+
+from reformatters.common import (
+    materialized_region_job as materialized_region_job_module,
+)
+from reformatters.common import shared_memory_utils
+from reformatters.common.iterating import shard_slice_indexers
+from reformatters.common.types import AppendDim
 
 
 def _shrink_dim(size: int, chunk: int, shard: int) -> tuple[int, int]:
@@ -78,3 +88,38 @@ def _shrink_dataset(ds: xr.Dataset, dims: Iterable[str] | None) -> xr.Dataset:
         if has_shards:
             var.encoding["shards"] = tuple(shards)
     return ds
+
+
+def patch_write_first_shard_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only write the first spatial shard (all indexer slices start at 0).
+
+    Replaces write_shards rather than write_shard_to_zarr because the latter
+    is pickled for ProcessPoolExecutor and local functions can't be pickled.
+    """
+    _orig_write_shard_to_zarr = shared_memory_utils.write_shard_to_zarr
+
+    def _first_shard_only_write_shards(
+        processing_region_da_template: xr.DataArray,
+        shared_buffer: object,
+        append_dim: AppendDim,
+        output_region_ds: xr.Dataset,
+        store: Store | Path,
+        cpu_process_executor: object,
+    ) -> None:
+        all_indexers = shard_slice_indexers(
+            output_region_ds[processing_region_da_template.name]
+        )
+        for si in all_indexers:
+            if all(s.start == 0 for s in si):
+                _orig_write_shard_to_zarr(
+                    processing_region_da_template,
+                    shared_buffer.name,  # ty: ignore[unresolved-attribute]
+                    append_dim,
+                    output_region_ds,
+                    store,
+                    si,
+                )
+
+    monkeypatch.setattr(
+        materialized_region_job_module, "write_shards", _first_shard_only_write_shards
+    )
