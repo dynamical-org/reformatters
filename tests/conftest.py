@@ -100,9 +100,9 @@ def pytest_xdist_make_scheduler(
 
     class LoadFileSplitByParam(LoadFileScheduling):
         def _split_scope(self, nodeid: str) -> str:
-            path = nodeid.split("::", 1)[0]
-            if path in _SPLIT_BY_PARAM_FILES and nodeid.endswith("]"):
-                return f"{path}::{nodeid[nodeid.rfind('[') :]}"
+            path, _, name = nodeid.partition("::")
+            if path in _SPLIT_BY_PARAM_FILES and "[" in name:
+                return f"{path}::{name[name.find('[') :]}"
             return path
 
     return LoadFileSplitByParam(config, log)

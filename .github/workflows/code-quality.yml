@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       # Four suites per architecture, balanced by measured cost. Each suite is a
       # positive path list or the complement of the others, so every test runs
-      # in exactly one suite and a new directory lands in other-b automatically.
+      # in exactly one suite and a new test directory is covered automatically.
       matrix:
         arch: [amd64, arm64]
         suite: [noaa-a, noaa-b, other-a, other-b]
