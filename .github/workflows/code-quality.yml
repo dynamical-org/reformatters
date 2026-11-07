@@ -87,16 +87,19 @@ jobs:
 
   quality:
     name: Code Quality
-    needs: tests
+    needs: [tests, admission]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     steps:
-      - name: Require all test partitions to pass
+      - name: Require all test partitions and admission to pass
         env:
           TEST_RESULT: ${{ needs.tests.result }}
+          ADMISSION_RESULT: ${{ needs.admission.result }}
         run: |
           echo "Test matrix result: $TEST_RESULT"
+          echo "Admission result: $ADMISSION_RESULT"
           test "$TEST_RESULT" = success
+          test "$ADMISSION_RESULT" = success
 
   admission:
     name: Kubernetes admission
