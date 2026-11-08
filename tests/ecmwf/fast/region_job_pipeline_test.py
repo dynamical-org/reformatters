@@ -1,9 +1,9 @@
 import json
-import time
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
 from concurrent.futures import FIRST_EXCEPTION, Future, ThreadPoolExecutor
 from pathlib import Path
-from threading import Event
+from threading import Event, current_thread
+from threading import enumerate as enumerate_threads
 from typing import ClassVar, cast
 from unittest.mock import Mock
 
@@ -80,6 +80,8 @@ class ManualPool:
 
     def complete(self, index: int) -> None:
         future, fn = self.tasks[index]
+        if future.done():
+            return
         try:
             future.set_result(fn())
         except (AssertionError, SourceAccessError) as exc:
@@ -183,7 +185,8 @@ def test_frequent_completions_do_not_postpone_discovery(
     monkeypatch.setattr(PipelineJob, "discover_available", discover)
     monkeypatch.setattr(region_job.time, "monotonic", lambda: clock)
     monkeypatch.setattr(region_job, "wait", wait)
-    batches = list(job.process_virtual_refs(coords))
+    batches = []
+    job._poll_ready_files(coords, batches.append, Event())
     assert sweeps == [0, 1]
     assert [c for b in batches for c, _ in b] == coords
     assert len(batches) == len(coords)
@@ -195,7 +198,8 @@ def test_slow_sibling_and_arrivals_during_build_and_commit(
     job = make_job(2)
     coords = list(job.source_file_coords())
     slow, first, during_build, during_commit = coords
-    started, release, commit_arrival = Event(), Event(), Event()
+    started, release, commit_arrival, admitted = Event(), Event(), Event(), Event()
+    build_arrival = Event()
     sweeps: list[list[EcmwfFastSourceFileCoord]] = []
     file_refs = PipelineJob.file_refs
 
@@ -205,6 +209,8 @@ def test_slow_sibling_and_arrivals_during_build_and_commit(
         if coord is slow:
             started.set()
             assert release.wait(5)
+        if coord is during_commit:
+            admitted.set()
         return file_refs(self, coord, size)
 
     def discover(
@@ -212,7 +218,7 @@ def test_slow_sibling_and_arrivals_during_build_and_commit(
     ) -> list[tuple[EcmwfFastSourceFileCoord, int]]:
         sweeps.append(pending)
         visible = [slow, first]
-        if started.is_set():
+        if build_arrival.is_set():
             visible.append(during_build)
         if commit_arrival.is_set():
             visible.append(during_commit)
@@ -228,11 +234,12 @@ def test_slow_sibling_and_arrivals_during_build_and_commit(
     try:
         assert [c for c, _ in next(iterator)] == [first]
         assert started.wait(2)
+        build_arrival.set()
         assert [c for c, _ in next(iterator)] == [during_build]
         sweep_count = len(sweeps)
         commit_arrival.set()
-        time.sleep(0.04)
-        assert len(sweeps) == sweep_count
+        assert admitted.wait(2)
+        assert len(sweeps) > sweep_count
         assert [c for c, _ in next(iterator)] == [during_commit]
         assert all(not any(c is slow for c in p) for p in sweeps[1:])
         release.set()
@@ -252,6 +259,90 @@ def test_backfill_delegates_to_shared_sweep_loop(
     monkeypatch.setattr(VirtualRegionJob, "process_virtual_refs", shared_loop)
     assert list(job.process_virtual_refs(coords)) == []
     shared_loop.assert_called_once_with(coords)
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_handoff_coalesces_before_eof_but_failure_discards_buffered_files(
+    monkeypatch: pytest.MonkeyPatch, failed: bool
+) -> None:
+    job = make_job()
+    coords = list(job.source_file_coords())
+
+    def poll(
+        self: PipelineJob,
+        remaining: Sequence[EcmwfFastSourceFileCoord],
+        publish: Callable,
+        stop: Event,
+    ) -> None:
+        for coord in coords:
+            publish([(coord, self.file_refs(coord, BLOCK_NBYTES))])
+        if failed:
+            publish(SourceAccessError("auth"))
+
+    monkeypatch.setattr(PipelineJob, "_poll_ready_files", poll)
+    monkeypatch.setattr(
+        region_job, "Thread", lambda *, target, **kwargs: Mock(start=target)
+    )
+    iterator = job.process_virtual_refs(coords)
+    if failed:
+        with pytest.raises(SourceAccessError, match="auth"):
+            next(iterator)
+    else:
+        assert [[c for c, _ in batch] for batch in iterator] == [coords]
+
+
+def test_discovery_and_collection_continue_during_shared_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    job = make_job(2)
+    coords = list(job.source_file_coords())
+    committing, collected = Event(), Event()
+    batches = []
+    poll = PipelineJob._poll_ready_files
+    writer = current_thread()
+
+    def discover(
+        self: PipelineJob, pending: list[EcmwfFastSourceFileCoord]
+    ) -> list[tuple[EcmwfFastSourceFileCoord, int]]:
+        visible = coords if committing.is_set() else coords[:1]
+        return [(c, BLOCK_NBYTES) for c in pending if c in visible]
+
+    def observed_poll(
+        self: PipelineJob,
+        remaining: Sequence[EcmwfFastSourceFileCoord],
+        publish: Callable,
+        stop: Event,
+    ) -> None:
+        observed = set()
+
+        def forward(item: object) -> None:
+            publish(item)
+            if isinstance(item, list):
+                observed.update(id(coord) for coord, _ in item)
+                if len(observed) == len(coords):
+                    collected.set()
+
+        poll(self, remaining, forward, stop)
+
+    def commit(
+        self: PipelineJob, repo: object, branch: str, batch: object, **kw: object
+    ) -> None:
+        assert current_thread() is writer
+        batches.append(batch)
+        if len(batches) == 1:
+            committing.set()
+            assert collected.wait(5), "source scheduling stalled behind the writer"
+
+    monkeypatch.setattr(PipelineJob, "discover_available", discover)
+    monkeypatch.setattr(PipelineJob, "_poll_ready_files", observed_poll)
+    monkeypatch.setattr(PipelineJob, "_commit_virtual_batch", commit)
+    monkeypatch.setattr(PipelineJob, "tick_interval", pd.Timedelta("0.01s"))
+    assert job.process_virtual(Mock(), [], "main", coords)
+    assert len(batches) == 2
+    assert [c for c, _ in batches[0]] == coords[:1]
+    assert len(batches[1]) == len(coords) - 1
+    assert {id(c) for c, _ in batches[1]} == {id(c) for c in coords[1:]}
+    assert not any(t.name == "ecmwf-fast-poller" for t in enumerate_threads())
 
 
 @pytest.mark.parametrize(
@@ -274,12 +365,31 @@ def test_fatal_failure_cancels_unstarted_work(
     assert all(f.cancelled() for f, _ in manual_pool.tasks[1:])
 
 
+@pytest.mark.parametrize("at_cutoff", [False, True])
 def test_iterator_close_cancels_queued_and_joins_running_reads(
     monkeypatch: pytest.MonkeyPatch,
+    at_cutoff: bool,
 ) -> None:
-    job = make_job(35)
+    now = pd.Timestamp("2026-11-08")
+    job = make_job(35).model_copy(
+        update={"poll_deadline": now + pd.Timedelta(seconds=1)}
+    )
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls, *a, **kw: now))
     coords = list(job.source_file_coords())
     started, release, finished, closing = Event(), Event(), Event(), Event()
+    draining = Event()
+    original_wait = region_job.wait
+
+    def observed_wait(
+        futures: Iterable[Future[list[VirtualRef]]],
+        timeout: float | None = None,
+        return_when: str = "ALL_COMPLETED",
+    ) -> tuple[set[Future[list[VirtualRef]]], set[Future[list[VirtualRef]]]]:
+        if return_when == FIRST_EXCEPTION:
+            draining.set()
+        return original_wait(futures, timeout=timeout, return_when=return_when)
+
+    monkeypatch.setattr(region_job, "wait", observed_wait)
     file_refs = PipelineJob.file_refs
     pool = ThreadPoolExecutor(2)
     shutdown = pool.shutdown
@@ -308,6 +418,9 @@ def test_iterator_close_cancels_queued_and_joins_running_reads(
     try:
         assert [c for c, _ in next(iterator)] == [coords[0]]
         assert started.wait(2)
+        if at_cutoff:
+            now += pd.Timedelta(seconds=2)
+            assert draining.wait(2)
         with ThreadPoolExecutor(1) as closer:
 
             def close() -> None:
@@ -354,10 +467,12 @@ def test_empty_and_deferred_sweeps_keep_cadence_and_log_duration(
 
     monkeypatch.setattr(PipelineJob, "discover_available", discover)
     monkeypatch.setattr(region_job.time, "monotonic", lambda: clock)
-    monkeypatch.setattr(region_job.time, "sleep", sleep)
+    stop = Event()
+    monkeypatch.setattr(stop, "wait", sleep)
     monkeypatch.setattr(region_job, "wait", wait)
+    batches = []
     with caplog.at_level("INFO"):
-        batches = list(job.process_virtual_refs(coords))
+        job._poll_ready_files(coords, batches.append, stop)
     events = [
         json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
         for r in caplog.records

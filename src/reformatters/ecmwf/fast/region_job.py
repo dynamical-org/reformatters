@@ -1,5 +1,5 @@
 import time
-from collections.abc import Buffer, Generator, Iterator, Sequence
+from collections.abc import Buffer, Callable, Generator, Iterator, Sequence
 from concurrent.futures import (
     FIRST_COMPLETED,
     FIRST_EXCEPTION,
@@ -7,8 +7,11 @@ from concurrent.futures import (
     ThreadPoolExecutor,
     wait,
 )
+from contextvars import copy_context
 from datetime import UTC, datetime
 from functools import partial
+from queue import Empty, SimpleQueue
+from threading import Event, Thread
 from time import monotonic
 from typing import ClassVar
 
@@ -123,30 +126,118 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                             )
         return list(available.values())
 
-    def process_virtual_refs(  # noqa: PLR0912
+    def process_virtual_refs(
         self, remaining: Sequence[EcmwfFastSourceFileCoord]
     ) -> Iterator[Sequence[tuple[EcmwfFastSourceFileCoord, Sequence[VirtualRef]]]]:
         """Yield finished whole files while polling; drain admitted work at cutoff."""
         if self.processing_mode == "backfill":
             yield from super().process_virtual_refs(remaining)
             return
+        handoff: SimpleQueue[
+            Sequence[tuple[EcmwfFastSourceFileCoord, Sequence[VirtualRef]]]
+            | BaseException
+            | None
+        ] = SimpleQueue()
+        stop = Event()
+
+        def poll() -> None:
+            try:
+                self._poll_ready_files(remaining, handoff.put, stop)
+            except BaseException as error:  # noqa: BLE001 - re-raised by the consumer
+                handoff.put(error)
+            finally:
+                handoff.put(None)
+
+        poller = Thread(target=poll, name="ecmwf-fast-poller", context=copy_context())
+        poller.start()
+        try:
+            done = False
+            while not done:
+                items = [handoff.get()]
+                while True:
+                    try:
+                        items.append(handoff.get_nowait())
+                    except Empty:
+                        break
+                batch = []
+                for item in items:
+                    if isinstance(item, BaseException):
+                        raise item
+                    if item is None:
+                        done = True
+                    else:
+                        batch.extend(item)
+                if batch:
+                    yield batch
+        finally:
+            stop.set()
+            poller.join()
+
+    def _poll_ready_files(  # noqa: PLR0912
+        self,
+        remaining: Sequence[EcmwfFastSourceFileCoord],
+        publish: Callable[
+            [
+                Sequence[tuple[EcmwfFastSourceFileCoord, Sequence[VirtualRef]]]
+                | BaseException
+            ],
+            None,
+        ],
+        stop: Event,
+    ) -> None:
         pending = list(remaining)
         futures: dict[Future[list[VirtualRef]], EcmwfFastSourceFileCoord] = {}
         next_sweep = time.monotonic()
         first_sweep = True
         pool = ThreadPoolExecutor(self.update_download_concurrency)
         try:
-            while pending:
+            while pending and not stop.is_set():
                 for future in futures:
                     if future.done():
                         future.result()
                 cutoff = not first_sweep and pd.Timestamp.now() >= self.poll_deadline
+                if cutoff:
+                    while any(not future.done() for future in futures):
+                        wait(
+                            futures,
+                            timeout=self.tick_interval.total_seconds(),
+                            return_when=FIRST_EXCEPTION,
+                        )
+                        if stop.is_set():
+                            return
+                        for future in futures:
+                            if future.done():
+                                future.result()
+                completed = [
+                    (futures.pop(future), future.result())
+                    for future in list(futures)
+                    if future.done()
+                ]
+                batch = [(coord, refs) for coord, refs in completed if refs]
+                removed = {
+                    id(coord)
+                    for coord, refs in completed
+                    if refs or not self.retain_failed_files
+                }
+                pending = [coord for coord in pending if id(coord) not in removed]
+                if batch:
+                    publish(batch)
+                if not pending or cutoff:
+                    if pending:
+                        log.info(
+                            f"Poll deadline reached with {len(pending)} source files "
+                            f"not yet ingested, leaving them to the next update "
+                            f"(first: {pending[0].get_url()})"
+                        )
+                    return
                 if not cutoff and (first_sweep or time.monotonic() >= next_sweep):
                     sweep_start = time.monotonic()
                     in_flight = {id(coord) for coord in futures.values()}
                     available = self.discover_available(
                         [coord for coord in pending if id(coord) not in in_flight]
                     )
+                    if stop.is_set():
+                        return
                     received_at = pd.Timestamp.now(tz="UTC").isoformat()
                     log_virtual_event(
                         "discovery_sweep",
@@ -166,31 +257,8 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                         futures[pool.submit(self._ready_file_refs, coord, size)] = coord
                     next_sweep = sweep_start + self.tick_interval.total_seconds()
                     first_sweep = False
-                cutoff = pd.Timestamp.now() >= self.poll_deadline
-                if cutoff and futures:
-                    wait(futures, return_when=FIRST_EXCEPTION)
-                completed = [
-                    (futures.pop(future), future.result())
-                    for future in list(futures)
-                    if future.done()
-                ]
-                batch = [(coord, refs) for coord, refs in completed if refs]
-                removed = {
-                    id(coord)
-                    for coord, refs in completed
-                    if refs or not self.retain_failed_files
-                }
-                pending = [coord for coord in pending if id(coord) not in removed]
-                if batch:
-                    yield batch
-                if not pending or cutoff:
-                    if pending:
-                        log.info(
-                            f"Poll deadline reached with {len(pending)} source files "
-                            f"not yet ingested, leaving them to the next update "
-                            f"(first: {pending[0].get_url()})"
-                        )
-                    return
+                if pd.Timestamp.now() >= self.poll_deadline:
+                    continue
                 timeout = max(
                     0.0,
                     min(
@@ -201,7 +269,9 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                 if futures:
                     wait(futures, timeout=timeout, return_when=FIRST_COMPLETED)
                 else:
-                    time.sleep(timeout)
+                    stop.wait(timeout)
+        except BaseException as error:  # noqa: BLE001 - re-raised by the consumer
+            publish(error)
         finally:
             pool.shutdown(wait=True, cancel_futures=True)
 
