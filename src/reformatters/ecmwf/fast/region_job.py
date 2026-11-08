@@ -244,7 +244,7 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                 {
                     "connect_timeout": "3 seconds",
                     "read_timeout": "3 seconds",
-                    "timeout": "30 seconds",
+                    "timeout": "60 seconds",
                 }
                 if self.processing_mode == "update"
                 else {}

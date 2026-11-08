@@ -795,7 +795,7 @@ def test_s3_store_from_secret_caches_signed_token_client(
     options = {
         "connect_timeout": "3 seconds",
         "read_timeout": "3 seconds",
-        "timeout": "30 seconds",
+        "timeout": "60 seconds",
     }
     tuned = download_module.s3_store_from_secret(
         "s3://bucket/source",

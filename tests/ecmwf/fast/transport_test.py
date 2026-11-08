@@ -197,7 +197,7 @@ def test_all_update_files_use_conditional_ranges(
         "endpoint": region_job.ENDPOINT,
         "connect_timeout": "3 seconds",
         "read_timeout": "3 seconds",
-        "timeout": "30 seconds",
+        "timeout": "60 seconds",
     }
 
 
