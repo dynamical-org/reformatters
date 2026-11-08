@@ -117,6 +117,10 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                         available[key] = (coord, size)
                         self._last_modified[key] = last_modified
                         self._listed_etags[key] = (size, etag)
+                        if self.processing_mode == "update" and size > 1_200_000_000:
+                            log.error(
+                                f"Source file {key} is {size} bytes; check memory headroom"
+                            )
         return list(available.values())
 
     def process_virtual_refs(  # noqa: PLR0912
