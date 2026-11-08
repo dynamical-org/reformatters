@@ -450,6 +450,11 @@ CF_STANDARD_NAMES_PENDING_PUBLICATION: dict[str, str] = {
 }
 
 ALLOWED_MISSING_STANDARD_NAME: set[str] = {
+    "runoff_water_equivalent_run_total_surface",
+    "snow_albedo_surface",
+    "sea_surface_height",
+    "net_long_wave_radiation_run_total_atmosphere_top",
+    "total_column_rain_water_atmosphere",
     # RRFS ceiling requires cloud-cover criteria; CF cloud_base_altitude does not.
     # CF condensed soil water includes ice; WTMP includes inland water as well as sea water.
     # CF surface_snow_density is snow cover; RRFS SDEN is the density of falling snow.
@@ -526,7 +531,6 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     # percentage and snow density a mass per snow volume; CF names none of them.
     "soil_moisture_0_20cm",
     "soil_moisture_0_100cm",
-    "snow_albedo_surface",
     "snow_density_surface",
     # HRRR forecast-48-hour-virtual single-level/surface fields with no CF standard name.
     "column_integrated_mass_density_atmosphere",
@@ -1887,6 +1891,56 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
         "Average of the ensemble mean and probability-matched mean of total precipitation",
     )
     for dataset_id in _REFS_PRODUCTS_DATASET_IDS
+}
+
+
+_IFS_ENS_VIRTUAL_DATASET_IDS = {
+    f"ecmwf-ifs-ens-forecast-{days}-day-{resolution}-degree-virtual"
+    for days in (6, 15)
+    for resolution in ("0-25", "0-1")
+}
+# IFS water totals retain source metres; masks are fractional, and snow diagnostics
+# are instantaneous rather than the daily materialized product's time averages.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (name, attr, dataset_id)
+    for dataset_id in _IFS_ENS_VIRTUAL_DATASET_IDS
+    for names, attrs in (
+        (
+            ("total_precipitation_run_total_surface", "tp", "Total precipitation"),
+            ("standard_name", "units"),
+        ),
+        (
+            (
+                "convective_precipitation_run_total_surface",
+                "cp",
+                "Convective precipitation",
+            ),
+            ("standard_name", "units"),
+        ),
+        (
+            (
+                "snowfall_water_equivalent_run_total_surface",
+                "sf",
+                "Snowfall water equivalent",
+            ),
+            ("standard_name", "units"),
+        ),
+        (
+            ("runoff_water_equivalent_run_total_surface",),
+            ("short_name", "long_name", "standard_name", "units"),
+        ),
+        (
+            ("land_sea_mask_surface", "lsm", "Land-sea mask"),
+            ("standard_name", "flag_values", "flag_meanings"),
+        ),
+        (
+            ("snow_density_surface", "rsn", "Snow density"),
+            ("standard_name", "step_type"),
+        ),
+        (("snow_albedo_surface",), ("step_type",)),
+    )
+    for name in names
+    for attr in attrs
 }
 
 

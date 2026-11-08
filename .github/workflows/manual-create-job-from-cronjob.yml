@@ -22,7 +22,11 @@ name: 'Manual: Create Job from CronJob'
         - ecmwf-ifs-ens-46-day-daily-update
         - ecmwf-ifs-ens-46-day-gribs-archive-grib-files
         - ecmwf-ifs-ens-forecast-0-25-degree-fast-update
+        - ecmwf-ifs-ens-forecast-15-day-0-1-virtual-update
         - ecmwf-ifs-ens-forecast-15-day-0-25-degree-update
+        - ecmwf-ifs-ens-forecast-15-day-0-25-virtual-update
+        - ecmwf-ifs-ens-forecast-6-day-0-1-virtual-update
+        - ecmwf-ifs-ens-forecast-6-day-0-25-virtual-update
         - google-wn2-forecast-historical-virtual-update
         - google-wn2-forecast-operational-virtual-update
         - google-wn3-15d-0-05-degree-virtual-update

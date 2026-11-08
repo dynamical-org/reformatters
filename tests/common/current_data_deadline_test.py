@@ -12,6 +12,10 @@ from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.noaa.rrfs.dynamical_dataset import NoaaRrfsDataset
 
 _FRESHNESS_DEADLINES = [
+    ("ecmwf-ifs-ens-forecast-6-day-0-25-degree-virtual", "2026-11-06 00:00", "7h42m"),
+    ("ecmwf-ifs-ens-forecast-6-day-0-1-degree-virtual", "2026-11-06 00:00", "9h42m"),
+    ("ecmwf-ifs-ens-forecast-15-day-0-25-degree-virtual", "2026-11-06 00:00", "7h42m"),
+    ("ecmwf-ifs-ens-forecast-15-day-0-1-degree-virtual", "2026-11-06 00:00", "9h42m"),
     ("noaa-gfs-forecast", "2026-09-27 00:00", "5h44m"),
     ("noaa-gfs-analysis", "2026-09-26 20:00", "3h58m"),
     ("noaa-gfs-analysis-virtual", "2026-09-26 22:00", "3h57m"),
