@@ -87,9 +87,6 @@ def test_operational_configuration(dataset: EcmwfIfsEnsForecastVirtualDataset) -
     assert len(dataset.validators()) == 3
     completeness = dataset.validators()[1]
     assert isinstance(completeness, EcmwfIfsEnsVirtualManifestCompleteness)
-    assert completeness.positions == (
-        "all" if dataset.template_config.forecast_days == 6 else 1
-    )
     for hour in (
         (0, 6, 12, 18) if dataset.template_config.forecast_days == 6 else (0, 12)
     ):

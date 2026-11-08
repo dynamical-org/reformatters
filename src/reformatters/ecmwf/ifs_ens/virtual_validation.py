@@ -1,10 +1,9 @@
 from collections.abc import Sequence
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar
 
 import xarray as xr
 import zarr
 from icechunk.store import IcechunkStore
-from pydantic import PositiveInt
 from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common.config_models import ROOT
@@ -24,9 +23,8 @@ from .virtual_region_job import (
 
 
 class EcmwfIfsEnsVirtualManifestCompleteness(Validator):
-    """Require every expected message at the selected newest initializations."""
+    """Require every expected message across the ingested update window."""
 
-    positions: PositiveInt | Literal["all"] = 1
     requires_virtual_dataset: ClassVar[bool] = True
 
     def check(self, context: ValidationContext) -> ValidationResult:
@@ -42,9 +40,6 @@ class EcmwfIfsEnsVirtualManifestCompleteness(Validator):
                 checked_count=0,
                 message="No source files in the init_time window to check",
             )
-        if self.positions != "all":
-            targets = set(sorted({c.init_time for c in candidates})[-self.positions :])
-            candidates = [c for c in candidates if c.init_time in targets]
         group = zarr.open_group(store, mode="r")
         missing: list[str] = []
         checked = 0

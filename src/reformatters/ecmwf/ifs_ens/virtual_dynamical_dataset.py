@@ -78,9 +78,7 @@ class EcmwfIfsEnsForecastVirtualDataset(
         )
         return (
             validation.CheckCurrentData(max_delay=delay),
-            EcmwfIfsEnsVirtualManifestCompleteness(
-                positions="all" if self.template_config.forecast_days == 6 else 1
-            ),
+            EcmwfIfsEnsVirtualManifestCompleteness(),
             EcmwfIfsEnsVirtualDecodeHealth(
                 sampled_leads=3, sampled_levels=2, max_workers=2
             ),
