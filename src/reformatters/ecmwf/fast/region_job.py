@@ -240,6 +240,15 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
             region="auto",
             k8s_secret_name=SOURCE_SECRET,
             endpoint=ENDPOINT,
+            **(
+                {
+                    "connect_timeout": "3 seconds",
+                    "read_timeout": "3 seconds",
+                    "timeout": "30 seconds",
+                }
+                if self.processing_mode == "update"
+                else {}
+            ),
         )
         with source_access():
             last_modified = self._last_modified.get(coord.key)

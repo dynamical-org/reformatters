@@ -182,13 +182,23 @@ def test_all_update_files_use_conditional_ranges(
     job._listed_etags = {coord.key: (len(data), ETAG)}
     owners: list[weakref.ReferenceType[Payload]] = []
     get = MagicMock(side_effect=getter(data, owners))
-    monkeypatch.setattr(region_job, "s3_store_from_secret", lambda *a, **kw: STORE)
+    factory = MagicMock(return_value=STORE)
+    monkeypatch.setattr(region_job, "s3_store_from_secret", factory)
     monkeypatch.setattr(region_job.obstore, "get", get)
     assert job.file_refs(coord, len(data))
     get.assert_called_once_with(
         STORE, coord.key, options={"range": (0, len(data)), "if_match": ETAG}
     )
     assert all(owner() is None for owner in owners)
+
+    assert factory.call_args.kwargs == {
+        "region": "auto",
+        "k8s_secret_name": region_job.SOURCE_SECRET,
+        "endpoint": region_job.ENDPOINT,
+        "connect_timeout": "3 seconds",
+        "read_timeout": "3 seconds",
+        "timeout": "30 seconds",
+    }
 
 
 @pytest.mark.parametrize("damage", ["range", "size", "etag", "extra", "short"])
@@ -344,7 +354,8 @@ def test_backfill_streams_at_existing_concurrency(
     )
     data = source_bytes(cls.model)
     get = MagicMock(return_value=source_response(data))
-    monkeypatch.setattr(region_job, "s3_store_from_secret", lambda *a, **kw: STORE)
+    factory = MagicMock(return_value=STORE)
+    monkeypatch.setattr(region_job, "s3_store_from_secret", factory)
     monkeypatch.setattr(region_job.obstore, "get", get)
     monkeypatch.setattr(
         region_job, "_ranged_chunks", lambda *a: pytest.fail("backfill ranged")
@@ -353,6 +364,12 @@ def test_backfill_streams_at_existing_concurrency(
     get.assert_called_once_with(STORE, coord.key)
     assert cls.download_concurrency == 64
     assert cls.update_download_concurrency == 5
+
+    assert factory.call_args.kwargs == {
+        "region": "auto",
+        "k8s_secret_name": region_job.SOURCE_SECRET,
+        "endpoint": region_job.ENDPOINT,
+    }
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])
