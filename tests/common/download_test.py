@@ -789,6 +789,33 @@ def test_s3_store_from_secret_caches_signed_token_client(
     assert (store.client_options.get("allow_http") == "true") == bool(
         endpoint and endpoint.startswith("http://")
     )
+    assert store.client_options["connect_timeout"] == "4 seconds"
+    assert store.client_options["timeout"] == "120 seconds"
+    assert "read_timeout" not in store.client_options
+    options = {
+        "connect_timeout": "3 seconds",
+        "read_timeout": "3 seconds",
+        "timeout": "60 seconds",
+    }
+    tuned = download_module.s3_store_from_secret(
+        "s3://bucket/source",
+        region="us-east-1",
+        k8s_secret_name="source-ref",  # noqa: S106
+        endpoint=endpoint,
+        **options,
+    )
+    assert tuned is not store
+    assert options.items() <= tuned.client_options.items()
+    assert (
+        download_module.s3_store_from_secret(
+            "s3://bucket/source",
+            region="us-east-1",
+            k8s_secret_name="source-ref",  # noqa: S106
+            endpoint=endpoint,
+            **options,
+        )
+        is tuned
+    )
     download_module.s3_store_from_secret.cache_clear()
     s3_store.cache_clear()
 

@@ -299,6 +299,9 @@ def s3_store(
     secret_access_key: str | None = None,
     virtual_hosted_style_request: bool | None = None,
     session_token: str | None = None,
+    connect_timeout: str | None = None,
+    read_timeout: str | None = None,
+    timeout: str | None = None,
 ) -> obstore.store.S3Store:
     """An S3 store, anonymous by default. Pass credentials and `endpoint` for a signed
     store on an S3-compatible service such as R2."""
@@ -323,6 +326,13 @@ def s3_store(
         skip_signature=skip_signature,
         client_options={
             **_CLIENT_OPTIONS,
+            **(
+                {"connect_timeout": connect_timeout}
+                if connect_timeout is not None
+                else {}
+            ),
+            **({"timeout": timeout} if timeout is not None else {}),
+            **({"read_timeout": read_timeout} if read_timeout is not None else {}),
             **(
                 {"allow_http": True}
                 if endpoint and endpoint.startswith("http://")
@@ -486,12 +496,18 @@ def s3_store_from_secret(
     region: str,
     k8s_secret_name: str,
     endpoint: str | None = None,
+    connect_timeout: str | None = None,
+    read_timeout: str | None = None,
+    timeout: str | None = None,
 ) -> obstore.store.S3Store:
     return s3_store(
         bucket_url,
         region=region,
         skip_signature=False,
         endpoint=endpoint,
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
+        timeout=timeout,
         virtual_hosted_style_request=False if endpoint is not None else None,
         **load_s3_credentials(k8s_secret_name),
     )
