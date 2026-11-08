@@ -7,6 +7,9 @@ from reformatters.common.config_models import ROOT
 from reformatters.ecmwf.ifs_ens.virtual_dynamical_dataset import (
     EcmwfIfsEnsForecastVirtualDataset,
 )
+from reformatters.ecmwf.ifs_ens.virtual_validation import (
+    EcmwfIfsEnsVirtualManifestCompleteness,
+)
 
 DATASETS = [
     d for d in DYNAMICAL_DATASETS if isinstance(d, EcmwfIfsEnsForecastVirtualDataset)
@@ -47,6 +50,9 @@ def test_product_geometry(dataset: EcmwfIfsEnsForecastVirtualDataset) -> None:
             assert "control member 0 only" in (var.attrs.comment or "")
         if var.internal_attrs.lead_0_only:
             assert "lead time 0 only" in (var.attrs.comment or "")
+        if config.forecast_days == 6 and var.attrs.step_type in {"min", "max"}:
+            assert "150" not in (var.attrs.comment or "")
+            assert "6 hours" not in (var.attrs.comment or "")
         if var.attrs.step_type in {"min", "max"}:
             assert "Not available at lead time 0" in (var.attrs.comment or "")
         if var.attrs.step_type == "accum":
@@ -79,6 +85,11 @@ def test_operational_configuration(dataset: EcmwfIfsEnsForecastVirtualDataset) -
         else ["gs://ecmwf-open-data/", "s3://ecmwf-forecasts/"]
     )
     assert len(dataset.validators()) == 3
+    completeness = dataset.validators()[1]
+    assert isinstance(completeness, EcmwfIfsEnsVirtualManifestCompleteness)
+    assert completeness.positions == (
+        "all" if dataset.template_config.forecast_days == 6 else 1
+    )
     for hour in (
         (0, 6, 12, 18) if dataset.template_config.forecast_days == 6 else (0, 12)
     ):

@@ -1,18 +1,19 @@
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, ClassVar, Literal
 
 import xarray as xr
 import zarr
 from icechunk.store import IcechunkStore
+from pydantic import PositiveInt
 from zarr.core.metadata import ArrayV3Metadata
 
 from reformatters.common.config_models import ROOT
 from reformatters.common.region_job import SourceFileCoord
 from reformatters.common.validation import (
     CheckVirtualDecodeHealth,
-    CheckVirtualManifestCompleteness,
     ValidationContext,
     ValidationResult,
+    Validator,
 )
 from reformatters.common.virtual_region_job import VirtualRegionJob, _exists_many
 
@@ -22,17 +23,28 @@ from .virtual_region_job import (
 )
 
 
-class EcmwfIfsEnsVirtualManifestCompleteness(CheckVirtualManifestCompleteness):
+class EcmwfIfsEnsVirtualManifestCompleteness(Validator):
+    """Require every expected message at the selected newest initializations."""
+
+    positions: PositiveInt | Literal["all"] = 1
+    requires_virtual_dataset: ClassVar[bool] = True
+
     def check(self, context: ValidationContext) -> ValidationResult:
-        result = super().check(context)
-        if not result.passed:
-            return result
         job = context.virtual_region_job()
         assert isinstance(job, EcmwfIfsEnsForecastVirtualRegionJob)
         store = context.store
         assert isinstance(store, IcechunkStore)
         through = context.ds.get_index(job.append_dim).max()
         candidates = [c for c in job.source_file_coords() if c.init_time <= through]
+        if not candidates:
+            return ValidationResult(
+                passed=False,
+                checked_count=0,
+                message="No source files in the init_time window to check",
+            )
+        if self.positions != "all":
+            targets = set(sorted({c.init_time for c in candidates})[-self.positions :])
+            candidates = [c for c in candidates if c.init_time in targets]
         group = zarr.open_group(store, mode="r")
         missing: list[str] = []
         checked = 0

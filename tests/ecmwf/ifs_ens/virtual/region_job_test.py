@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.ecmwf import ecmwf_virtual_source as source_module
 from reformatters.ecmwf.ifs_ens import virtual_region_job as module
 from reformatters.ecmwf.ifs_ens.forecast_6_day_0_1_degree_virtual.region_job import (
     EcmwfIfsEnsForecast6Day01DegreeVirtualRegionJob,
@@ -238,7 +239,7 @@ def test_fallback_cutoff(
         assert require_index
         return [(p, 100) for p in pending] if location_prefix.startswith("s3") else []
 
-    monkeypatch.setattr(module, "discover_available_by_obstore_listing", listing)
+    monkeypatch.setattr(source_module, "discover_available_by_obstore_listing", listing)
     found = make_job(template).discover_available([c])
     if pd.Timestamp(init) < S3_FALLBACK_BEFORE:
         assert found == [(c, 100)]
@@ -259,7 +260,7 @@ def test_gcs_hit_avoids_fallback(
         assert kwargs["location_prefix"] == "gs://ecmwf-open-data/"
         return [(pending[0], 100)]
 
-    monkeypatch.setattr(module, "discover_available_by_obstore_listing", listing)
+    monkeypatch.setattr(source_module, "discover_available_by_obstore_listing", listing)
     assert make_job(template).discover_available([c]) == [(c, 100)]
     assert c.source == "gcs"
 
@@ -325,7 +326,7 @@ def test_fine_resolution_never_falls_back_even_for_old_coord(
         assert kwargs["location_prefix"] == "gs://ecmwf-open-data/"
         return []
 
-    monkeypatch.setattr(module, "discover_available_by_obstore_listing", listing)
+    monkeypatch.setattr(source_module, "discover_available_by_obstore_listing", listing)
     assert job.discover_available([coord]) == []
 
 
@@ -345,7 +346,7 @@ def test_s3_refs_keep_source_and_legacy_soil_selectors(
 
 
 @pytest.mark.parametrize(
-    ("processing_mode", "sizes"), [("backfill", [100, 100, 5]), ("update", [205])]
+    ("processing_mode", "sizes"), [("backfill", [2, 1]), ("update", [3])]
 )
 def test_backfill_bounds_reference_batches_without_splitting_update_sweeps(
     template: xr.DataTree,
@@ -353,18 +354,106 @@ def test_backfill_bounds_reference_batches_without_splitting_update_sweeps(
     processing_mode: str,
     sizes: list[int],
 ) -> None:
-    job = make_job(template).model_copy(
-        update={"processing_mode": processing_mode, "poll_deadline": pd.Timestamp.min}
-    )
-    coord = source_coord([get_var("temperature_2m")])
-    observed = []
+    job = make_job(template).model_copy(update={"processing_mode": processing_mode})
+    monkeypatch.setattr(type(job), "backfill_files_per_batch", 2)
+    coords = [
+        source_coord([get_var("temperature_2m")], lead=lead) for lead in (0, 3, 6)
+    ]
 
     def discover(
         _self: object, pending: list[EcmwfIfsEnsForecastVirtualSourceFileCoord]
     ) -> list[tuple[EcmwfIfsEnsForecastVirtualSourceFileCoord, int]]:
-        observed.append(len(pending))
-        return []
+        return [(coord, 100) for coord in pending]
+
+    def file_refs(
+        _self: object, coord: EcmwfIfsEnsForecastVirtualSourceFileCoord, file_size: int
+    ) -> list[module.VirtualRef]:
+        return [
+            module.VirtualRef(
+                data_var=coord.data_vars[0],
+                out_loc=job.representative_probe_loc(coord, coord.data_vars[0]),
+                location=coord.get_url(),
+                offset=0,
+                length=file_size,
+            )
+        ]
 
     monkeypatch.setattr(type(job), "discover_available", discover)
-    assert list(job.process_virtual_refs([coord] * 205)) == []
-    assert observed == sizes
+    monkeypatch.setattr(type(job), "file_refs", file_refs)
+    batches = list(job.process_virtual_refs(coords))
+    assert [len(batch) for batch in batches] == sizes
+    yielded = [coord for batch in batches for coord, refs in batch if refs]
+    assert [id(coord) for coord in yielded] == [id(coord) for coord in coords]
+
+
+@pytest.mark.parametrize("canonical", [False, True])
+def test_temperature_aliases_cover_all_members(
+    template: xr.DataTree,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    canonical: bool,
+) -> None:
+    variables = [get_var("temperature_2m"), get_var("skin_temperature_surface")]
+    coord = source_coord(variables, init="2024-09-17T18", lead=3).model_copy(
+        update={"ensemble_members": tuple(range(51))}
+    )
+    rows = [
+        json.loads(line)
+        for line in (FIXTURES / "20240917_18_3_temperature_aliases.index")
+        .read_text()
+        .splitlines()
+    ]
+    if canonical:
+        rows += [
+            {
+                **row,
+                "param": {"mean2t": "2t", "mskt": "skt"}[row["param"]],
+                "_offset": row["_offset"] + 1,
+            }
+            for row in rows.copy()
+        ]
+    index_path = tmp_path / "aliases.index"
+    index_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    monkeypatch.setattr(module, "gcs_download_to_disk", lambda *args: index_path)
+    refs = make_job(template, variables).file_refs(coord, 10_000_000_000)
+    assert len(refs) == 102
+    for var in variables:
+        assert {
+            ref.out_loc["ensemble_member"] for ref in refs if ref.data_var == var
+        } == set(range(51))
+    assert {ref.offset for ref in refs} == {
+        row["_offset"] for row in rows[(102 if canonical else 0) :]
+    }
+
+
+def test_duplicate_alias_selector_fails(
+    template: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    row = json.loads(
+        (FIXTURES / "20240917_18_3_temperature_aliases.index")
+        .read_text()
+        .splitlines()[0]
+    )
+    path = tmp_path / "duplicate.index"
+    path.write_text((json.dumps(row) + "\n") * 2)
+    monkeypatch.setattr(module, "gcs_download_to_disk", lambda *args: path)
+    variables = [get_var("temperature_2m"), get_var("skin_temperature_surface")]
+    coord = source_coord(variables, init="2024-09-17T18", lead=3).model_copy(
+        update={"ensemble_members": tuple(range(51))}
+    )
+    with pytest.raises(AssertionError, match="Duplicate source selector"):
+        make_job(template, variables).file_refs(coord, 10_000_000_000)
+
+
+def test_real_index_with_out_of_bounds_unrequested_rows_skips_file(
+    template: xr.DataTree, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    var = get_var("temperature_2m")
+    coord = source_coord([var], init="2024-09-18T06", lead=111)
+    fixture = "20240918_06_111_enfo_0p25.index"
+    rows = [json.loads(line) for line in (FIXTURES / fixture).read_text().splitlines()]
+    file_size = 4472635497
+    assert max(row["_offset"] + row["_length"] for row in rows) == 4472760345
+    assert rows[-1]["param"] == "r"
+    serve_fixture(monkeypatch, tmp_path, fixture)
+    assert make_job(template, [var]).file_refs(coord, file_size) == []

@@ -36,7 +36,7 @@ from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.source_file_coord im
 )
 
 IFS_ENS_025_DEGREE_START = pd.Timestamp("2024-04-01T00")
-SOIL_AND_CAPE_CUTOVER = pd.Timestamp("2024-11-12T06")
+IFS_CYCLE_49R1_CUTOVER = pd.Timestamp("2024-11-12T06")
 PRESSURE_LEVEL_EXPANSION = pd.Timestamp("2025-01-14T06")
 PRESSURE_LEVELS = (10, 50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000)
 EARLY_PRESSURE_LEVELS = (50, 200, 250, 300, 500, 700, 850, 925, 1000)
@@ -73,7 +73,7 @@ class EcmwfIfsEnsVirtualDataVar(EcmwfDataVar):
         self, init_time: Timestamp, lead_time: pd.Timedelta
     ) -> tuple[str, str, int | None]:
         attrs = self.internal_attrs
-        if attrs.legacy_soil_param is not None and init_time < SOIL_AND_CAPE_CUTOVER:
+        if attrs.legacy_soil_param is not None and init_time < IFS_CYCLE_49R1_CUTOVER:
             return attrs.legacy_soil_param, "sfc", None
         param = _resolve_grib_index_param(
             self, lead_time
@@ -192,7 +192,7 @@ class EcmwfIfsEnsForecastVirtualTemplateConfig(
         grid = (721, 1440) if self.resolution == "0p25" else (1801, 3600)
         return [
             var
-            for var in _data_vars(grid)
+            for var in _data_vars(grid, self.forecast_days)
             if var.internal_attrs.date_unavailable is None
             or var.internal_attrs.date_unavailable > self.append_dim_start
         ]
@@ -283,7 +283,9 @@ def _var(
     )
 
 
-def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
+def _data_vars(
+    grid: tuple[int, int], forecast_days: Literal[6, 15]
+) -> list[EcmwfIfsEnsVirtualDataVar]:
     var = functools.partial(_var, grid=grid)
     return [
         var(
@@ -522,7 +524,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
-            date_available=pd.Timestamp("2026-05-12T06:00:00"),
+            date_available=IFS_CYCLE_50R1_CUTOVER,
             control_only=True,
             lead_0_only=True,
             comment="Surface (orography) geopotential height.",
@@ -534,7 +536,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             short_name="sdor",
             long_name="Standard deviation of sub-gridscale orography",
             units="m",
-            date_available=pd.Timestamp("2026-05-12T06:00:00"),
+            date_available=IFS_CYCLE_50R1_CUTOVER,
             control_only=True,
             lead_0_only=True,
         ),
@@ -544,7 +546,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             short_name="slor",
             long_name="Slope of sub-gridscale orography",
             units="1",
-            date_available=pd.Timestamp("2026-05-12T06:00:00"),
+            date_available=IFS_CYCLE_50R1_CUTOVER,
             control_only=True,
             lead_0_only=True,
         ),
@@ -556,7 +558,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             units="m2 s-2",
             standard_name="geopotential",
             group="pressure_level",
-            date_available=pd.Timestamp("2026-05-12T06:00:00"),
+            date_available=IFS_CYCLE_50R1_CUTOVER,
             control_only=True,
         ),
         var(
@@ -657,7 +659,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             long_name="Convective available potential energy",
             units="J kg-1",
             standard_name="atmosphere_convective_available_potential_energy",
-            date_unavailable=pd.Timestamp("2024-11-12T06:00:00"),
+            date_unavailable=IFS_CYCLE_49R1_CUTOVER,
         ),
         var(
             "most_unstable_convective_available_potential_energy_surface",
@@ -665,7 +667,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             standard_name="atmosphere_convective_available_potential_energy",
             long_name="Most-unstable CAPE",
             units="J kg-1",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
+            date_available=IFS_CYCLE_49R1_CUTOVER,
         ),
         var(
             "wind_gust_10m",
@@ -674,8 +676,11 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             units="m s-1",
             standard_name="wind_speed_of_gust",
             step_type="max",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
-            comment="Maximum over the preceding 1 hour through lead 90 hours, 3 hours at leads 93-144 hours, and 6 hours from lead 150 hours.",
+            date_available=IFS_CYCLE_49R1_CUTOVER,
+            comment=(
+                "Maximum over the preceding 1 hour through lead 90 hours, 3 hours at leads 93-144 hours"
+                + (", and 6 hours from lead 150 hours." if forecast_days == 15 else ".")
+            ),
             lead_time_overrides=((pd.Timedelta("93h"), pd.Timedelta("144h"), "10fg3"),),
         ),
         var(
@@ -686,8 +691,11 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             units="degree_Celsius",
             standard_name="air_temperature",
             step_type="max",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
-            comment="Maximum over the preceding 3 hours through lead 144 hours and 6 hours from lead 150 hours.",
+            date_available=IFS_CYCLE_49R1_CUTOVER,
+            comment=(
+                "Maximum over the preceding 3 hours through lead 144 hours"
+                + (" and 6 hours from lead 150 hours." if forecast_days == 15 else ".")
+            ),
             lead_time_overrides=(
                 (pd.Timedelta("150h"), pd.Timedelta("360h"), "mx2t6"),
             ),
@@ -700,8 +708,11 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             units="degree_Celsius",
             standard_name="air_temperature",
             step_type="min",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
-            comment="Minimum over the preceding 3 hours through lead 144 hours and 6 hours from lead 150 hours.",
+            date_available=IFS_CYCLE_49R1_CUTOVER,
+            comment=(
+                "Minimum over the preceding 3 hours through lead 144 hours"
+                + (" and 6 hours from lead 150 hours." if forecast_days == 15 else ".")
+            ),
             lead_time_overrides=(
                 (pd.Timedelta("150h"), pd.Timedelta("360h"), "mn2t6"),
             ),
@@ -711,7 +722,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             param="ptype",
             long_name="Precipitation type",
             units="1",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
+            date_available=IFS_CYCLE_49R1_CUTOVER,
             flag_values=(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 255),
             flag_meanings="no_precipitation rain thunderstorm freezing_rain mixed_ice snow wet_snow mixture_of_rain_and_snow ice_pellets graupel hail drizzle freezing_drizzle hail_less_than_5mm hail_greater_than_or_equal_to_5mm missing",
         ),
@@ -722,7 +733,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             long_name="Time-integrated eastward turbulent surface stress",
             units="Pa s",
             step_type="accum",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
+            date_available=IFS_CYCLE_49R1_CUTOVER,
         ),
         var(
             "northward_turbulent_surface_stress_run_total_surface",
@@ -731,7 +742,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             long_name="Time-integrated northward turbulent surface stress",
             units="Pa s",
             step_type="accum",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
+            date_available=IFS_CYCLE_49R1_CUTOVER,
         ),
         var(
             "snow_density_surface",
@@ -755,7 +766,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             long_name="Sea ice thickness",
             units="m",
             standard_name="sea_ice_thickness",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
+            date_available=IFS_CYCLE_49R1_CUTOVER,
             comment="NaN where there is no ocean model value, including over land.",
         ),
         var(
@@ -763,7 +774,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             param="zos",
             long_name="Sea surface height",
             units="m",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
+            date_available=IFS_CYCLE_49R1_CUTOVER,
             comment="NaN where there is no ocean model value, including over land.",
         ),
         var(
@@ -772,7 +783,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             long_name="Eastward surface sea water velocity",
             units="m s-1",
             standard_name="eastward_sea_water_velocity",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
+            date_available=IFS_CYCLE_49R1_CUTOVER,
             comment="NaN where there is no ocean model value, including over land.",
         ),
         var(
@@ -781,7 +792,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             long_name="Northward surface sea water velocity",
             units="m s-1",
             standard_name="northward_sea_water_velocity",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
+            date_available=IFS_CYCLE_49R1_CUTOVER,
             comment="NaN where there is no ocean model value, including over land.",
         ),
         var(
@@ -846,7 +857,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             units="kg m-2 s-1",
             standard_name="precipitation_flux",
             short_name="prate",
-            date_available=pd.Timestamp("2024-11-12T06:00:00"),
+            date_available=IFS_CYCLE_49R1_CUTOVER,
         ),
         var(
             "geopotential_height",

@@ -31,7 +31,7 @@ class EcmwfIfsEnsForecastVirtualDataset(
 ):
     template_config: EcmwfIfsEnsForecastVirtualTemplateConfig
     region_job_class: type[EcmwfIfsEnsForecastVirtualRegionJob]
-    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=7)
+    virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda data: IcechunkVirtualConfig(
             containers=ifs_ens_virtual_chunk_containers(
@@ -52,7 +52,7 @@ class EcmwfIfsEnsForecastVirtualDataset(
         hours = ",".join(
             str((hour + offset) % 24) for offset in range(0, 24, 6 if short else 12)
         )
-        deadline = timedelta(hours=6 if short else 12, minutes=8)
+        deadline = timedelta(hours=6 if short else 12, minutes=6)
         return [
             ReformatCronJob(
                 name=f"{self.dataset_id.replace('-degree', '')}-update",
@@ -78,7 +78,9 @@ class EcmwfIfsEnsForecastVirtualDataset(
         )
         return (
             validation.CheckCurrentData(max_delay=delay),
-            EcmwfIfsEnsVirtualManifestCompleteness(),
+            EcmwfIfsEnsVirtualManifestCompleteness(
+                positions="all" if self.template_config.forecast_days == 6 else 1
+            ),
             EcmwfIfsEnsVirtualDecodeHealth(
                 sampled_leads=3, sampled_levels=2, max_workers=2
             ),

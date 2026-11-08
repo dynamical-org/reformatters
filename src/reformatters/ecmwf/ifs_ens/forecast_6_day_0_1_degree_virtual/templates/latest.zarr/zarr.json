@@ -1027,7 +1027,7 @@
           "short_name": "tmax",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "Maximum over the preceding 3 hours through lead 144 hours and 6 hours from lead 150 hours. Not available at lead time 0.",
+          "comment": "Maximum over the preceding 3 hours through lead 144 hours. Not available at lead time 0.",
           "step_type": "max",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1156,7 +1156,7 @@
           "short_name": "tmin",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "Minimum over the preceding 3 hours through lead 144 hours and 6 hours from lead 150 hours. Not available at lead time 0.",
+          "comment": "Minimum over the preceding 3 hours through lead 144 hours. Not available at lead time 0.",
           "step_type": "min",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4607,7 +4607,7 @@
           "short_name": "10fg",
           "standard_name": "wind_speed_of_gust",
           "units": "m s-1",
-          "comment": "Maximum over the preceding 1 hour through lead 90 hours, 3 hours at leads 93-144 hours, and 6 hours from lead 150 hours. Not available at lead time 0.",
+          "comment": "Maximum over the preceding 1 hour through lead 90 hours, 3 hours at leads 93-144 hours. Not available at lead time 0.",
           "step_type": "max",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

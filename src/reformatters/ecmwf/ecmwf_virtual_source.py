@@ -1,12 +1,12 @@
-from typing import Protocol
-
 import icechunk
 import pandas as pd
-from obstore.store import ObjectStore
 from pydantic import PrivateAttr
 
 from reformatters.common.download import gcs_store, s3_store
 from reformatters.common.region_job import InitLeadSourceFileCoord
+from reformatters.common.virtual_source_listing import (
+    discover_available_by_obstore_listing,
+)
 from reformatters.ecmwf.ecmwf_utils import EcmwfOpenDataSource
 
 GCS_LOCATION_PREFIX = "gs://ecmwf-open-data/"
@@ -41,25 +41,13 @@ def ecmwf_virtual_chunk_containers(
     return containers
 
 
-class _Listing[COORD: EcmwfVirtualSourceFileCoord](Protocol):
-    def __call__(
-        self,
-        pending: list[COORD],
-        *,
-        store: ObjectStore,
-        location_prefix: str,
-        require_index: bool,
-    ) -> list[tuple[COORD, int]]: ...
-
-
 def discover_ecmwf_available[COORD: EcmwfVirtualSourceFileCoord](
     pending: list[COORD],
     *,
     s3_fallback_before: pd.Timestamp | None,
-    listing: _Listing[COORD],
 ) -> list[tuple[COORD, int]]:
     assert all(coord.source == "gcs" for coord in pending)
-    available = listing(
+    available = discover_available_by_obstore_listing(
         pending,
         store=gcs_store(GCS_LOCATION_PREFIX),
         location_prefix=GCS_LOCATION_PREFIX,
@@ -80,7 +68,7 @@ def discover_ecmwf_available[COORD: EcmwfVirtualSourceFileCoord](
         probes.append(probe)
         originals[id(probe)] = coord
     if probes:
-        on_s3 = listing(
+        on_s3 = discover_available_by_obstore_listing(
             probes,
             store=s3_store(S3_LOCATION_PREFIX, region=S3_REGION),
             location_prefix=S3_LOCATION_PREFIX,

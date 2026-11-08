@@ -17,9 +17,6 @@ from reformatters.common.region_job import (
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim, Timedelta
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
-from reformatters.common.virtual_source_listing import (
-    discover_available_by_obstore_listing,
-)
 from reformatters.ecmwf.aifs_single.template_config import (
     aifs_single_stream_path,
 )
@@ -144,7 +141,6 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
         return discover_ecmwf_available(
             pending,
             s3_fallback_before=S3_FALLBACK_BEFORE,
-            listing=discover_available_by_obstore_listing,
         )
 
     def file_refs(

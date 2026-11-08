@@ -1,0 +1,4 @@
+{"domain": "g", "date": "20240918", "time": "0600", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levtype": "sfc", "number": "1", "step": "111", "param": "mean2t", "_offset": 513998537, "_length": 671302}
+{"domain": "g", "date": "20240918", "time": "0600", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levelist": "50", "levtype": "pl", "number": "42", "step": "111", "param": "r", "_offset": 4471594621, "_length": 109256}
+{"domain": "g", "date": "20240918", "time": "0600", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levelist": "500", "levtype": "pl", "number": "30", "step": "111", "param": "r", "_offset": 4471703877, "_length": 528002}
+{"domain": "g", "date": "20240918", "time": "0600", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "levelist": "500", "levtype": "pl", "number": "4", "step": "111", "param": "r", "_offset": 4472231879, "_length": 528466}

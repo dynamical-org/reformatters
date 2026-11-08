@@ -2,6 +2,7 @@ import obstore.store
 import pandas as pd
 import pytest
 
+from reformatters.ecmwf import ecmwf_virtual_source as source_module
 from reformatters.ecmwf.aifs_single.forecast_virtual.region_job import (
     EcmwfAifsSingleForecastVirtualSourceFileCoord,
 )
@@ -32,6 +33,7 @@ from reformatters.ecmwf.ecmwf_virtual_source import discover_ecmwf_available
     ],
 )
 def test_explicit_caller_cutoff_preserves_aifs_and_ifs_policies(
+    monkeypatch: pytest.MonkeyPatch,
     cutoff: str | None,
     gcs_present: bool,
     s3_present: bool,
@@ -57,10 +59,10 @@ def test_explicit_caller_cutoff_preserves_aifs_and_ifs_policies(
         available = gcs_present if location_prefix.startswith("gs") else s3_present
         return [(p, 100) for p in pending] if available else []
 
+    monkeypatch.setattr(source_module, "discover_available_by_obstore_listing", listing)
     found = discover_ecmwf_available(
         [coord],
         s3_fallback_before=pd.Timestamp(cutoff) if cutoff else None,
-        listing=listing,
     )
     assert calls == expected_calls
     assert coord.source == source

@@ -7,15 +7,15 @@ import pandas as pd
 import xarray as xr
 
 from reformatters.common.config_models import ROOT, DataVar
-from reformatters.common.download import gcs_download_to_disk, s3_download_to_disk
+from reformatters.common.download import (
+    gcs_download_to_disk,
+    s3_download_to_disk,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim, Timedelta
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
-from reformatters.common.virtual_source_listing import (
-    discover_available_by_obstore_listing,
-)
 from reformatters.ecmwf.ecmwf_grib_index import parse_index_file
 from reformatters.ecmwf.ecmwf_virtual_source import (
     GCS_LOCATION_PREFIX,
@@ -35,6 +35,7 @@ from .virtual_template_config import (
 )
 
 log = get_logger(__name__)
+TEMPERATURE_ALIASES = {"2t": "mean2t", "skt": "mskt"}
 S3_FALLBACK_BEFORE = pd.Timestamp("2025-02-13T00")
 
 
@@ -175,7 +176,6 @@ class EcmwfIfsEnsForecastVirtualRegionJob(
         return discover_ecmwf_available(
             pending,
             s3_fallback_before=None if self.resolution == "0p1" else S3_FALLBACK_BEFORE,
-            listing=discover_available_by_obstore_listing,
         )
 
     def representative_var(
@@ -238,6 +238,28 @@ class EcmwfIfsEnsForecastVirtualRegionJob(
             index = parse_index_file(index_path, ensemble=True)
         finally:
             index_path.unlink()
+        entries = [
+            (
+                int(number),
+                str(param),
+                str(levtype),
+                None if pd.isna(levelist) else int(levelist),
+                int(offset),
+                int(length),
+            )
+            for number, param, levtype, levelist, offset, length in index.reset_index()[
+                ["number", "param", "levtype", "levelist", "_offset", "_length"]
+            ].itertuples(index=False, name=None)
+        ]
+        if any(
+            offset < 0 or length <= 0 or offset + length > file_size
+            for *_, offset, length in entries
+        ):
+            log.warning(
+                f"Skipping {coord.get_url()}: index byte range outside {file_size}-byte data file"
+            )
+            return []
+        selectors = {entry[:4] for entry in entries}
         lookup: dict[
             tuple[int, str, str, int | None],
             tuple[EcmwfIfsEnsVirtualDataVar, Mapping[Dim, CoordinateValue]],
@@ -253,29 +275,19 @@ class EcmwfIfsEnsForecastVirtualRegionJob(
                     else source_level
                 )
                 key = (cast("int", loc["ensemble_member"]), param, level_type, level)
+                if key not in selectors and param in TEMPERATURE_ALIASES:
+                    key = (key[0], TEMPERATURE_ALIASES[param], level_type, level)
                 assert key not in lookup, f"Duplicate source selector {key}"
                 lookup[key] = var, loc
         refs = []
-        entries = index.reset_index()
-        for number, param, levtype, levelist, raw_offset, raw_length in zip(
-            entries["number"],
-            entries["param"],
-            entries["levtype"],
-            entries["levelist"],
-            entries["_offset"],
-            entries["_length"],
-            strict=True,
-        ):
-            level = None if pd.isna(levelist) else int(levelist)
-            match = lookup.get((int(number), str(param), str(levtype), level))
+        matched: set[tuple[int, str, str, int | None]] = set()
+        for number, param, levtype, level, offset, length in entries:
+            key = (number, param, levtype, level)
+            match = lookup.get(key)
             if match is None:
                 continue
-            offset, length = int(raw_offset), int(raw_length)
-            if offset < 0 or length <= 0 or offset + length > file_size:
-                log.warning(
-                    f"Skipping {coord.get_url()}: index byte range outside {file_size}-byte data file"
-                )
-                return []
+            assert key not in matched, f"Duplicate source selector {key}"
+            matched.add(key)
             var, loc = match
             refs.append(
                 VirtualRef(
