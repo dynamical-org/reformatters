@@ -197,8 +197,16 @@ def _assert_retained_bytes(
             assert value == before[key], key
 
 
-@pytest.mark.parametrize("config", CONFIGS, ids=lambda config: config.dataset_id)
-@pytest.mark.parametrize("consolidated", [False, True])
+@pytest.mark.parametrize(
+    ("config", "consolidated"),
+    [
+        *((config, False) for config in CONFIGS),
+        # Consolidated metadata once for a root-only and once for a grouped config.
+        (CONFIGS[2], True),
+        (CONFIGS[3], True),
+    ],
+    ids=lambda value: value.dataset_id if hasattr(value, "dataset_id") else str(value),
+)
 def test_old_schema_migration_preserves_retained_data_and_passes_new_template_guard(
     tmp_path: Path, config: TemplateConfig[Any], consolidated: bool
 ) -> None:

@@ -27,6 +27,7 @@ from reformatters.noaa.gefs.virtual_region_job import (
     NoaaGefsForecastVirtualSourceFileCoord,
 )
 from reformatters.noaa.gefs.virtual_template_config import PRESSURE_LEVELS
+from tests.chunk_utils import patch_template_to_variables
 from tests.common.dynamical_dataset_test import (
     assert_configured_validators,
 )
@@ -163,6 +164,9 @@ def test_backfill_local_and_operational_update(
 ) -> None:
     dataset = make_dataset(tmp_path)
     _narrow_source_files(monkeypatch)
+    patch_template_to_variables(
+        monkeypatch, type(dataset.template_config), _FILTER_VARS
+    )
 
     dataset.backfill_local(
         append_dim_end=pd.Timestamp("2024-06-01T06:00"),

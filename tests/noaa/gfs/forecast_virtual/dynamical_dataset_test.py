@@ -21,6 +21,7 @@ from reformatters.noaa.gfs.forecast_virtual.template_config import (
     NoaaGfsForecastVirtualTemplateConfig,
 )
 from reformatters.noaa.models import NoaaDataVar
+from tests.chunk_utils import patch_template_to_variables
 from tests.common.dynamical_dataset_test import assert_configured_validators
 
 # A convective cell off the coast of Colombia: precipitating, at sea level so the
@@ -69,6 +70,9 @@ def test_backfill_local_and_operational_update(
         lambda self, end_time: original_get_template(self, end_time).isel(
             lead_time=_LEAD_INDEX
         ),
+    )
+    patch_template_to_variables(
+        monkeypatch, type(dataset.template_config), _FILTER_VARS
     )
 
     dataset.backfill_local(

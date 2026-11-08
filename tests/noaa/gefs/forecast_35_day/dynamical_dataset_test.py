@@ -10,7 +10,7 @@ from reformatters.common.config_models import ROOT
 from reformatters.noaa.gefs.forecast_35_day.dynamical_dataset import (
     GefsForecast35DayDataset,
 )
-from tests.chunk_utils import shrink_chunks_and_shards
+from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
@@ -122,6 +122,7 @@ def test_backfill_local_and_operational_update(
         ),
     )
 
+    patch_write_shards_containing(monkeypatch, [{"latitude": 0, "longitude": 0}])
     dataset.backfill_local(
         append_dim_end=init_time_end, filter_variable_names=filter_variable_names
     )

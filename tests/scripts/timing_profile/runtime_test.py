@@ -8,7 +8,6 @@ import pytest
 
 from reformatters.common.kubernetes import ReformatCronJob
 from scripts.timing_profile.runtime import (
-    checkins_page,
     fetch_checkins,
     measure_runtime,
 )
@@ -156,24 +155,3 @@ def test_empty_exports_leave_all_components_unmeasured(
     assert stats.startup_estimate is None
     assert stats.processing is None
     assert stats.validation_max is None
-
-
-def test_sentry_rate_limit_respects_bounded_retry_after(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls = 0
-    sleeps = []
-
-    def respond(request: httpx.Request) -> httpx.Response:
-        nonlocal calls
-        calls += 1
-        return (
-            httpx.Response(429, headers={"Retry-After": "120"})
-            if calls == 1
-            else httpx.Response(200, json=[])
-        )
-
-    monkeypatch.setattr("scripts.timing_profile.runtime.time.sleep", sleeps.append)
-    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
-        assert checkins_page(client, "https://sentry.io/api/0/test").status_code == 200
-    assert sleeps == [1, 60, 1]

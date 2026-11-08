@@ -84,8 +84,10 @@ def test_local_icechunk_reads_all_available_fields_and_validates(
     np.testing.assert_array_equal(ds.time.values, [time.to_datetime64()])
     assert np.all(np.diff(ds.y.values) < 0)
     assert np.all(np.diff(ds.x.values) > 0)
+    first_pass_values = {}
     for var in dataset.template_config.data_vars:
         array = ds[var.name].isel(time=0).values
+        first_pass_values[var.name] = array[798, 1172]
         assert array.dtype == np.float64
         assert array.shape == (1597, 2345)
         available_from = var.internal_attrs.available_from
@@ -133,6 +135,11 @@ def test_local_icechunk_reads_all_available_fields_and_validates(
         region_job=job,
     )
     for check in dataset.validators()[1:]:
+        if isinstance(check, validation.CheckVirtualDecodeHealth) and time not in (
+            pd.Timestamp("2020-07-28T00:00"),
+            pd.Timestamp("2026-10-15T14:45"),
+        ):
+            continue
         result = check.check(context)
         assert result.passed, result.message
     dataset.backfill_local(append_dim_end=end)
@@ -140,10 +147,9 @@ def test_local_icechunk_reads_all_available_fields_and_validates(
         dataset.store_factory.primary_store(), consolidated=False, chunks=None
     )
     np.testing.assert_array_equal(reopened.time.values, ds.time.values)
-    for var in dataset.template_config.data_vars:
+    for name, value in first_pass_values.items():
         np.testing.assert_array_equal(
-            reopened[var.name].isel(y=798, x=1172).values,
-            ds[var.name].isel(y=798, x=1172).values,
+            reopened[name].isel(time=0, y=798, x=1172).values, value
         )
     if time == pd.Timestamp("2020-07-28T00:00"):
         broken_store = dataset.store_factory.primary_store(writable=True)

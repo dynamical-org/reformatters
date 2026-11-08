@@ -14,7 +14,7 @@ from reformatters.noaa.gfs.analysis.dynamical_dataset import (
 )
 from reformatters.noaa.gfs.analysis.region_job import NoaaGfsAnalysisRegionJob
 from reformatters.noaa.gfs.region_job import DownloadSource, NoaaGfsSourceFileCoord
-from tests.chunk_utils import shrink_chunks_and_shards
+from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
@@ -55,6 +55,7 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         lambda self, end_time: shrink_chunks_and_shards(orig_get_template(end_time)),
     )
 
+    patch_write_shards_containing(monkeypatch, [{"latitude": 0, "longitude": 0}])
     dataset.backfill_local(
         append_dim_end=pd.Timestamp("2021-05-01T03:00"),
         filter_variable_names=filter_variable_names,
@@ -178,7 +179,9 @@ def test_validators(dataset: NoaaGfsAnalysisDataset) -> None:
 
 
 @pytest.mark.slow
-def test_precipitation_not_null_at_shard_boundary() -> None:
+def test_precipitation_not_null_at_shard_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     Test that precipitation_surface is not NaN at the start of the 2nd shard.
 
@@ -204,6 +207,7 @@ def test_precipitation_not_null_at_shard_boundary() -> None:
     assert time_shard_size == 1440
     assert shard_2_start == pd.Timestamp("2021-06-30T00:00")
 
+    patch_write_shards_containing(monkeypatch, [{"latitude": 0, "longitude": 0}])
     dataset.backfill_local(
         # Get first 3 timesteps of 2nd shard (00:00, 01:00, 02:00)
         append_dim_end=pd.Timestamp("2021-06-30T03:00"),

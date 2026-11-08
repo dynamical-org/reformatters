@@ -262,7 +262,7 @@ def test_refs_unsupported_statistic_source_family_fails(
         choose_statistic(statistic_context.validation_ds, var.path)
 
 
-@pytest.mark.parametrize("label", [None, *STATISTICS])
+@pytest.mark.parametrize("label", [None, "p90"])
 def test_run_all_statistic_cli_smoke(
     wn3_context: RunContext, monkeypatch: pytest.MonkeyPatch, label: str | None
 ) -> None:

@@ -1,6 +1,7 @@
 import asyncio
 import json
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -235,7 +236,8 @@ def assert_numeric_snapshots(
         if has_hourly_fields
         else {"avrg", "ffri", "lpmm", "mean", "prob", "sprd"}
     )
-    for sample in samples:
+
+    def check(sample: dict[str, Any]) -> None:
         is_offset = sample["name"] in OFFSET_SAMPLES
         name = (
             f"{sample['name']}_standard_deviation"
@@ -249,24 +251,24 @@ def assert_numeric_snapshots(
             da = da.sel(
                 statistic="mean" if sample["family"] == "mean" else "standard_deviation"
             )
-        np.testing.assert_allclose(
-            da.isel(y=sample["peak_y"], x=sample["peak_x"]).values,
-            sample["peak"] - 273.15
-            if is_offset and sample["family"] == "mean"
-            else sample["peak"],
-            rtol=GDAL_RTOL,
-            atol=1e-4 if is_offset else 1e-10,
-            err_msg=f"{init} {sample['name']} {sample['family']} f{sample['lead_hours']}",
-        )
-        np.testing.assert_allclose(
-            da.isel(y=635, x=1062).values,
-            sample["point"] - 273.15
-            if is_offset and sample["family"] == "mean"
-            else sample["point"],
-            rtol=GDAL_RTOL,
-            atol=1e-4 if is_offset else 1e-10,
-            equal_nan=True,
-        )
+        field = da.load()
+        for y, x, key in (
+            (sample["peak_y"], sample["peak_x"], "peak"),
+            (635, 1062, "point"),
+        ):
+            np.testing.assert_allclose(
+                field.isel(y=y, x=x).values,
+                sample[key] - 273.15
+                if is_offset and sample["family"] == "mean"
+                else sample[key],
+                rtol=GDAL_RTOL,
+                atol=1e-4 if is_offset else 1e-10,
+                equal_nan=key == "point",
+                err_msg=f"{init} {sample['name']} {sample['family']} f{sample['lead_hours']}",
+            )
+
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(check, samples))
     assert "composite_reflectivity" not in ds
     assert ("derived_radar_reflectivity_1000m" in ds) == has_hourly_fields
     if has_hourly_fields:

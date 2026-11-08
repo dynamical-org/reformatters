@@ -31,7 +31,8 @@ from reformatters.noaa.refs.region_job import (
 FIXTURES = Path(__file__).parent / "fixtures"
 CONFIG = NoaaRefsForecastHourlyVirtualTemplateConfig()
 CONFIGS = (CONFIG, NoaaRefsForecast3HourlyVirtualTemplateConfig())
-VARIABLES = [v for config in CONFIGS for v in config.data_vars]
+CONFIG_VARS = [list(config.data_vars) for config in CONFIGS]
+VARIABLES = [v for variables in CONFIG_VARS for v in variables]
 FAMILIES: tuple[ProductFamily, ...] = (
     "mean",
     "sprd",
@@ -144,12 +145,12 @@ def test_every_source_message_is_referenced_except_explicit_exclusions(
         )
         lines = parse_grib_index_lines(path)
         refs = []
-        for config in CONFIGS:
-            variant_coord = file_coord(coord.init_time, family, lead, config.data_vars)
+        for config, config_vars in zip(CONFIGS, CONFIG_VARS, strict=True):
+            variant_coord = file_coord(coord.init_time, family, lead, config_vars)
             if not variant_coord.data_vars:
                 continue
             local.write_bytes(path.read_bytes())
-            variant_refs = make_job(config.data_vars).file_refs(
+            variant_refs = make_job(config_vars).file_refs(
                 variant_coord, lines[-1][0] + 1000
             )
             assert {ref.data_var.path for ref in variant_refs} == {

@@ -1,8 +1,20 @@
 import math
-from collections.abc import Iterable
-from typing import cast
+from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
+from typing import Any, cast
 
+import pandas as pd
+import pytest
 import xarray as xr
+from zarr.abc.store import Store
+
+from reformatters.common import (
+    materialized_region_job as materialized_region_job_module,
+)
+from reformatters.common import shared_memory_utils
+from reformatters.common.iterating import shard_slice_indexers
+from reformatters.common.template_config import TemplateConfig
+from reformatters.common.types import AppendDim
 
 
 def _shrink_dim(size: int, chunk: int, shard: int) -> tuple[int, int]:
@@ -78,3 +90,133 @@ def _shrink_dataset(ds: xr.Dataset, dims: Iterable[str] | None) -> xr.Dataset:
         if has_shards:
             var.encoding["shards"] = tuple(shards)
     return ds
+
+
+def patch_write_first_shard_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only write the first spatial shard (all indexer slices start at 0).
+
+    Replaces write_shards rather than write_shard_to_zarr because the latter
+    is pickled for ProcessPoolExecutor and local functions can't be pickled.
+    """
+    _orig_write_shard_to_zarr = shared_memory_utils.write_shard_to_zarr
+
+    def _first_shard_only_write_shards(
+        processing_region_da_template: xr.DataArray,
+        shared_buffer: object,
+        append_dim: AppendDim,
+        output_region_ds: xr.Dataset,
+        store: Store | Path,
+        cpu_process_executor: object,
+    ) -> None:
+        all_indexers = shard_slice_indexers(
+            output_region_ds[processing_region_da_template.name]
+        )
+        for si in all_indexers:
+            if all(s.start == 0 for s in si):
+                _orig_write_shard_to_zarr(
+                    processing_region_da_template,
+                    shared_buffer.name,  # ty: ignore[unresolved-attribute]
+                    append_dim,
+                    output_region_ds,
+                    store,
+                    si,
+                )
+
+    monkeypatch.setattr(
+        materialized_region_job_module, "write_shards", _first_shard_only_write_shards
+    )
+
+
+def patch_template_to_variables(
+    monkeypatch: pytest.MonkeyPatch,
+    template_config_type: type[TemplateConfig[Any]],
+    wanted: Iterable[str],
+) -> None:
+    """Shrink a template config's template and data_vars to the variables named by
+    bare name or `group/name`, dropping groups left empty. Composes with an earlier
+    get_template patch on the same type."""
+    names = set(wanted)
+    original_get_template = template_config_type.get_template
+    original_data_vars = template_config_type.data_vars.fget
+    assert original_data_vars is not None
+
+    def selected(path: str, name: str) -> bool:
+        return name in names or path in names
+
+    def trimmed_get_template(self: TemplateConfig[Any], end_time: Any) -> xr.DataTree:  # noqa: ANN401
+        nodes = {}
+        for node in original_get_template(self, end_time).subtree:
+            prefix = node.path.strip("/")
+            keep = [
+                name
+                for name in map(str, node.data_vars)
+                if selected(f"{prefix}/{name}" if prefix else name, name)
+            ]
+            if keep or node.path == "/":
+                nodes[node.path] = node.to_dataset().drop_vars(
+                    [name for name in node.data_vars if name not in keep]
+                )
+        return xr.DataTree.from_dict(nodes)
+
+    monkeypatch.setattr(template_config_type, "get_template", trimmed_get_template)
+    monkeypatch.setattr(
+        template_config_type,
+        "data_vars",
+        property(
+            lambda self: [
+                v for v in original_data_vars(self) if selected(v.path, v.name)
+            ]
+        ),
+    )
+
+
+def patch_write_shards_containing(
+    monkeypatch: pytest.MonkeyPatch, cells: Sequence[Mapping[str, float]]
+) -> None:
+    """Only write the shards that contain a cell the test reads.
+
+    Each cell maps dimension names to the coordinate labels the test selects with
+    `.sel(..., method="nearest")`, e.g. {"latitude": 0, "longitude": 0}. A dimension a
+    cell omits matches every shard. A shard is written when it contains at least one cell.
+
+    Replaces write_shards rather than write_shard_to_zarr because the latter is pickled
+    for ProcessPoolExecutor and a local function can't be.
+    """
+    orig_write_shard_to_zarr = shared_memory_utils.write_shard_to_zarr
+
+    def _selective_write_shards(
+        processing_region_da_template: xr.DataArray,
+        shared_buffer: object,
+        append_dim: AppendDim,
+        output_region_ds: xr.Dataset,
+        store: Store | Path,
+        cpu_process_executor: object,
+    ) -> None:
+        da = output_region_ds[processing_region_da_template.name]
+        cell_positions = [
+            {
+                dim: da.get_index(dim)
+                .get_indexer(pd.Index([label]), method="nearest")
+                .item()
+                for dim, label in cell.items()
+            }
+            for cell in cells
+        ]
+        for indexer in shard_slice_indexers(da):
+            shard = dict(zip(da.dims, indexer, strict=True))
+            if any(
+                all(shard[dim].start <= i < shard[dim].stop for dim, i in cell.items())
+                for cell in cell_positions
+            ):
+                orig_write_shard_to_zarr(
+                    processing_region_da_template,
+                    shared_buffer.name,  # ty: ignore[unresolved-attribute]
+                    append_dim,
+                    output_region_ds,
+                    store,
+                    indexer,
+                )
+
+    monkeypatch.setattr(
+        materialized_region_job_module, "write_shards", _selective_write_shards
+    )
