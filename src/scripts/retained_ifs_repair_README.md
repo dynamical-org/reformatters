@@ -1,5 +1,7 @@
 # Repairing a retained IFS ensemble snapshot
 
+For the bounded streaming patch path, use [retained_ifs_patch_README.md](retained_ifs_patch_README.md). The PVC/regeneration instructions below describe the earlier runner.
+
 `src/scripts/retained_ifs_repair.py` stages and verifies exact variable/init units from an explicitly pinned IFS 15-day snapshot. With an additional flag it commits only changed data shards to a **fresh descendant branch**. It never publishes, resets or deletes a branch, changes metadata, or opens a writable session on main or the protected input branch. Existing candidate names fail, including on retries.
 
 This is an operator-reviewed repair tool. A reviewed manifest, independent source evidence and explicit execution authorization are prerequisites. It is not a substitute for an ordinary backfill. Run the full-size pipeline in a separately approved Job; a single variable/init buffer can exceed a shared workstation's available memory.
