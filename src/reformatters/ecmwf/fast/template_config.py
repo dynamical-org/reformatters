@@ -19,10 +19,10 @@ from reformatters.common.config_models import (
 from reformatters.common.pydantic import replace
 from reformatters.common.types import Dims, Timestamp
 from reformatters.common.zarr import BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE
-from reformatters.ecmwf.aifs_single.template_config import (
-    EcmwfAifsSingleCommonTemplateConfig,
-)
 from reformatters.ecmwf.ecmwf_config_models import EcmwfDataVar, EcmwfInternalAttrs
+from reformatters.ecmwf.ecmwf_template_config import (
+    Ecmwf025DegreeForecastTemplateConfig,
+)
 
 type FastModel = Literal["ifs", "aifs"]
 
@@ -41,7 +41,7 @@ def lead_hours(model: FastModel, init_hour: int) -> tuple[int, ...]:
             assert_never(unexpected)
 
 
-class EcmwfFastTemplateConfig(EcmwfAifsSingleCommonTemplateConfig[EcmwfDataVar]):
+class EcmwfFastTemplateConfig(Ecmwf025DegreeForecastTemplateConfig[EcmwfDataVar]):
     model: FastModel
     append_dim_start: Timestamp = pd.Timestamp("2026-11-01T00:00")
     dims: Dims = {
