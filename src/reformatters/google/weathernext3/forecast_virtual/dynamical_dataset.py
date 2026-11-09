@@ -59,10 +59,10 @@ class GoogleWeathernext3ForecastVirtualDataset(
         ]
 
     def _min_present_fraction(self) -> tuple[float, ...]:
+        # Hourly inits keep landing while the next one starts, and a synoptic init can
+        # finish after the off-synoptic init after it, so two positions may be partial.
         if self.region_job_class.init_frequency == pd.Timedelta("1h"):
-            # Temporary allowance: Nov 2026 synoptic source tails reached init + 11h23m,
-            # with ingestion complete by init + 11h39m.
-            return (0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+            return (0.0, 0.0, 1.0)
         return (1.0,)
 
     def validators(self) -> Sequence[validation.Validator]:
