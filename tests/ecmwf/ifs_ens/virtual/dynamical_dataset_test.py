@@ -2,17 +2,27 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import icechunk
 import numpy as np
 import pandas as pd
 import pytest
 
-from reformatters.common import validation
-from reformatters.common.storage import DatasetFormat, StorageConfig
+from reformatters.common import template_utils, validation
+from reformatters.common.iterating import flatten_groups
+from reformatters.common.storage import (
+    DatasetFormat,
+    StorageConfig,
+    _repository_config_and_credentials,
+)
+from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.ecmwf.ifs_ens.forecast_6_day_0_1_degree_virtual.dynamical_dataset import (
     EcmwfIfsEnsForecast6Day01DegreeVirtualDataset,
 )
 from reformatters.ecmwf.ifs_ens.forecast_6_day_0_25_degree_virtual.dynamical_dataset import (
     EcmwfIfsEnsForecast6Day025DegreeVirtualDataset,
+)
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree_virtual.dynamical_dataset import (
+    EcmwfIfsEnsForecast15Day025DegreeVirtualDataset,
 )
 from reformatters.ecmwf.ifs_ens.virtual_region_job import (
     EcmwfIfsEnsForecastVirtualRegionJob,
@@ -173,3 +183,77 @@ def test_backfill_and_update_real_source_snapshot(
     )
     assert -10 < float(point.temperature_2m.values) < 40
     assert_configured_validators(dataset)
+
+
+def test_configured_15_day_catch_up_checks_older_inits(tmp_path: Path) -> None:
+    dataset = EcmwfIfsEnsForecast15Day025DegreeVirtualDataset(
+        primary_storage_config=StorageConfig(
+            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+        )
+    )
+    inits = pd.to_datetime(["2026-11-06T00", "2026-11-06T12"])
+    template = dataset.template_config.get_template("2026-11-07").sel(
+        init_time=inits, lead_time=[pd.Timedelta(0)], ensemble_member=[0, 1, 50]
+    )
+    var = next(
+        var
+        for var in dataset.template_config.data_vars
+        if var.name == "pressure_surface"
+    )
+    job = dataset.region_job_class(
+        tmp_store=tmp_path / "unused.zarr",
+        template_ds=template,
+        data_vars=[var],
+        append_dim="init_time",
+        region=slice(0, 2),
+        reformat_job_name="catch-up",
+        processing_mode="update",
+    )
+    config, credentials = _repository_config_and_credentials(
+        dataset.icechunk_virtual_config
+    )
+    repo = icechunk.Repository.create(
+        icechunk.local_filesystem_storage(str(tmp_path / "icechunk")),
+        config=config,
+        authorize_virtual_chunk_access=credentials,
+    )
+    session = repo.writable_session("main")
+    template_utils.write_metadata(
+        template,
+        session.store,
+        mode="w-",
+        skip_icechunk_commit=True,
+        consolidated=False,
+    )
+    coords = job.source_file_coords()
+    refs = [
+        VirtualRef(
+            data_var=var, out_loc=loc, location=coord.get_url(), offset=0, length=1
+        )
+        for coord in coords
+        for loc in job.message_locations(coord, var)
+        if coord.init_time == inits[-1] or coord.family != "enfo"
+    ]
+    assert sum(ref.out_loc["init_time"] == inits[-1] for ref in refs) == 3
+    job._emit_refs([session.store], refs)
+    older_perturbed = next(
+        coord
+        for coord in coords
+        if coord.init_time == inits[0] and coord.family == "enfo"
+    )
+    assert job.filter_already_present([older_perturbed], session.store) == [
+        older_perturbed
+    ]
+    validator = dataset.validators()[1]
+    assert isinstance(validator, validation.CheckVirtualManifestCompleteness)
+    result = validator.check(
+        validation.ValidationContext(
+            store=session.store,
+            ds=flatten_groups(template),
+            append_dim="init_time",
+            region_job=job,
+        )
+    )
+    assert not result.passed
+    assert str(inits[0]) in result.message
+    assert str(inits[-1]) not in result.message

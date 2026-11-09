@@ -5,11 +5,11 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.ecmwf.ifs_ens.forecast_6_day_0_25_degree_virtual.region_job import (
+    EcmwfIfsEnsForecast6Day025DegreeVirtualRegionJob,
+)
 from reformatters.ecmwf.ifs_ens.forecast_6_day_0_25_degree_virtual.template_config import (
     EcmwfIfsEnsForecast6Day025DegreeVirtualTemplateConfig,
-)
-from reformatters.ecmwf.ifs_ens.virtual_region_job import (
-    EcmwfIfsEnsForecastVirtualRegionJob,
 )
 from reformatters.ecmwf.ifs_ens.virtual_template_config import EcmwfIfsEnsVirtualDataVar
 
@@ -28,8 +28,8 @@ def template() -> xr.DataTree:
 
 def make_job(
     template: xr.DataTree, data_vars: Sequence[EcmwfIfsEnsVirtualDataVar] | None = None
-) -> EcmwfIfsEnsForecastVirtualRegionJob:
-    return EcmwfIfsEnsForecastVirtualRegionJob(
+) -> EcmwfIfsEnsForecast6Day025DegreeVirtualRegionJob:
+    return EcmwfIfsEnsForecast6Day025DegreeVirtualRegionJob(
         tmp_store=Path("unused-tmp.zarr"),
         template_ds=template,
         data_vars=data_vars if data_vars is not None else CONFIG.data_vars,

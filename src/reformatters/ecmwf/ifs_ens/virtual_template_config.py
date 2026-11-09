@@ -1,6 +1,6 @@
 import functools
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any, Literal, assert_never
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,6 @@ from reformatters.common.config_models import (
     ROOT,
     Coordinate,
     CoordinateAttrs,
-    DatasetAttributes,
     DataVarAttrs,
     Encoding,
     Group,
@@ -89,8 +88,8 @@ class EcmwfIfsEnsVirtualDataVar(EcmwfDataVar):
 class EcmwfIfsEnsForecastVirtualTemplateConfig(
     Ecmwf025DegreeForecastTemplateConfig[EcmwfIfsEnsVirtualDataVar]
 ):
-    resolution: Literal["0p25", "0p1"] = "0p25"
-    forecast_days: Literal[6, 15] = 6
+    resolution: Literal["0p25", "0p1"]
+    forecast_days: Literal[6, 15]
     append_dim_start: Timestamp = IFS_ENS_025_DEGREE_START
     dims: Dims = {
         ROOT: ("init_time", "lead_time", "ensemble_member", "latitude", "longitude"),
@@ -104,44 +103,33 @@ class EcmwfIfsEnsForecastVirtualTemplateConfig(
         ),
     }
 
-    @computed_field
-    @property
-    def dataset_attributes(self) -> DatasetAttributes:
-        resolution = "0.25" if self.resolution == "0p25" else "0.1"
-        slug = resolution.replace(".", "-")
-        days = self.forecast_days
-        return DatasetAttributes(
-            dataset_id=f"ecmwf-ifs-ens-forecast-{days}-day-{slug}-degree-virtual",
-            dataset_version="0.1.0",
-            name=f"ECMWF IFS ENS forecast, {days} day, {resolution} degree, virtual",
-            description="Ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
-            attribution="ECMWF IFS ENS forecast data processed by dynamical.org from ECMWF Open Data.",
-            license="CC-BY-4.0",
-            spatial_domain="Global",
-            spatial_resolution="0.25 degrees (~20km)"
-            if self.resolution == "0p25"
-            else "0.1 degrees (~10km)",
-            time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
-            time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
-            forecast_domain=f"Forecast lead time 0-{days * 24} hours (0-{days} days) ahead",
-            forecast_resolution="3 hourly"
-            if days == 6
-            else "Forecast step 0-144 hours: 3 hourly, 144-360 hours: 6 hourly",
-        )
-
     def dimension_coordinates(self) -> dict[str, Any]:
-        coords = super().dimension_coordinates()
-        if self.resolution == "0p1":
-            coords |= {
-                "latitude": np.arange(900, -901, -1) / 10,
-                "longitude": np.arange(-1800, 1800) / 10,
-            }
-        leads = pd.timedelta_range("0h", "144h", freq="3h")
-        if self.forecast_days == 15:
-            leads = leads.union(pd.timedelta_range("150h", "360h", freq="6h"))
-        return coords | {
-            "lead_time": leads,
+        match self.resolution:
+            case "0p25":
+                latitude = np.flip(np.arange(-90, 90.25, 0.25))
+                longitude = np.arange(-180, 180, 0.25)
+            case "0p1":
+                latitude = np.arange(900, -901, -1) / 10
+                longitude = np.arange(-1800, 1800) / 10
+            case unexpected:
+                assert_never(unexpected)
+        match self.forecast_days:
+            case 6:
+                lead_time = pd.timedelta_range("0h", "144h", freq="3h")
+            case 15:
+                lead_time = pd.timedelta_range("0h", "144h", freq="3h").union(
+                    pd.timedelta_range("150h", "360h", freq="6h")
+                )
+            case unexpected:
+                assert_never(unexpected)
+        return {
+            self.append_dim: self.append_dim_coordinates(
+                self.append_dim_start + self.append_dim_frequency
+            ),
+            "lead_time": lead_time,
             "ensemble_member": np.arange(51),
+            "latitude": latitude,
+            "longitude": longitude,
             "pressure_level": np.array(PRESSURE_LEVELS, dtype=np.int64),
         }
 
@@ -189,10 +177,16 @@ class EcmwfIfsEnsForecastVirtualTemplateConfig(
     @computed_field
     @property
     def data_vars(self) -> Sequence[EcmwfIfsEnsVirtualDataVar]:
-        grid = (721, 1440) if self.resolution == "0p25" else (1801, 3600)
+        match self.resolution:
+            case "0p25":
+                grid = (721, 1440)
+            case "0p1":
+                grid = (1801, 3600)
+            case unexpected:
+                assert_never(unexpected)
         return [
             var
-            for var in _data_vars(grid, self.forecast_days)
+            for var in _data_vars(grid)
             if var.internal_attrs.date_unavailable is None
             or var.internal_attrs.date_unavailable > self.append_dim_start
         ]
@@ -283,9 +277,7 @@ def _var(
     )
 
 
-def _data_vars(
-    grid: tuple[int, int], forecast_days: Literal[6, 15]
-) -> list[EcmwfIfsEnsVirtualDataVar]:
+def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
     var = functools.partial(_var, grid=grid)
     return [
         var(
@@ -444,10 +436,12 @@ def _data_vars(
         var(
             "runoff_water_equivalent_run_total_surface",
             param="ro",
-            short_name="ro",
-            long_name="Runoff",
-            units="m",
+            short_name="rowe",
+            long_name="Runoff water equivalent (surface plus subsurface)",
+            units="kg m-2",
+            standard_name="runoff_amount",
             step_type="accum",
+            filters=[ScaleOffset(offset=0, scale=0.001).to_dict()],
         ),
         var(
             "downward_short_wave_radiation_run_total_surface",
@@ -654,6 +648,7 @@ def _data_vars(
             param="asn",
             long_name="Snow albedo",
             units="percent",
+            comment="Meaningful only where snow is present; snow-free cells hold placeholder values.",
             filters=[ScaleOffset(offset=0, scale=0.01).to_dict()],
         ),
         var(
@@ -680,10 +675,7 @@ def _data_vars(
             standard_name="wind_speed_of_gust",
             step_type="max",
             date_available=IFS_CYCLE_49R1_CUTOVER,
-            comment=(
-                "Maximum over the preceding 1 hour through lead 90 hours, 3 hours at leads 93-144 hours"
-                + (", and 6 hours from lead 150 hours." if forecast_days == 15 else ".")
-            ),
+            comment="Maximum over the preceding hour through lead 90 hours, then since the preceding forecast step.",
             lead_time_overrides=((pd.Timedelta("93h"), pd.Timedelta("144h"), "10fg3"),),
         ),
         var(
@@ -695,10 +687,7 @@ def _data_vars(
             standard_name="air_temperature",
             step_type="max",
             date_available=IFS_CYCLE_49R1_CUTOVER,
-            comment=(
-                "Maximum over the preceding 3 hours through lead 144 hours"
-                + (" and 6 hours from lead 150 hours." if forecast_days == 15 else ".")
-            ),
+            comment="Maximum since the preceding forecast step.",
             lead_time_overrides=(
                 (pd.Timedelta("150h"), pd.Timedelta("360h"), "mx2t6"),
             ),
@@ -712,10 +701,7 @@ def _data_vars(
             standard_name="air_temperature",
             step_type="min",
             date_available=IFS_CYCLE_49R1_CUTOVER,
-            comment=(
-                "Minimum over the preceding 3 hours through lead 144 hours"
-                + (" and 6 hours from lead 150 hours." if forecast_days == 15 else ".")
-            ),
+            comment="Minimum since the preceding forecast step.",
             lead_time_overrides=(
                 (pd.Timedelta("150h"), pd.Timedelta("360h"), "mn2t6"),
             ),
@@ -753,6 +739,7 @@ def _data_vars(
             long_name="Snow density",
             units="kg m-3",
             standard_name="surface_snow_density",
+            comment="Meaningful only where snow is present; snow-free cells hold placeholder values.",
             date_available=pd.Timestamp("2026-02-11T12:00:00"),
         ),
         var(

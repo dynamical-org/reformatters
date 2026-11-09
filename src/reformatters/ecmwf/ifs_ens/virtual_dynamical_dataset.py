@@ -8,19 +8,15 @@ from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.storage import IcechunkVirtualConfig, manifest_append_dim_split
+from reformatters.ecmwf.ecmwf_virtual_source import ecmwf_virtual_chunk_containers
 
 from .virtual_region_job import (
     EcmwfIfsEnsForecastVirtualRegionJob,
     EcmwfIfsEnsForecastVirtualSourceFileCoord,
-    ifs_ens_virtual_chunk_containers,
 )
 from .virtual_template_config import (
     EcmwfIfsEnsForecastVirtualTemplateConfig,
     EcmwfIfsEnsVirtualDataVar,
-)
-from .virtual_validation import (
-    EcmwfIfsEnsVirtualDecodeHealth,
-    EcmwfIfsEnsVirtualManifestCompleteness,
 )
 
 
@@ -31,11 +27,15 @@ class EcmwfIfsEnsForecastVirtualDataset(
 ):
     template_config: EcmwfIfsEnsForecastVirtualTemplateConfig
     region_job_class: type[EcmwfIfsEnsForecastVirtualRegionJob]
+    schedule: ClassVar[str]
+    deadline: ClassVar[timedelta]
+    # Delay tracks control files which make a position visible before perturbed files arrive.
+    max_delay: ClassVar[timedelta]
     virtual_poll_deadline_grace: ClassVar[timedelta] = timedelta(minutes=5)
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda data: IcechunkVirtualConfig(
-            containers=ifs_ens_virtual_chunk_containers(
-                fine_resolution=data["template_config"].resolution == "0p1"
+            containers=ecmwf_virtual_chunk_containers(
+                s3_fallback_before=data["region_job_class"].s3_fallback_before
             ),
             # At 85 leads: 40 x 85 x 51 x 16 bytes = 2.65 MiB per root array;
             # 6 x 85 x 51 x 14 x 16 bytes = 5.56 MiB per pressure array.
@@ -46,21 +46,14 @@ class EcmwfIfsEnsForecastVirtualDataset(
     )
 
     def operational_kubernetes_resources(self, image_tag: str) -> Sequence[CronJob]:
-        short = self.template_config.forecast_days == 6
-        fine = self.template_config.resolution == "0p1"
-        hour = (8 if fine else 6) if short else (9 if fine else 7)
-        hours = ",".join(
-            str((hour + offset) % 24) for offset in range(0, 24, 6 if short else 12)
-        )
-        deadline = timedelta(hours=6 if short else 12, minutes=6)
         return [
             ReformatCronJob(
                 name=f"{self.dataset_id.replace('-degree', '')}-update",
-                schedule=f"{12 if short else 19} {hours} * * *",
+                schedule=self.schedule,
                 concurrency_policy="Allow",
                 suspend=True,
-                pod_active_deadline=deadline,
-                active_deadline=deadline,
+                pod_active_deadline=self.deadline,
+                active_deadline=self.deadline,
                 image=image_tag,
                 dataset_id=self.dataset_id,
                 cpu="1.7",
@@ -72,14 +65,11 @@ class EcmwfIfsEnsForecastVirtualDataset(
         ]
 
     def validators(self) -> Sequence[validation.Validator]:
-        # Control files make the position visible before perturbed files arrive.
-        delay = timedelta(
-            hours=9 if self.template_config.resolution == "0p1" else 7, minutes=42
-        )
         return (
-            validation.CheckCurrentData(max_delay=delay),
-            EcmwfIfsEnsVirtualManifestCompleteness(),
-            EcmwfIfsEnsVirtualDecodeHealth(
+            validation.CheckCurrentData(max_delay=self.max_delay),
+            validation.CheckVirtualManifestCompleteness(),
+            # Bounds decoded memory: each sampled field is up to 52 MB at 0.1 degree.
+            validation.CheckVirtualDecodeHealth(
                 sampled_leads=3, sampled_levels=2, max_workers=2
             ),
         )

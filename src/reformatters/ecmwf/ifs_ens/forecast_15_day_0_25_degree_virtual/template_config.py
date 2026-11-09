@@ -1,7 +1,9 @@
 from typing import Literal
 
 import pandas as pd
+from pydantic import computed_field
 
+from reformatters.common.config_models import DatasetAttributes
 from reformatters.common.types import Timedelta
 from reformatters.ecmwf.ifs_ens.virtual_template_config import (
     EcmwfIfsEnsForecastVirtualTemplateConfig,
@@ -14,3 +16,21 @@ class EcmwfIfsEnsForecast15Day025DegreeVirtualTemplateConfig(
     resolution: Literal["0p25", "0p1"] = "0p25"
     forecast_days: Literal[6, 15] = 15
     append_dim_frequency: Timedelta = pd.Timedelta("12h")
+
+    @computed_field
+    @property
+    def dataset_attributes(self) -> DatasetAttributes:
+        return DatasetAttributes(
+            dataset_id="ecmwf-ifs-ens-forecast-15-day-0-25-degree-virtual",
+            dataset_version="0.1.0",
+            name="ECMWF IFS ENS forecast, 15 day, 0.25 degree, virtual",
+            description="Ensemble weather forecasts from the ECMWF Integrated Forecasting System (IFS).",
+            attribution="ECMWF IFS ENS forecast data processed by dynamical.org from ECMWF Open Data.",
+            license="CC-BY-4.0",
+            spatial_domain="Global",
+            spatial_resolution="0.25 degrees (~20km)",
+            time_domain="Forecasts initialized 2024-04-01 00:00:00 UTC to Present",
+            time_resolution="Forecasts initialized every 12 hours",
+            forecast_domain="Forecast lead time 0-360 hours (0-15 days) ahead",
+            forecast_resolution="Forecast step 0-144 hours: 3 hourly, 144-360 hours: 6 hourly",
+        )

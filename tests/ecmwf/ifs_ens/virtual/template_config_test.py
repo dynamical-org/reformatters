@@ -8,9 +8,6 @@ from reformatters.common.config_models import ROOT
 from reformatters.ecmwf.ifs_ens.virtual_dynamical_dataset import (
     EcmwfIfsEnsForecastVirtualDataset,
 )
-from reformatters.ecmwf.ifs_ens.virtual_validation import (
-    EcmwfIfsEnsVirtualManifestCompleteness,
-)
 
 DATASETS = [
     d for d in DYNAMICAL_DATASETS if isinstance(d, EcmwfIfsEnsForecastVirtualDataset)
@@ -68,14 +65,11 @@ def test_product_geometry(dataset: EcmwfIfsEnsForecastVirtualDataset) -> None:
 def test_water_accumulation_units() -> None:
     for var in DATASETS[0].template_config.data_vars:
         match var.internal_attrs.grib_index_param:
-            case "tp" | "cp" | "sf":
+            case "tp" | "cp" | "sf" | "ro":
                 assert var.attrs.units == "kg m-2"
                 assert var.encoding.filters == [
                     ScaleOffset(offset=0, scale=0.001).to_dict()
                 ]
-            case "ro":
-                assert var.attrs.units == "m"
-                assert not var.encoding.filters
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda d: d.dataset_id)
@@ -92,8 +86,6 @@ def test_operational_configuration(dataset: EcmwfIfsEnsForecastVirtualDataset) -
         else ["gs://ecmwf-open-data/", "s3://ecmwf-forecasts/"]
     )
     assert len(dataset.validators()) == 3
-    completeness = dataset.validators()[1]
-    assert isinstance(completeness, EcmwfIfsEnsVirtualManifestCompleteness)
     for hour in (
         (0, 6, 12, 18) if dataset.template_config.forecast_days == 6 else (0, 12)
     ):

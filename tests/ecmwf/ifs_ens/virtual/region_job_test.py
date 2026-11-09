@@ -3,18 +3,26 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
+import icechunk
 import obstore.store
 import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.common import template_utils
+from reformatters.common.storage import (
+    IcechunkVirtualConfig,
+    _repository_config_and_credentials,
+    manifest_append_dim_split,
+)
+from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.ecmwf import ecmwf_virtual_source as source_module
+from reformatters.ecmwf.ecmwf_virtual_source import ecmwf_virtual_chunk_containers
 from reformatters.ecmwf.ifs_ens import virtual_region_job as module
 from reformatters.ecmwf.ifs_ens.forecast_6_day_0_1_degree_virtual.region_job import (
     EcmwfIfsEnsForecast6Day01DegreeVirtualRegionJob,
 )
 from reformatters.ecmwf.ifs_ens.virtual_region_job import (
-    S3_FALLBACK_BEFORE,
     EcmwfIfsEnsForecastVirtualSourceFileCoord,
 )
 from reformatters.ecmwf.ifs_ens.virtual_template_config import (
@@ -240,8 +248,10 @@ def test_fallback_cutoff(
         return [(p, 100) for p in pending] if location_prefix.startswith("s3") else []
 
     monkeypatch.setattr(source_module, "discover_available_by_obstore_listing", listing)
-    found = make_job(template).discover_available([c])
-    if pd.Timestamp(init) < S3_FALLBACK_BEFORE:
+    job = make_job(template)
+    found = job.discover_available([c])
+    assert job.s3_fallback_before is not None
+    if pd.Timestamp(init) < job.s3_fallback_before:
         assert found == [(c, 100)]
         assert c.get_url().startswith("s3://ecmwf-forecasts/")
     else:
@@ -457,3 +467,71 @@ def test_real_index_with_out_of_bounds_unrequested_rows_skips_file(
     assert rows[-1]["param"] == "r"
     serve_fixture(monkeypatch, tmp_path, fixture)
     assert make_job(template, [var]).file_refs(coord, file_size) == []
+
+
+@pytest.mark.slow
+def test_real_temperature_alias_decodes_with_configured_celsius_filter(
+    template: xr.DataTree, tmp_path: Path
+) -> None:
+    init = pd.Timestamp("2024-09-17T18")
+    var = get_var("temperature_2m")
+    template = xr.DataTree.from_dict(
+        {
+            node.path: node.to_dataset()
+            .assign_coords(
+                init_time=node.to_dataset().init_time.copy(data=[init.to_datetime64()])
+            )
+            .isel(lead_time=[1])
+            .sel(ensemble_member=[44])
+            for node in template.subtree
+        }
+    )
+    job = make_job(template, [var])
+    (coord,) = job.source_file_coords()
+    rows = [
+        json.loads(line)
+        for line in (FIXTURES / "20240917_18_3_temperature_aliases.index")
+        .read_text()
+        .splitlines()
+    ]
+    row = next(
+        row for row in rows if row.get("number") == "44" and row["param"] == "mean2t"
+    )
+    config, credentials = _repository_config_and_credentials(
+        IcechunkVirtualConfig(
+            containers=ecmwf_virtual_chunk_containers(
+                s3_fallback_before=job.s3_fallback_before
+            ),
+            manifest_split=manifest_append_dim_split(split_size=1, dim="init_time"),
+        )
+    )
+    repo = icechunk.Repository.create(
+        icechunk.local_filesystem_storage(str(tmp_path / "alias.icechunk")),
+        config=config,
+        authorize_virtual_chunk_access=credentials,
+    )
+    session = repo.writable_session("main")
+    template_utils.write_metadata(
+        template,
+        session.store,
+        mode="w-",
+        skip_icechunk_commit=True,
+        consolidated=False,
+    )
+    job._emit_refs(
+        [session.store],
+        [
+            VirtualRef(
+                data_var=var,
+                out_loc={**coord.out_loc(), "ensemble_member": 44},
+                location=coord.get_url(),
+                offset=row["_offset"],
+                length=row["_length"],
+            )
+        ],
+    )
+    ds = xr.open_zarr(
+        session.store, chunks=None, consolidated=False, decode_timedelta=True
+    )
+    value = ds.temperature_2m.sel(latitude=-5, longitude=-60).item()
+    assert value == pytest.approx(36.296060180664085)

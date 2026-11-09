@@ -1091,7 +1091,7 @@
           "short_name": "tmax",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "Maximum over the preceding 3 hours through lead 144 hours and 6 hours from lead 150 hours. Not available at lead time 0.",
+          "comment": "Maximum since the preceding forecast step. Not available at lead time 0.",
           "step_type": "max",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1220,7 +1220,7 @@
           "short_name": "tmin",
           "standard_name": "air_temperature",
           "units": "degree_Celsius",
-          "comment": "Minimum over the preceding 3 hours through lead 144 hours and 6 hours from lead 150 hours. Not available at lead time 0.",
+          "comment": "Minimum since the preceding forecast step. Not available at lead time 0.",
           "step_type": "min",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -2926,6 +2926,12 @@
         "fill_value": "NaN",
         "codecs": [
           {
+            "name": "scale_offset",
+            "configuration": {
+              "scale": 0.001
+            }
+          },
+          {
             "name": "gribberish",
             "configuration": {
               "var": "ro",
@@ -2935,9 +2941,10 @@
           }
         ],
         "attributes": {
-          "long_name": "Runoff",
-          "short_name": "ro",
-          "units": "m",
+          "long_name": "Runoff water equivalent (surface plus subsurface)",
+          "short_name": "rowe",
+          "standard_name": "runoff_amount",
+          "units": "kg m-2",
           "comment": "Accumulated since forecast initialization.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
@@ -3359,6 +3366,7 @@
           "long_name": "Snow albedo",
           "short_name": "asn",
           "units": "percent",
+          "comment": "Meaningful only where snow is present; snow-free cells hold placeholder values.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3417,6 +3425,7 @@
           "short_name": "rsn",
           "standard_name": "surface_snow_density",
           "units": "kg m-3",
+          "comment": "Meaningful only where snow is present; snow-free cells hold placeholder values.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4683,7 +4692,7 @@
           "short_name": "10fg",
           "standard_name": "wind_speed_of_gust",
           "units": "m s-1",
-          "comment": "Maximum over the preceding 1 hour through lead 90 hours, 3 hours at leads 93-144 hours, and 6 hours from lead 150 hours. Not available at lead time 0.",
+          "comment": "Maximum over the preceding hour through lead 90 hours, then since the preceding forecast step. Not available at lead time 0.",
           "step_type": "max",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

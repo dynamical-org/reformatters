@@ -41,6 +41,7 @@
     "short_name": "rsn",
     "standard_name": "surface_snow_density",
     "units": "kg m-3",
+    "comment": "Meaningful only where snow is present; snow-free cells hold placeholder values.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

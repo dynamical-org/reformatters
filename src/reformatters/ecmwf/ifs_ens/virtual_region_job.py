@@ -1,8 +1,7 @@
 from collections.abc import Iterator, Mapping, Sequence
 from itertools import batched
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, Literal, assert_never, cast
 
-import icechunk
 import pandas as pd
 import xarray as xr
 
@@ -14,7 +13,7 @@ from reformatters.common.download import (
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import CoordinateValue
 from reformatters.common.time_utils import whole_hours
-from reformatters.common.types import Dim, Timedelta
+from reformatters.common.types import Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.ecmwf.ecmwf_grib_index import parse_index_file
 from reformatters.ecmwf.ecmwf_virtual_source import (
@@ -23,7 +22,6 @@ from reformatters.ecmwf.ecmwf_virtual_source import (
     S3_REGION,
     EcmwfVirtualSourceFileCoord,
     discover_ecmwf_available,
-    ecmwf_virtual_chunk_containers,
 )
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.source_file_coord import (
     IFS_CYCLE_50R1_CUTOVER,
@@ -36,15 +34,6 @@ from .virtual_template_config import (
 
 log = get_logger(__name__)
 TEMPERATURE_ALIASES = {"2t": "mean2t", "skt": "mskt"}
-S3_FALLBACK_BEFORE = pd.Timestamp("2025-02-13T00")
-
-
-def ifs_ens_virtual_chunk_containers(
-    *, fine_resolution: bool
-) -> tuple[icechunk.VirtualChunkContainer, ...]:
-    return ecmwf_virtual_chunk_containers(
-        s3_fallback_before=None if fine_resolution else S3_FALLBACK_BEFORE
-    )
 
 
 class EcmwfIfsEnsForecastVirtualSourceFileCoord(EcmwfVirtualSourceFileCoord):
@@ -56,13 +45,20 @@ class EcmwfIfsEnsForecastVirtualSourceFileCoord(EcmwfVirtualSourceFileCoord):
     pressure_levels: tuple[int, ...]
 
     def _get_base_url(self) -> str:
-        assert self.source == "gcs" or (
-            self.resolution == "0p25" and self.init_time < S3_FALLBACK_BEFORE
-        ), "Only older 0.25 degree inits may reference S3"
-        location_prefix = (
-            GCS_LOCATION_PREFIX if self.source == "gcs" else S3_LOCATION_PREFIX
-        )
-        file_type = "ef" if self.family == "enfo" else "fc"
+        match self.source:
+            case "gcs":
+                location_prefix = GCS_LOCATION_PREFIX
+            case "s3":
+                location_prefix = S3_LOCATION_PREFIX
+            case unexpected:
+                assert_never(unexpected)
+        match self.family:
+            case "enfo":
+                file_type = "ef"
+            case "oper":
+                file_type = "fc"
+            case unexpected:
+                assert_never(unexpected)
         suffix = f"-{self.level_family}" if self.level_family else ""
         return (
             f"{location_prefix}{self.init_time:%Y%m%d}/{self.init_time:%H}z/"
@@ -92,11 +88,11 @@ class EcmwfIfsEnsForecastVirtualRegionJob(
         EcmwfIfsEnsVirtualDataVar, EcmwfIfsEnsForecastVirtualSourceFileCoord
     ]
 ):
-    resolution: ClassVar[Literal["0p25", "0p1"]] = "0p25"
-    operational_update_window: ClassVar[Timedelta] = pd.Timedelta("30h")
-    download_concurrency: ClassVar[int] = 8
-
-    backfill_files_per_batch: ClassVar[int] = 100
+    resolution: ClassVar[Literal["0p25", "0p1"]]
+    s3_fallback_before: ClassVar[Timestamp | None]
+    operational_update_window: ClassVar[Timedelta]
+    # A backfill otherwise holds a worker's whole slice of refs in memory for one commit.
+    backfill_files_per_batch: ClassVar[int] = 500
 
     def process_virtual_refs(
         self,
@@ -131,16 +127,10 @@ class EcmwfIfsEnsForecastVirtualRegionJob(
             )
             for lead_time in pd.to_timedelta(processing_region_ds.lead_time.values):
                 for family in ("enfo", "oper") if separate_control else ("enfo",):
-                    file_members = (
-                        tuple(m for m in members if (m == 0) == (family == "oper"))
-                        if separate_control
-                        else members
-                    )
+                    file_members = _file_members(family, members, separate_control)
                     if not file_members:
                         continue
-                    for level_family in (
-                        ("sfc", "pl") if self.resolution == "0p1" else (None,)
-                    ):
+                    for level_family in self._level_families():
                         file_vars = [
                             var
                             for var in data_var_group
@@ -148,11 +138,7 @@ class EcmwfIfsEnsForecastVirtualRegionJob(
                             and (
                                 not var.internal_attrs.control_only or 0 in file_members
                             )
-                            and (
-                                level_family is None
-                                or (var.group == "pressure_level")
-                                == (level_family == "pl")
-                            )
+                            and _in_level_family(var, level_family)
                             and (var.group is ROOT or levels)
                         ]
                         if file_vars:
@@ -170,12 +156,20 @@ class EcmwfIfsEnsForecastVirtualRegionJob(
                             )
         return coords
 
+    def _level_families(self) -> tuple[Literal["sfc", "pl"] | None, ...]:
+        match self.resolution:
+            case "0p25":
+                return (None,)
+            case "0p1":
+                return ("sfc", "pl")
+            case unexpected:
+                assert_never(unexpected)
+
     def discover_available(
         self, pending: list[EcmwfIfsEnsForecastVirtualSourceFileCoord]
     ) -> list[tuple[EcmwfIfsEnsForecastVirtualSourceFileCoord, int]]:
         return discover_ecmwf_available(
-            pending,
-            s3_fallback_before=None if self.resolution == "0p1" else S3_FALLBACK_BEFORE,
+            pending, s3_fallback_before=self.s3_fallback_before
         )
 
     def representative_var(
@@ -227,13 +221,17 @@ class EcmwfIfsEnsForecastVirtualRegionJob(
     def file_refs(
         self, coord: EcmwfIfsEnsForecastVirtualSourceFileCoord, file_size: int
     ) -> list[VirtualRef]:
-        index_path = (
-            gcs_download_to_disk(coord.get_index_url(), self.dataset_id)
-            if coord.source == "gcs"
-            else s3_download_to_disk(
-                coord.get_index_url(), self.dataset_id, region=S3_REGION
-            )
-        )
+        match coord.source:
+            case "gcs":
+                index_path = gcs_download_to_disk(
+                    coord.get_index_url(), self.dataset_id
+                )
+            case "s3":
+                index_path = s3_download_to_disk(
+                    coord.get_index_url(), self.dataset_id, region=S3_REGION
+                )
+            case unexpected:
+                assert_never(unexpected)
         try:
             index = parse_index_file(index_path, ensemble=True)
         finally:
@@ -299,3 +297,33 @@ class EcmwfIfsEnsForecastVirtualRegionJob(
                 )
             )
         return refs
+
+
+def _file_members(
+    family: Literal["enfo", "oper"],
+    members: tuple[int, ...],
+    separate_control: bool,
+) -> tuple[int, ...]:
+    if not separate_control:
+        return members
+    match family:
+        case "enfo":
+            return tuple(m for m in members if m != 0)
+        case "oper":
+            return tuple(m for m in members if m == 0)
+        case unexpected:
+            assert_never(unexpected)
+
+
+def _in_level_family(
+    var: EcmwfIfsEnsVirtualDataVar, level_family: Literal["sfc", "pl"] | None
+) -> bool:
+    match level_family:
+        case None:
+            return True
+        case "sfc":
+            return var.group is ROOT
+        case "pl":
+            return var.group == "pressure_level"
+        case unexpected:
+            assert_never(unexpected)
