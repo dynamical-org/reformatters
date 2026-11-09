@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from zarr.codecs import ScaleOffset
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common.config_models import ROOT
@@ -64,11 +65,17 @@ def test_product_geometry(dataset: EcmwfIfsEnsForecastVirtualDataset) -> None:
     assert (cape is None) == fine
 
 
-def test_native_water_accumulation_units() -> None:
+def test_water_accumulation_units() -> None:
     for var in DATASETS[0].template_config.data_vars:
-        if var.internal_attrs.grib_index_param in {"tp", "cp", "sf", "ro"}:
-            assert var.attrs.units == "m"
-            assert not var.encoding.filters
+        match var.internal_attrs.grib_index_param:
+            case "tp" | "cp" | "sf":
+                assert var.attrs.units == "kg m-2"
+                assert var.encoding.filters == [
+                    ScaleOffset(offset=0, scale=0.001).to_dict()
+                ]
+            case "ro":
+                assert var.attrs.units == "m"
+                assert not var.encoding.filters
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda d: d.dataset_id)

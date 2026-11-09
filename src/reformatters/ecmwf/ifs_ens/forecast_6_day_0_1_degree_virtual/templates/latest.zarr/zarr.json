@@ -124,6 +124,12 @@
         "fill_value": "NaN",
         "codecs": [
           {
+            "name": "scale_offset",
+            "configuration": {
+              "scale": 0.001
+            }
+          },
+          {
             "name": "gribberish",
             "configuration": {
               "var": "cp",
@@ -135,8 +141,8 @@
         "attributes": {
           "long_name": "Convective precipitation",
           "short_name": "cp",
-          "standard_name": "lwe_thickness_of_convective_precipitation_amount",
-          "units": "m",
+          "standard_name": "convective_precipitation_amount",
+          "units": "kg m-2",
           "comment": "Accumulated since forecast initialization.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
@@ -3456,6 +3462,12 @@
         "fill_value": "NaN",
         "codecs": [
           {
+            "name": "scale_offset",
+            "configuration": {
+              "scale": 0.001
+            }
+          },
+          {
             "name": "gribberish",
             "configuration": {
               "var": "sf",
@@ -3467,8 +3479,8 @@
         "attributes": {
           "long_name": "Snowfall water equivalent",
           "short_name": "sf",
-          "standard_name": "lwe_thickness_of_snowfall_amount",
-          "units": "m",
+          "standard_name": "snowfall_amount",
+          "units": "kg m-2",
           "comment": "Accumulated since forecast initialization.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
@@ -4241,6 +4253,12 @@
         "fill_value": "NaN",
         "codecs": [
           {
+            "name": "scale_offset",
+            "configuration": {
+              "scale": 0.001
+            }
+          },
+          {
             "name": "gribberish",
             "configuration": {
               "var": "tp",
@@ -4252,8 +4270,8 @@
         "attributes": {
           "long_name": "Total precipitation",
           "short_name": "tp",
-          "standard_name": "lwe_thickness_of_precipitation_amount",
-          "units": "m",
+          "standard_name": "precipitation_amount",
+          "units": "kg m-2",
           "comment": "Accumulated since forecast initialization.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",

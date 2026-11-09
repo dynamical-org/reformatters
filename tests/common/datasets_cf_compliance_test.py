@@ -1899,32 +1899,12 @@ _IFS_ENS_VIRTUAL_DATASET_IDS = {
     for days in (6, 15)
     for resolution in ("0-25", "0-1")
 }
-# IFS water totals retain source metres; masks are fractional, and snow diagnostics
+# IFS runoff retains source metres; masks are fractional, and snow diagnostics
 # are instantaneous rather than the daily materialized product's time averages.
 CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
     (name, attr, dataset_id)
     for dataset_id in _IFS_ENS_VIRTUAL_DATASET_IDS
     for names, attrs in (
-        (
-            ("total_precipitation_run_total_surface", "tp", "Total precipitation"),
-            ("standard_name", "units"),
-        ),
-        (
-            (
-                "convective_precipitation_run_total_surface",
-                "cp",
-                "Convective precipitation",
-            ),
-            ("standard_name", "units"),
-        ),
-        (
-            (
-                "snowfall_water_equivalent_run_total_surface",
-                "sf",
-                "Snowfall water equivalent",
-            ),
-            ("standard_name", "units"),
-        ),
         (
             ("runoff_water_equivalent_run_total_surface",),
             ("short_name", "long_name", "standard_name", "units"),
