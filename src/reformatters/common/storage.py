@@ -602,7 +602,7 @@ def _repository_config_and_credentials(
     config.storage = icechunk.StorageSettings(
         timeouts=icechunk.StorageTimeoutSettings(
             connect_timeout_ms=3_000,
-            read_timeout_ms=15_000,
+            read_timeout_ms=3_000,
             operation_attempt_timeout_ms=15_000,
             operation_timeout_ms=30_000,
         ),
