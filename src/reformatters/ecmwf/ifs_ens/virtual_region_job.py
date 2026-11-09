@@ -92,7 +92,8 @@ class EcmwfIfsEnsForecastVirtualRegionJob(
     s3_fallback_before: ClassVar[Timestamp | None]
     operational_update_window: ClassVar[Timedelta]
     # A backfill otherwise holds a worker's whole slice of refs in memory for one commit.
-    backfill_files_per_batch: ClassVar[int] = 500
+    # At up to ~8,850 refs per file this stays under docs/backfill.md's per-commit cap.
+    backfill_files_per_batch: ClassVar[int] = 400
 
     def process_virtual_refs(
         self,
