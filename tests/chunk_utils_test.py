@@ -1,10 +1,16 @@
 import math
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
 import xarray as xr
 
-from tests.chunk_utils import _shrink_dim, shrink_chunks_and_shards
+from reformatters.common import materialized_region_job, shared_memory_utils
+from tests.chunk_utils import (
+    _shrink_dim,
+    patch_write_shards_containing,
+    shrink_chunks_and_shards,
+)
 
 
 def _structure(size: int, chunk: int, shard: int) -> tuple[bool, bool]:
@@ -92,3 +98,35 @@ def test_shrink_dataset_without_shards() -> None:
 
     assert "shards" not in ds["v"].encoding
     assert ds["v"].encoding["chunks"][0] <= 3
+
+
+@pytest.mark.parametrize("second_cell", [False, True])
+def test_patch_write_shards_containing_selects_distinct_shards(
+    monkeypatch: pytest.MonkeyPatch, second_cell: bool
+) -> None:
+    ds = _make_dataset(
+        {"time": 2, "latitude": 3, "longitude": 5}, (1, 1, 1), (2, 2, 2)
+    ).assign_coords(latitude=[30.0, 20.0, 10.0], longitude=[-2, -1, 0, 1, 2])
+    ds = ds.rename({"v": "pressure_level/temperature"})
+    write = Mock()
+    monkeypatch.setattr(shared_memory_utils, "write_shard_to_zarr", write)
+    cells = [{"latitude": 10.1, "longitude": 1.9}] * 2
+    expected = [(slice(0, 2), slice(2, 4), slice(4, 6))]
+    if second_cell:
+        cells.append({"latitude": 29.9, "longitude": -1.9})
+        expected.insert(0, (slice(0, 2), slice(0, 2), slice(0, 2)))
+    patch_write_shards_containing(monkeypatch, cells)
+    shared_buffer = Mock()
+    shared_buffer.name = "test-buffer"
+
+    materialized_region_job.write_shards(
+        ds["pressure_level/temperature"],
+        shared_buffer,
+        "time",
+        ds,
+        Mock(),
+        Mock(),
+    )
+
+    assert [call.args[-1] for call in write.call_args_list] == expected
+    assert all(call.args[1] == "test-buffer" for call in write.call_args_list)

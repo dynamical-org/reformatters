@@ -14,6 +14,7 @@ from reformatters.noaa.hrrr.forecast_48_hour.dynamical_dataset import (
 from reformatters.noaa.hrrr.forecast_48_hour.template_config import (
     NoaaHrrrForecast48HourTemplateConfig,
 )
+from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
@@ -48,8 +49,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
-        lambda self, end_time: orig_get_template(end_time).sel(
-            lead_time=slice("0h", "2h")
+        lambda self, end_time: shrink_chunks_and_shards(
+            orig_get_template(end_time).sel(lead_time=slice("0h", "2h"))
         ),
     )
 

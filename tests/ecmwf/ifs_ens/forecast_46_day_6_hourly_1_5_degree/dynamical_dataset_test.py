@@ -14,7 +14,7 @@ from reformatters.ecmwf.ifs_ens.forecast_46_day_6_hourly_1_5_degree.dynamical_da
 from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
     EcmwfIfsEns46DayRegionJob,
 )
-from tests.chunk_utils import patch_write_first_shard_only, shrink_chunks_and_shards
+from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_update_fails_validation,
@@ -131,12 +131,10 @@ def test_backfill_local_and_operational_update(
         )
         # Leave init_time at production geometry: one shard per init, so
         # filter_start scopes the run to a single initialization.
-        return shrink_chunks_and_shards(
-            tree, dims=("lead_time", "ensemble_member", "latitude", "longitude")
-        )
+        return shrink_chunks_and_shards(tree, dims=("lead_time", "ensemble_member"))
 
     monkeypatch.setattr(type(dataset.template_config), "get_template", small_template)
-    patch_write_first_shard_only(monkeypatch)
+    patch_write_shards_containing(monkeypatch, [{"latitude": 10.5, "longitude": -60}])
     first_init = np.datetime64("2026-08-10T00:00:00")
     second_init = np.datetime64("2026-08-11T00:00:00")
 

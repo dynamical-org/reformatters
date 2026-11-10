@@ -71,15 +71,12 @@ jobs:
         run: "uv pip install -e ."
 
       - name: Run Ruff
-        if: matrix.suite == 'other-b'
         run: uv run ruff check --output-format=github
 
       - name: Check code format
-        if: matrix.suite == 'other-b'
         run: uv run ruff format --check
 
       - name: Run ty
-        if: matrix.suite == 'other-b'
         run: uv run ty check
 
       - name: Run Pytest

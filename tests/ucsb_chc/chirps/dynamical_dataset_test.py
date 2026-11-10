@@ -28,7 +28,7 @@ from reformatters.ucsb_chc.chirps.template_config import (
     MM_PER_DAY_TO_KG_M2_S,
     SOURCE_FILL_VALUE,
 )
-from tests.chunk_utils import shrink_chunks_and_shards
+from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
@@ -52,13 +52,15 @@ def _preliminary_dataset() -> UcsbChcChirpsAnalysisPreliminaryDataset:
 
 
 def _shrink_template(
-    monkeypatch: pytest.MonkeyPatch, dataset: UcsbChcChirpsAnalysisMaterializedDataset
+    monkeypatch: pytest.MonkeyPatch,
+    dataset: UcsbChcChirpsAnalysisMaterializedDataset,
+    dims: tuple[str, ...] | None = None,
 ) -> None:
     original_get_template = dataset._get_template
     monkeypatch.setitem(
         dataset.__dict__,
         "_get_template",
-        lambda end: shrink_chunks_and_shards(original_get_template(end)),
+        lambda end: shrink_chunks_and_shards(original_get_template(end), dims=dims),
     )
 
 
@@ -101,7 +103,8 @@ def test_backfill_local_and_operational_update(
     source_mm_per_day: list[float],
 ) -> None:
     dataset = make_dataset()
-    _shrink_template(monkeypatch, dataset)
+    _shrink_template(monkeypatch, dataset, dims=("time",))
+    patch_write_shards_containing(monkeypatch, [_LAND_POINT, _OCEAN_POINT])
 
     dataset.backfill_local(append_dim_end=first_day + pd.Timedelta(days=2))
     backfilled_ds = _open_store(dataset)
@@ -114,7 +117,7 @@ def test_backfill_local_and_operational_update(
         "now",
         classmethod(lambda *args, **kwargs: first_day + pd.Timedelta(days=3)),
     )
-    dataset.update("test-update")
+    assert_update_fails_validation(dataset, "test-update", "CheckExpectedShards")
 
     updated_ds = _open_store(dataset)
     assert_array_equal(

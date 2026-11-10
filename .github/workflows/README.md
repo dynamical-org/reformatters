@@ -7,8 +7,8 @@ into five suites defined in `code-quality.yml` as explicit path lists and their
 complements, so every test, including slow tests, runs in exactly one suite and
 a new test directory is covered automatically: inside a listed path by that
 suite, otherwise by the complement suite for its tree. Rebalance the lists
-from the `--durations` output in the test job logs. Ruff, formatting, and ty
-run in the `other-b` suite on each architecture.
+from the `--durations` output in the test job logs. Every test job runs Ruff,
+the format check, and ty.
 
 The required `Code Quality` check waits for all ten test jobs and the
 Kubernetes admission job. Its gate job runs even if one of them fails or is
