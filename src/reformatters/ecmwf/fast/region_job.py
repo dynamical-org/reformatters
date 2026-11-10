@@ -187,7 +187,7 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
     ) -> None:
         pending = list(remaining)
         futures: dict[Future[list[VirtualRef]], EcmwfFastSourceFileCoord] = {}
-        next_sweep = time.monotonic()
+        next_sweep = next_sweep_log = time.monotonic()
         first_sweep = True
         pool = ThreadPoolExecutor(self.update_download_concurrency)
         try:
@@ -239,14 +239,16 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                     if stop.is_set():
                         return
                     received_at = pd.Timestamp.now(tz="UTC").isoformat()
-                    log_virtual_event(
-                        "discovery_sweep",
-                        received_at=received_at,
-                        duration_s=time.monotonic() - sweep_start,
-                        files=len(available),
-                        active_streams=sum(f.running() for f in futures),
-                        outstanding_files=len(futures),
-                    )
+                    if available or futures or sweep_start >= next_sweep_log:
+                        log_virtual_event(
+                            "discovery_sweep",
+                            received_at=received_at,
+                            duration_s=time.monotonic() - sweep_start,
+                            files=len(available),
+                            active_streams=sum(f.running() for f in futures),
+                            outstanding_files=len(futures),
+                        )
+                        next_sweep_log = sweep_start + 10
                     for coord, size in available:
                         log_virtual_event(
                             "discovered",
