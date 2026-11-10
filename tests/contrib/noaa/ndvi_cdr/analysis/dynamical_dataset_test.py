@@ -13,7 +13,7 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis.dynamical_dataset import (
 from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     assert_configured_validators,
-    assert_update_fails_validation,
+    assert_update_succeeds_validation_fails,
 )
 
 pytestmark = pytest.mark.slow
@@ -76,7 +76,7 @@ def test_backfill_local_and_update(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
         "pandas.Timestamp.now", lambda *args, **kwargs: pd.Timestamp("1981-06-26")
     )
     dataset = NoaaNdviCdrAnalysisDataset(primary_storage_config=noop_storage_config)
-    assert_update_fails_validation(
+    assert_update_succeeds_validation_fails(
         dataset, "test-update", "CheckRecentNans(include=ndvi_usable)"
     )
     updated_ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)

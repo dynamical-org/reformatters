@@ -78,14 +78,14 @@ def _encoding_kwargs(n_levels: int | None) -> dict[str, Any]:
         return {
             "dtype": "float32",
             "fill_value": np.nan,
-            "chunks": (1, 1, 1),
-            "shards": (SHARD_TIME, 1, 2),
+            "chunks": (1, N_LAT, N_LON),
+            "shards": (SHARD_TIME, N_LAT, N_LON),
         }
     return {
         "dtype": "float32",
         "fill_value": np.nan,
-        "chunks": (1, 1, 1, 1),
-        "shards": (SHARD_TIME, 1, 2, n_levels),
+        "chunks": (1, N_LAT, N_LON, 1),
+        "shards": (SHARD_TIME, N_LAT, N_LON, n_levels),
     }
 
 

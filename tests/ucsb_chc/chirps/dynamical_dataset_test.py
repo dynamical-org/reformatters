@@ -32,7 +32,7 @@ from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_s
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
-    assert_update_fails_validation,
+    assert_update_succeeds_validation_fails,
 )
 
 # A land point in the western Amazon and an open ocean point in the Pacific.
@@ -117,7 +117,10 @@ def test_backfill_local_and_operational_update(
         "now",
         classmethod(lambda *args, **kwargs: first_day + pd.Timedelta(days=3)),
     )
-    assert_update_fails_validation(dataset, "test-update", "CheckExpectedShards")
+    # The update commits successfully; intentionally unwritten shards fail validation.
+    assert_update_succeeds_validation_fails(
+        dataset, "test-update", "CheckExpectedShards"
+    )
 
     updated_ds = _open_store(dataset)
     assert_array_equal(
@@ -299,7 +302,7 @@ def test_update_advances_past_an_unread_day_and_fills_it_in_later(
         "now",
         classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-05T12:00")),
     )
-    assert_update_fails_validation(dataset, "test-update", "CheckRecentNans")
+    assert_update_succeeds_validation_fails(dataset, "test-update", "CheckRecentNans")
 
     gap_ds = _open_store(dataset)
     assert_array_equal(gap_ds["time"], pd.date_range("2025-01-01", "2025-01-04"))
@@ -332,7 +335,9 @@ def test_failed_reread_before_a_later_success_writes_nan_then_refills(
         classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-05T12:00")),
     )
 
-    assert_update_fails_validation(dataset, "test-failed-reread", "CheckRecentNans")
+    assert_update_succeeds_validation_fails(
+        dataset, "test-failed-reread", "CheckRecentNans"
+    )
     failed_reread_ds = _open_store(dataset)
     assert_array_equal(
         failed_reread_ds["time"], pd.date_range("2025-01-01", "2025-01-03")

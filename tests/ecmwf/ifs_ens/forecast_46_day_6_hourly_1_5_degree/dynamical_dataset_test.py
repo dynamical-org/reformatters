@@ -17,7 +17,7 @@ from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
 from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
-    assert_update_fails_validation,
+    assert_update_succeeds_validation_fails,
 )
 
 
@@ -155,5 +155,8 @@ def test_backfill_local_and_operational_update(
         return pd.Timestamp("2026-08-13T00:00", tz=tz)
 
     monkeypatch.setattr(pd.Timestamp, "now", now)
-    assert_update_fails_validation(dataset, "test-update", "CheckExpectedShards")
+    # The update commits successfully; intentionally unwritten shards fail validation.
+    assert_update_succeeds_validation_fails(
+        dataset, "test-update", "CheckExpectedShards"
+    )
     assert_point_values(xr.open_zarr(store, chunks=None), [first_init, second_init])

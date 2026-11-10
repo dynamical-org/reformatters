@@ -14,7 +14,7 @@ from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_s
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
-    assert_update_fails_validation,
+    assert_update_succeeds_validation_fails,
 )
 
 
@@ -99,7 +99,10 @@ def test_backfill_local_and_operational_update(
         "now",
         Mock(return_value=pd.Timestamp("2025-07-02T12:00:00")),
     )
-    assert_update_fails_validation(dataset, "test-update", "CheckExpectedShards")
+    # The update commits successfully; intentionally unwritten shards fail validation.
+    assert_update_succeeds_validation_fails(
+        dataset, "test-update", "CheckExpectedShards"
+    )
 
     updated_ds = xr.open_zarr(dataset.store_factory.primary_store(), chunks=None)
     np.testing.assert_array_equal(
