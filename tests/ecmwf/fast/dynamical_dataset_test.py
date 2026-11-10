@@ -1,14 +1,17 @@
 from datetime import timedelta
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
+import xarray as xr
 
 from reformatters.__main__ import DYNAMICAL_DATASETS
 from reformatters.common import validation
 from reformatters.common.storage import DatasetFormat
 from reformatters.ecmwf.fast.dynamical_dataset import EcmwfFastDataset
 from reformatters.ecmwf.fast.source import SOURCE_PREFIX, SOURCE_SECRET
+from tests.common.validation_decode_test import _context, _spy_on_load
 
 OUTPUT_SECRET = "dynamical-ecmwf-output-r2-storage-options-key"  # noqa: S105
 
@@ -75,3 +78,78 @@ def test_schedule_deadline_currency_and_repair_window(
         intended_fire = init + timedelta(hours=5, minutes=minute)
         assert cron.previous_fire_time(intended_fire) == intended_fire
         assert currency.max_delay >= intended_fire - init
+
+
+@pytest.mark.parametrize("dataset", DATASETS, ids=lambda d: d.dataset_id)
+@pytest.mark.parametrize("missing_old_index", [None, *range(7)])
+def test_decode_health_exempts_only_the_two_new_variables(
+    dataset: EcmwfFastDataset,
+    missing_old_index: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loads = _spy_on_load(monkeypatch)
+    init = pd.Timestamp("2026-11-10")
+    variables = dataset.template_config.data_vars
+    ds = xr.Dataset(
+        {
+            var.name: (
+                ("init_time", "latitude", "longitude"),
+                np.full((1, 1, 1), np.nan if i >= 7 or i == missing_old_index else 1.0),
+            )
+            for i, var in enumerate(variables)
+        },
+        coords={"init_time": [init], "latitude": [0], "longitude": [0]},
+    )
+    context = _context(ds, [var.path for var in variables], [{"init_time": init}])
+    check = next(
+        c
+        for c in dataset.validators()
+        if isinstance(c, validation.CheckVirtualDecodeHealth)
+    )
+    result = check.check(context)
+    assert result.passed == (missing_old_index is None), result.message
+    assert result.checked_count == 7
+    assert {call.name for call in loads} == {v.name for v in variables[:7]}
+    if missing_old_index is not None:
+        assert (
+            f"{variables[missing_old_index].name}: every sampled chunk decoded entirely NaN"
+            in result.message
+        )
+    else:
+        assert "2 variable(s) had no reference" in result.message
+
+
+@pytest.mark.parametrize("dataset", DATASETS, ids=lambda d: d.dataset_id)
+def test_decode_health_can_lift_exemption_while_older_inits_have_nan_additions(
+    dataset: EcmwfFastDataset, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loads = _spy_on_load(monkeypatch)
+    inits = pd.date_range("2026-11-10", periods=2, freq="6h")
+    variables = dataset.template_config.data_vars
+    ds = xr.Dataset(
+        {
+            var.name: (("init_time", "latitude", "longitude"), np.ones((2, 1, 1)))
+            for var in variables
+        },
+        coords={"init_time": inits, "latitude": [0], "longitude": [0]},
+    )
+    for var in variables[7:]:
+        ds[var.name][0] = np.nan
+    check = next(
+        c
+        for c in dataset.validators()
+        if isinstance(c, validation.CheckVirtualDecodeHealth)
+    )
+    assert check.positions == 1
+    check = check.model_copy(update={"reference_presence": None})
+    context = _context(
+        ds, [v.path for v in variables], [{"init_time": init} for init in inits]
+    )
+    result = check.check(context)
+    assert result.passed, result.message
+    assert result.checked_count == 9
+    assert len(loads) == 9
+    assert all(
+        call.coordinates["init_time"] == ds.init_time.values[-1].tolist()
+        for call in loads
+    )

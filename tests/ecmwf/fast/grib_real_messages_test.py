@@ -89,3 +89,76 @@ def test_native_message_inventory_and_template_codec(
         [values[point["row"], point["column"]] for point in row["snapshots"]],
         [point["value"] for point in row["snapshots"]],
     )
+
+
+@pytest.mark.parametrize(
+    "row",
+    json.loads((FIXTURES.parent / "nine_variable" / "metadata.json").read_text()),
+    ids=lambda row: (
+        f"{row['model']}-{row['family']}-{row['param']}-{row['lead_hours']}h-{row['bits']}bits"
+    ),
+)
+def test_nine_variable_delivery_native_accuracy_and_filters(
+    row: dict, caplog: pytest.LogCaptureFixture
+) -> None:
+    payload = (FIXTURES.parent / "nine_variable" / row["file"]).read_bytes()
+    assert hashlib.sha256(payload).hexdigest() == row["sha256"]
+    assert len(payload) == row["length"]
+    assert payload[7] == row["edition"]
+    if row["edition"] == 1:
+        pds_length = int.from_bytes(payload[8:11], "big")
+        assert pds_length == row["pds_length"]
+        assert payload[8 + 40] == (1 if row["family"] == "cf" else 30)
+        assert payload[8 + 49] == row["member"]
+        if row["family"] == "pf":
+            assert pds_length == 106
+            assert payload[8 + 50] == 51
+        grid_start = 8 + pds_length
+        grid_length = int.from_bytes(payload[grid_start : grid_start + 3], "big")
+        assert payload[grid_start + grid_length + 10] == row["bits"]
+    else:
+        sections: dict[int, bytes] = {}
+        offset = 16
+        while offset < len(payload) - 4:
+            size = int.from_bytes(payload[offset : offset + 4], "big")
+            sections[payload[offset + 4]] = payload[offset : offset + size]
+            offset += size
+        assert len(sections[4]) == row["pds_length"]
+        assert sections[4][35] == row["member"]
+        assert int.from_bytes(sections[5][9:11], "big") == 42
+        assert sections[5][19] == row["bits"]
+    variable = next(
+        v
+        for v in EcmwfFastTemplateConfig(model=row["model"]).data_vars
+        if v.attrs.short_name == row["param"]
+    )
+    source = EcmwfFastSourceFileCoord(
+        model=row["model"],
+        family=row["family"],
+        init_time=pd.Timestamp(row["init_time"]),
+        lead_time=pd.Timedelta(hours=row["lead_hours"]),
+        data_vars=[variable],
+        source_params=frozenset({row["param"]}),
+        source_members=(row["member"],),
+    )
+    assert inventory(StreamReader(iter([payload])), len(payload), source) == [
+        Message(row["param"], row["member"], 0, len(payload))
+    ]
+    assert not caplog.records
+    assert variable.internal_attrs.source_units == row["native_units"]
+    assert variable.encoding.filters == row["filters"]
+    values = asyncio.run(_decode(payload, variable.encoding))
+    assert np.isfinite(values).all()
+    np.testing.assert_allclose(
+        [values.min(), values.max()],
+        [row["minimum"], row["maximum"]],
+        rtol=0,
+        atol=row["atol"],
+    )
+    assert np.count_nonzero(values == 0) == row["zero_count"]
+    np.testing.assert_allclose(
+        [values[p["row"], p["column"]] for p in row["snapshots"]],
+        [p["value"] for p in row["snapshots"]],
+        rtol=0,
+        atol=row["atol"],
+    )

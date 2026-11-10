@@ -36,7 +36,14 @@ from reformatters.ecmwf.ifs_ens.forecast_0_25_degree_fast.region_job import (
 from reformatters.ecmwf.ifs_ens.forecast_0_25_degree_fast.template_config import (
     EcmwfIfsEnsForecast025DegreeFastTemplateConfig,
 )
-from tests.ecmwf.fast.grib_test import PARAMS, chunks, grib1, grib2, source_bytes
+from tests.ecmwf.fast.grib_test import (
+    OLD_PARAMS,
+    PARAMS,
+    chunks,
+    grib1,
+    grib2,
+    source_bytes,
+)
 
 LAST_MODIFIED = pd.Timestamp("2026-11-04T00:00Z")
 
@@ -82,7 +89,7 @@ def test_structural_holes_and_family_boundaries(
     coords = job.source_file_coords()
     assert len(coords) == expected
     assert len({c.key for c in coords}) == expected
-    assert all(len(c.data_vars) == 7 for c in coords)
+    assert all(len(c.data_vars) == 9 for c in coords)
     assert {c.family for c in coords} == {"cf", "pf"}
     assert {c.out_loc()["ensemble_member"] for c in coords} == {0, 1}
     assert all(c.source_params == PARAMS for c in coords)
@@ -189,7 +196,7 @@ def test_stream_attempts_restart_after_interruption_and_never_retry_source_contr
     monkeypatch.setattr(region_job.obstore, "get", getter)
     monkeypatch.setattr("reformatters.common.retry.time.sleep", lambda _: None)
     refs = job.file_refs(coord, len(data))
-    assert len(refs) == 7
+    assert len(refs) == 9
     assert getter.call_count == 2
     assert sum(r.length for r in refs) == len(data)
     getter.reset_mock(side_effect=True)
@@ -238,6 +245,50 @@ def source_response(payload: bytes) -> MagicMock:
 
 
 @pytest.mark.parametrize(
+    "cls",
+    [EcmwfIfsEnsForecast025DegreeFastRegionJob, EcmwfAifsEnsForecastFastRegionJob],
+)
+@pytest.mark.parametrize("params", [OLD_PARAMS, PARAMS, PARAMS - {"2t"}])
+def test_transition_preserves_temperature_probe_and_missing_temperature_invariant(
+    tmp_path: Path,
+    source_getter: MagicMock,
+    cls: type[EcmwfFastRegionJob],
+    params: frozenset[str],
+) -> None:
+    job = make_job(tmp_path, cls)
+    config = (
+        EcmwfIfsEnsForecast025DegreeFastTemplateConfig()
+        if cls.model == "ifs"
+        else EcmwfAifsEnsForecastFastTemplateConfig()
+    )
+    job = job.model_copy(
+        update={
+            "template_ds": config.get_template(pd.Timestamp("2026-11-04T01:00")).sel(
+                init_time=[pd.Timestamp("2026-11-04")], ensemble_member=[0, 1, 50]
+            )
+        }
+    )
+    source = next(
+        c
+        for c in job.source_file_coords()
+        if c.family == "cf" and c.lead_time == pd.Timedelta("6h")
+    )
+    assert job.representative_var(source).name == "temperature_2m"
+    build = grib1 if cls.model == "ifs" else grib2
+    data = b"".join(build(param, 0) for param in sorted(params))
+    source_getter.return_value = source_response(data)
+    refs = job.file_refs(source, len(data))
+    assert {r.data_var.internal_attrs.grib_index_param for r in refs} == params
+    if "2t" in params:
+        job._assert_probe_chunk_covered(source, refs)
+        assert job._file_refs_or_skip(source, len(data)) == refs
+    else:
+        with pytest.raises(AssertionError, match="do not cover representative chunk"):
+            job._assert_probe_chunk_covered(source, refs)
+        assert job._file_refs_or_skip(source, len(data)) == []
+
+
+@pytest.mark.parametrize(
     "message", ["503 Service Unavailable", "broken pipe", "Unsupported response format"]
 )
 @pytest.mark.parametrize("during_stream", [False, True])
@@ -263,7 +314,7 @@ def test_generic_errors_restart_the_whole_file(
         broken if during_stream else failure,
         source_response(data),
     ]
-    assert len(job.file_refs(coord, len(data))) == 7
+    assert len(job.file_refs(coord, len(data))) == 9
     assert source_getter.call_count == 2
 
 

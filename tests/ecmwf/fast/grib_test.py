@@ -14,7 +14,8 @@ from reformatters.ecmwf.fast.grib import (
 from reformatters.ecmwf.fast.source import EcmwfFastSourceFileCoord, Family
 from reformatters.ecmwf.fast.template_config import EcmwfFastTemplateConfig, FastModel
 
-PARAMS = frozenset({"2t", "10u", "10v", "100u", "100v", "tp", "ssrd"})
+OLD_PARAMS = frozenset({"2t", "10u", "10v", "100u", "100v", "tp", "ssrd"})
+PARAMS = OLD_PARAMS | {"sp", "2d"}
 
 INIT = pd.Timestamp("2026-11-04")
 
@@ -57,6 +58,8 @@ def grib1(
     pds[:3] = len(pds).to_bytes(3, "big")
     table, parameter = {
         "2t": (128, 167),
+        "2d": (128, 168),
+        "sp": (128, 134),
         "10u": (128, 165),
         "10v": (128, 166),
         "100u": (228, 246),
@@ -115,6 +118,8 @@ def grib2(
     product[7:9] = (11 if accum else 1).to_bytes(2, "big")
     category, number, height = {
         "2t": (0, 0, 2),
+        "2d": (0, 6, 2),
+        "sp": (3, 0, 0),
         "10u": (2, 2, 10),
         "10v": (2, 3, 10),
         "100u": (2, 2, 100),
@@ -125,7 +130,7 @@ def grib2(
     product[9:11] = bytes((category, number))
     product[17] = 1
     product[18:22] = (0 if accum else hours).to_bytes(4, "big")
-    product[22] = 1 if accum else 103
+    product[22] = 1 if accum or param == "sp" else 103
     product[24:28] = height.to_bytes(4, "big")
     product[28:34] = b"\xff" * 6
     product[34:37] = bytes((5 if member == 0 else 6, member, 51))
@@ -463,6 +468,56 @@ def test_complete_shuffled_inventory_and_chunk_boundaries(
     assert [m.offset for m in messages] == [
         sum(x.length for x in messages[:i]) for i in range(len(messages))
     ]
+
+
+@pytest.mark.parametrize("model", ["ifs", "aifs"])
+@pytest.mark.parametrize(("family", "members"), [("cf", (0,)), ("pf", (1, 50))])
+def test_old_seven_fields_keep_refs_and_report_only_missing_additions(
+    model: FastModel,
+    family: Family,
+    members: tuple[int, ...],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    build = grib1 if model == "ifs" else grib2
+    data = b"".join(
+        build(param, member) for param in sorted(OLD_PARAMS) for member in members
+    )
+    source = coord(model, family).model_copy(update={"source_members": members})
+    messages = inventory(StreamReader(chunks(data, 31)), len(data), source)
+    assert {(m.param, m.member) for m in messages} == {
+        (param, member) for param in OLD_PARAMS for member in members
+    }
+    missing = sorted((param, member) for param in ("sp", "2d") for member in members)
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelname == "ERROR"
+    assert caplog.records[0].getMessage() == (
+        f"Source discrepancies in {source.key}: missing fields={missing}"
+    )
+
+
+@pytest.mark.parametrize("param", ["sp", "2d"])
+def test_grib2_new_instantaneous_surface_meaning_is_enforced(
+    param: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    data = bytearray(grib2(param, 0))
+    product = 16 + 21 + 72
+    data[product + 22] = 103 if param == "sp" else 1
+    assert inventory(StreamReader(iter([data])), len(data), coord("aifs")) == []
+    assert "unsupported GRIB2 physical identity" in caplog.text
+
+
+@pytest.mark.parametrize("param", ["sp", "2d"])
+def test_new_instantaneous_fields_reject_accumulation(
+    param: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    data = bytearray(grib2("tp", 0))
+    product = 16 + 21 + 72
+    data[product + 9 : product + 11] = bytes((3, 0) if param == "sp" else (0, 6))
+    if param == "2d":
+        data[product + 22] = 103
+        data[product + 24 : product + 28] = (2).to_bytes(4, "big")
+    assert inventory(StreamReader(iter([data])), len(data), coord("aifs")) == []
+    assert "changed GRIB2 accumulation meaning" in caplog.text
 
 
 @pytest.mark.parametrize("model", ["ifs", "aifs"])

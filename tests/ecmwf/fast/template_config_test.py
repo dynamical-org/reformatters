@@ -27,7 +27,7 @@ def test_native_grid_and_encoding(model: FastModel) -> None:
     np.testing.assert_array_equal(coords["ensemble_member"], np.arange(51))
     np.testing.assert_array_equal(coords["latitude"], np.arange(90, -90.25, -0.25))
     np.testing.assert_array_equal(coords["longitude"], np.arange(-180, 180, 0.25))
-    assert len(config.data_vars) == 7
+    assert len(config.data_vars) == 9
     for var in config.data_vars:
         assert var.encoding.dtype == "float64"
         assert var.encoding.chunks == (1, 1, 1, 721, 1440)
@@ -49,6 +49,28 @@ def test_units_and_scaling(model: FastModel) -> None:
     temperature = variables["temperature_2m"]
     assert temperature.encoding.filters == [
         {"name": "scale_offset", "configuration": {"offset": -273.15}}
+    ]
+    dewpoint = variables["dew_point_temperature_2m"]
+    pressure = variables["pressure_surface"]
+    assert dewpoint.encoding.filters == temperature.encoding.filters
+    assert dewpoint.internal_attrs.source_units == "K"
+    assert dewpoint.attrs.units == "degree_Celsius"
+    assert dewpoint.attrs.standard_name == "dew_point_temperature"
+    assert pressure.encoding.filters == []
+    assert pressure.internal_attrs.source_units == pressure.attrs.units == "Pa"
+    assert pressure.attrs.standard_name == "surface_air_pressure"
+    assert dewpoint.attrs.comment is pressure.attrs.comment is None
+    assert dewpoint.attrs.step_type == pressure.attrs.step_type == "instant"
+    assert [v.name for v in config.data_vars] == [
+        "temperature_2m",
+        "wind_u_10m",
+        "wind_v_10m",
+        "wind_u_100m",
+        "wind_v_100m",
+        "total_precipitation_run_total_surface",
+        "downward_short_wave_radiation_run_total_surface",
+        "pressure_surface",
+        "dew_point_temperature_2m",
     ]
     rain = variables["total_precipitation_run_total_surface"]
     radiation = variables["downward_short_wave_radiation_run_total_surface"]
