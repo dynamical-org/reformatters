@@ -455,7 +455,7 @@ def test_empty_and_deferred_sweeps_keep_cadence_and_log_duration(
         nonlocal clock
         starts.append(clock)
         clock += 0.3
-        return [(c, BLOCK_NBYTES) for c in pending] if len(starts) == 3 else []
+        return [(c, BLOCK_NBYTES) for c in pending] if len(starts) == 24 else []
 
     def sleep(seconds: float) -> None:
         nonlocal clock
@@ -478,11 +478,55 @@ def test_empty_and_deferred_sweeps_keep_cadence_and_log_duration(
         for r in caplog.records
         if '"event": "discovery_sweep"' in r.getMessage()
     ]
-    assert starts == [0, 1, 2]
-    assert [e["files"] for e in events] == [0, 0, 2]
-    assert [e["duration_s"] for e in events] == pytest.approx([0.3] * 3)
+    assert starts == list(range(24))
+    assert [e["files"] for e in events] == [0, 0, 0, 2]
+    assert [e["duration_s"] for e in events] == pytest.approx([0.3] * 4)
     assert len(batches) == 1
     assert [c for c, _ in batches[0]] == coords
+
+
+@pytest.mark.parametrize("running", [False, True])
+def test_sweeps_with_outstanding_files_are_not_thinned(
+    monkeypatch: pytest.MonkeyPatch,
+    manual_pool: ManualPool,
+    caplog: pytest.LogCaptureFixture,
+    running: bool,
+) -> None:
+    job = make_job()
+    coords = list(job.source_file_coords())
+    clock = 0.0
+    stop = Event()
+
+    def discover(
+        self: PipelineJob, pending: list[EcmwfFastSourceFileCoord]
+    ) -> list[tuple[EcmwfFastSourceFileCoord, int]]:
+        return [(c, BLOCK_NBYTES) for c in pending] if clock == 0 else []
+
+    def wait(futures: object, timeout: float, **kwargs: object) -> None:
+        nonlocal clock
+        clock += timeout
+        if clock == 1 and running:
+            for future, _ in manual_pool.tasks:
+                future.set_running_or_notify_cancel()
+        if clock == 3:
+            for i in range(len(manual_pool.tasks)):
+                manual_pool.complete(i)
+
+    monkeypatch.setattr(PipelineJob, "discover_available", discover)
+    monkeypatch.setattr(region_job.time, "monotonic", lambda: clock)
+    monkeypatch.setattr(region_job, "wait", wait)
+    batches = []
+    with caplog.at_level("INFO"):
+        job._poll_ready_files(coords, batches.append, stop)
+    events = [
+        json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
+        for r in caplog.records
+        if '"event": "discovery_sweep"' in r.getMessage()
+    ]
+    assert [e["files"] for e in events] == [2, 0, 0]
+    assert [e["outstanding_files"] for e in events] == [0, 2, 2]
+    assert [e["active_streams"] for e in events] == [0, 2 * running, 2 * running]
+    assert len(batches) == 1
 
 
 @pytest.mark.parametrize("close_from_writer", [False, True])
