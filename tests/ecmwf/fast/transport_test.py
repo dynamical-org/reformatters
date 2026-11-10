@@ -360,7 +360,7 @@ def test_backfill_streams_at_existing_concurrency(
     monkeypatch.setattr(
         region_job, "_ranged_chunks", lambda *a: pytest.fail("backfill ranged")
     )
-    assert len(job.file_refs(coord, len(data))) == 7
+    assert len(job.file_refs(coord, len(data))) == 9
     get.assert_called_once_with(STORE, coord.key)
     assert cls.download_concurrency == 64
     assert cls.update_download_concurrency == 5
@@ -587,7 +587,7 @@ def test_single_range_conditional_206_covers_whole_file(
                 region_job, "s3_store_from_secret", lambda *a, **kw: store
             )
             monkeypatch.setattr(region_job, "TARGET_RANGE_CHUNK", 64 * 1024**2)
-            assert len(job.file_refs(coord, len(data))) == 7
+            assert len(job.file_refs(coord, len(data))) == 9
         finally:
             server.shutdown()
             thread.join(timeout=5)

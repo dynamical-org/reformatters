@@ -68,7 +68,7 @@ class EcmwfFastSourceFileCoord(InitLeadSourceFileCoord):
     family: Family
     data_vars: Sequence[EcmwfDataVar]
     source_params: frozenset[str] = frozenset(
-        {"2t", "10u", "10v", "100u", "100v", "tp", "ssrd"}
+        {"2t", "10u", "10v", "100u", "100v", "tp", "ssrd", "sp", "2d"}
     )
     source_members: tuple[int, ...]
 

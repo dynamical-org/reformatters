@@ -14,7 +14,8 @@ log = get_logger(__name__)
 # Units are defined by parameter code tables, not stored as strings in GRIB messages.
 _GRIB1_PARAMS = (
     {
-        (128, 167, level_type, level): ("2t", "K")
+        (128, number, level_type, level): (param, "K")
+        for number, param in ((167, "2t"), (168, "2d"))
         for level_type, level in ((1, 0), (105, 2))
     }
     | {
@@ -30,10 +31,13 @@ _GRIB1_PARAMS = (
     | {
         (128, 228, 1, 0): ("tp", "m"),
         (128, 169, 1, 0): ("ssrd", "J m-2"),
+        (128, 134, 1, 0): ("sp", "Pa"),
     }
 )
 _GRIB2_PARAMS: dict[tuple[int, int, int, int, float], tuple[str, str]] = {
     (0, 0, 0, 103, 2): ("2t", "K"),
+    (0, 0, 6, 103, 2): ("2d", "K"),
+    (0, 3, 0, 1, 0): ("sp", "Pa"),
     (0, 2, 2, 103, 10): ("10u", "m s-1"),
     (0, 2, 3, 103, 10): ("10v", "m s-1"),
     (0, 2, 2, 103, 100): ("100u", "m s-1"),

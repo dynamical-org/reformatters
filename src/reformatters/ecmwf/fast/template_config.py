@@ -189,13 +189,27 @@ class EcmwfFastTemplateConfig(Ecmwf025DegreeForecastTemplateConfig[EcmwfDataVar]
                 "W s m-2",
                 "integral_wrt_time_of_surface_downwelling_shortwave_flux_in_air",
             ),
+            (
+                "pressure_surface",
+                "sp",
+                "Surface pressure",
+                "Pa",
+                "surface_air_pressure",
+            ),
+            (
+                "dew_point_temperature_2m",
+                "2d",
+                "2 metre dewpoint temperature",
+                "degree_Celsius",
+                "dew_point_temperature",
+            ),
         ]
         result = []
         for name, param, long_name, units, standard_name in quantities:
             accumulated = param in ("tp", "ssrd")
             filters = []
             source_units = "J m-2" if param == "ssrd" else units
-            if param == "2t":
+            if param in ("2t", "2d"):
                 source_units = "K"
                 filters = [ScaleOffset(offset=-273.15, scale=1.0).to_dict()]
             elif param == "tp":

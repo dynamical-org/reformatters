@@ -124,7 +124,9 @@ def test_real_backfill_update_and_snapshot_isolation(
         latitude=0,
         longitude=0,
     )
-    names = [v.name for v in dataset.template_config.data_vars]
+    names = [v.name for v in dataset.template_config.data_vars[:7]]
+    for var in dataset.template_config.data_vars[7:]:
+        assert before[var.name].isnull().all()
     np.testing.assert_allclose(
         [float(cell[name].sel(ensemble_member=0).values) for name in names],
         _SNAPSHOTS[model],
