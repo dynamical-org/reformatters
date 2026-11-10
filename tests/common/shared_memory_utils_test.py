@@ -1,13 +1,57 @@
+from concurrent.futures import ProcessPoolExecutor
 from multiprocessing.shared_memory import SharedMemory
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 import xarray as xr
 
 from reformatters.common.shared_memory_utils import (
     create_data_array_and_template,
     make_shared_buffer,
+    write_shards,
 )
+
+
+@pytest.mark.parametrize("group", [None, "pressure_level"])
+def test_write_all_spatial_shards_with_partial_edges(
+    tmp_path: Path, group: str | None
+) -> None:
+    name = "temperature"
+    path = f"{group}/{name}" if group else name
+    expected = np.arange(60, dtype=np.float32).reshape(4, 3, 5) + 1
+    processing = xr.Dataset(
+        {path: (("time", "latitude", "longitude"), expected)},
+        coords={
+            "time": pd.date_range("2025-01-01", periods=4, freq="h"),
+            "latitude": [0, 1, 2],
+            "longitude": [0, 1, 2, 3, 4],
+        },
+    )
+    processing[path].encoding.update(
+        dtype="float32", fill_value=np.nan, chunks=(1, 1, 1), shards=(1, 2, 3)
+    )
+    output = processing.isel(time=slice(1, 3))
+    store = tmp_path / "shards.zarr"
+    output.rename({path: name}).chunk().to_zarr(
+        store, group=group, compute=False, consolidated=False
+    )
+
+    with (
+        make_shared_buffer(processing) as buffer,
+        ProcessPoolExecutor(max_workers=2) as executor,
+    ):
+        data, template = create_data_array_and_template(
+            processing, path, buffer, fill_value=np.nan
+        )
+        data.values[:] = expected
+        write_shards(template, buffer, "time", output, store, executor)
+
+    actual = xr.open_zarr(store, group=group, chunks=None, consolidated=False)
+    np.testing.assert_array_equal(actual[name].values, expected[1:3])
+    shard_files = [p for p in (store / path / "c").rglob("*") if p.is_file()]
+    assert len(shard_files) == 8
 
 
 @pytest.fixture

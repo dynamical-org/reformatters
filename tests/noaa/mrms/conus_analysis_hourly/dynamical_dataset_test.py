@@ -14,7 +14,7 @@ from tests.chunk_utils import patch_write_first_shard_only
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
-    assert_update_fails_validation,
+    assert_update_succeeds_validation_fails,
 )
 from tests.xarray_testing import assert_no_nulls
 
@@ -141,7 +141,7 @@ def test_backfill_local_and_operational_update(
         ),
     )
 
-    assert_update_fails_validation(dataset, "test-update", "CheckRecentNans")
+    assert_update_succeeds_validation_fails(dataset, "test-update", "CheckRecentNans")
 
     updated_ds = xr.open_zarr(
         dataset.store_factory.primary_store(), chunks=None, decode_timedelta=True

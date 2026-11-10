@@ -28,11 +28,11 @@ from reformatters.ucsb_chc.chirps.template_config import (
     MM_PER_DAY_TO_KG_M2_S,
     SOURCE_FILL_VALUE,
 )
-from tests.chunk_utils import shrink_chunks_and_shards
+from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
-    assert_update_fails_validation,
+    assert_update_succeeds_validation_fails,
 )
 
 # A land point in the western Amazon and an open ocean point in the Pacific.
@@ -52,13 +52,15 @@ def _preliminary_dataset() -> UcsbChcChirpsAnalysisPreliminaryDataset:
 
 
 def _shrink_template(
-    monkeypatch: pytest.MonkeyPatch, dataset: UcsbChcChirpsAnalysisMaterializedDataset
+    monkeypatch: pytest.MonkeyPatch,
+    dataset: UcsbChcChirpsAnalysisMaterializedDataset,
+    dims: tuple[str, ...] | None = None,
 ) -> None:
     original_get_template = dataset._get_template
     monkeypatch.setitem(
         dataset.__dict__,
         "_get_template",
-        lambda end: shrink_chunks_and_shards(original_get_template(end)),
+        lambda end: shrink_chunks_and_shards(original_get_template(end), dims=dims),
     )
 
 
@@ -101,7 +103,8 @@ def test_backfill_local_and_operational_update(
     source_mm_per_day: list[float],
 ) -> None:
     dataset = make_dataset()
-    _shrink_template(monkeypatch, dataset)
+    _shrink_template(monkeypatch, dataset, dims=("time",))
+    patch_write_shards_containing(monkeypatch, [_LAND_POINT, _OCEAN_POINT])
 
     dataset.backfill_local(append_dim_end=first_day + pd.Timedelta(days=2))
     backfilled_ds = _open_store(dataset)
@@ -114,7 +117,10 @@ def test_backfill_local_and_operational_update(
         "now",
         classmethod(lambda *args, **kwargs: first_day + pd.Timedelta(days=3)),
     )
-    dataset.update("test-update")
+    # The update commits successfully; intentionally unwritten shards fail validation.
+    assert_update_succeeds_validation_fails(
+        dataset, "test-update", "CheckExpectedShards"
+    )
 
     updated_ds = _open_store(dataset)
     assert_array_equal(
@@ -296,7 +302,7 @@ def test_update_advances_past_an_unread_day_and_fills_it_in_later(
         "now",
         classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-05T12:00")),
     )
-    assert_update_fails_validation(dataset, "test-update", "CheckRecentNans")
+    assert_update_succeeds_validation_fails(dataset, "test-update", "CheckRecentNans")
 
     gap_ds = _open_store(dataset)
     assert_array_equal(gap_ds["time"], pd.date_range("2025-01-01", "2025-01-04"))
@@ -329,7 +335,9 @@ def test_failed_reread_before_a_later_success_writes_nan_then_refills(
         classmethod(lambda *args, **kwargs: pd.Timestamp("2025-01-05T12:00")),
     )
 
-    assert_update_fails_validation(dataset, "test-failed-reread", "CheckRecentNans")
+    assert_update_succeeds_validation_fails(
+        dataset, "test-failed-reread", "CheckRecentNans"
+    )
     failed_reread_ds = _open_store(dataset)
     assert_array_equal(
         failed_reread_ds["time"], pd.date_range("2025-01-01", "2025-01-03")

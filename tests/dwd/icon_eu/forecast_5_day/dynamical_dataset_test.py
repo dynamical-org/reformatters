@@ -19,10 +19,11 @@ from reformatters.dwd.icon_eu.forecast_5_day.dynamical_dataset import (
     ICOSAHEDRAL_RUN_ALLOWANCE,
     DwdIconEuForecast5DayDataset,
 )
+from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
-    assert_update_fails_validation,
+    assert_update_succeeds_validation_fails,
 )
 from tests.xarray_testing import assert_no_nulls
 
@@ -51,8 +52,8 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
-        lambda self, end_time: orig_get_template(end_time).sel(
-            lead_time=slice("0h", "2h")
+        lambda self, end_time: shrink_chunks_and_shards(
+            orig_get_template(end_time).sel(lead_time=slice("0h", "2h"))
         ),
     )
 
@@ -129,7 +130,9 @@ def test_backfill_local_and_operational_update(monkeypatch: pytest.MonkeyPatch) 
         ),
     )
 
-    assert_update_fails_validation(dataset, "test-update", "CheckExpectedShards")
+    assert_update_succeeds_validation_fails(
+        dataset, "test-update", "CheckExpectedShards"
+    )
 
     # Check resulting dataset
     updated_ds = xr.open_zarr(

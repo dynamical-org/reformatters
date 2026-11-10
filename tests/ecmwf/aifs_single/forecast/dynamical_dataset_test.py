@@ -9,6 +9,7 @@ from reformatters.common import validation
 from reformatters.ecmwf.aifs_single.forecast.dynamical_dataset import (
     EcmwfAifsSingleForecastDataset,
 )
+from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
@@ -40,12 +41,14 @@ def test_backfill_local_and_operational_update(
     monkeypatch.setattr(
         type(dataset.template_config),
         "get_template",
-        lambda self, end_time: xr.DataTree.from_dict(
-            {
-                "/": orig_get_template(end_time)
-                .sel(lead_time=slice("0h", "6h"))
-                .to_dataset()[variables_to_check]
-            }
+        lambda self, end_time: shrink_chunks_and_shards(
+            xr.DataTree.from_dict(
+                {
+                    "/": orig_get_template(end_time)
+                    .sel(lead_time=slice("0h", "6h"))
+                    .to_dataset()[variables_to_check]
+                }
+            )
         ),
     )
     # Backfill one 6-hour init

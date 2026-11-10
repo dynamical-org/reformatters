@@ -68,7 +68,7 @@ NOOP_STORAGE_CONFIG = StorageConfig(
 
 
 # Partial and historical e2e fixtures commit their data before validation rejects them.
-def assert_update_fails_validation(
+def assert_update_succeeds_validation_fails(
     dataset: DynamicalDataset, job_name: str, expected_check: str
 ) -> None:
     with pytest.raises(typer.Exit) as exc_info:
