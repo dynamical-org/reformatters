@@ -55,8 +55,22 @@ Container image inputs in `deploy/Dockerfile` are pinned to multi-platform diges
 
 `deployments/targets.py` lists cluster names, GitHub environments, capacity policy
 and whether workflow deployment is enabled. Its first entry is the primary build
-environment. Each environment supplies the same secret names: `AWS_ROLE_TO_ASSUME`,
-`AWS_REGION`, `EKS_CLUSTER_NAME`, `DOCKER_REPOSITORY`, and the shared `DEPOT_PROJECT`.
+environment. Clusters may share a GitHub environment and its `AWS_ROLE_TO_ASSUME`
+and `DEPOT_PROJECT` secrets. The environment's `AWS_CLUSTER_CONFIG` secret maps public cluster
+names to private deployment settings:
+
+```json
+{
+  "public-cluster-name": {
+    "aws_region": "us-east-1",
+    "eks_cluster_name": "private-cluster-name",
+    "docker_repository": "account.dkr.ecr.us-east-1.amazonaws.com/repository"
+  }
+}
+```
+
+Workflows select this entry inside the target job. The shared AWS role needs
+access to each target cluster and repository.
 Each deployment module owns its configured datasets, archivers and storage configs.
 
 Before submission, the current kubeconfig must match the administrator-owned

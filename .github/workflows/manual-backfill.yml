@@ -144,21 +144,27 @@ jobs:
         GH_REPO: ${{ github.repository }}
         CLUSTER: ${{ needs.prepare.outputs.cluster }}
       run: uv run src/scripts/workflow_support.py wait-for-deploy "$CLUSTER"
+    - name: Load cluster settings
+      env:
+        AWS_CLUSTER_CONFIG: ${{ secrets.AWS_CLUSTER_CONFIG }}
+        CLUSTER: ${{ needs.prepare.outputs.cluster }}
+      run: uv run src/scripts/workflow_support.py configure-cluster "$CLUSTER"
+
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ env.AWS_REGION }}
     - name: Install kubectl
       uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e
       with:
         version: latest
     - name: Update kubeconfig
-      run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+      run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
     - name: Start backfill (SEE LOGS)
       env:
         DYNAMICAL_ENV: prod
-        DOCKER_IMAGE: ${{ secrets.DOCKER_REPOSITORY }}:${{ github.sha }}
+        DOCKER_IMAGE: ${{ env.DOCKER_REPOSITORY }}:${{ github.sha }}
         DATASET_ID: ${{ github.event.inputs.dataset_id }}
         OPERATION: ${{ github.event.inputs.operation }}
         APPEND_DIM_END: ${{ github.event.inputs.append_dim_end }}

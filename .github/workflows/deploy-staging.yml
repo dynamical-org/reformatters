@@ -70,7 +70,6 @@ jobs:
     needs: [quality, prepare]
     env:
       DYNAMICAL_CLUSTER: ${{ needs.prepare.outputs.cluster }}
-      IMAGE_TAG: "${{ secrets.DOCKER_REPOSITORY }}:${{ github.sha }}"
     runs-on: ubuntu-24.04
     environment: ${{ needs.prepare.outputs.environment }}
     permissions:
@@ -86,11 +85,17 @@ jobs:
 
       - uses: ./.github/actions/setup-project
 
+      - name: Load cluster settings
+        env:
+          AWS_CLUSTER_CONFIG: ${{ secrets.AWS_CLUSTER_CONFIG }}
+          CLUSTER: ${{ needs.prepare.outputs.cluster }}
+        run: uv run src/scripts/workflow_support.py configure-cluster "$CLUSTER"
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Install kubectl
         uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5
@@ -99,7 +104,7 @@ jobs:
 
       - name: Update kubeconfig
         run: |
-          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+          aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
 
       - name: Verify cluster identity
         env:
@@ -118,7 +123,7 @@ jobs:
           project: ${{ secrets.DEPOT_PROJECT }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.IMAGE_TAG }}
+          tags: ${{ env.DOCKER_REPOSITORY }}:${{ github.sha }}
           context: .
           file: deploy/Dockerfile
 
@@ -126,6 +131,7 @@ jobs:
         env:
           DATASET_ID: ${{ needs.prepare.outputs.dataset_id }}
           VERSION: ${{ needs.prepare.outputs.version }}
+          IMAGE_TAG: ${{ env.DOCKER_REPOSITORY }}:${{ github.sha }}
         run: >
           uv run main deploy-staging
           "$DATASET_ID"

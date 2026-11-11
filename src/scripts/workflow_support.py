@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,24 @@ def require_enabled(cluster: targets.Cluster) -> None:
     assert cluster.enabled, (
         f"{cluster.name} deployment is disabled; no workload was launched."
     )
+
+
+def configure_cluster(cluster: str) -> None:
+    config = json.loads(os.environ["AWS_CLUSTER_CONFIG"])[cluster]
+    values = {
+        "AWS_REGION": config["aws_region"],
+        "EKS_CLUSTER_NAME": config["eks_cluster_name"],
+        "DOCKER_REPOSITORY": config["docker_repository"],
+    }
+    for key, value in values.items():
+        assert isinstance(value, str), f"{key} must be a string for {cluster}"
+        assert re.fullmatch(r"\S+", value), (
+            f"{key} must be nonempty and contain no whitespace for {cluster}"
+        )
+    for key in ("EKS_CLUSTER_NAME", "DOCKER_REPOSITORY"):
+        sys.stdout.write(f"::add-mask::{values[key].replace('%', '%25')}\n")
+    with Path(os.environ["GITHUB_ENV"]).open("a") as output:
+        output.writelines(f"{key}={value}\n" for key, value in values.items())
 
 
 def deployment_matrix() -> None:
@@ -206,10 +225,16 @@ def main() -> None:
     wait.add_argument(
         "cluster", choices=[cluster.name for cluster in targets.clusters()]
     )
+    configure = commands.add_parser("configure-cluster")
+    configure.add_argument(
+        "cluster", choices=[cluster.name for cluster in targets.clusters()]
+    )
     commands.add_parser("matrix")
     args = parser.parse_args()
     if args.command == "prepare":
         prepare(args)
+    elif args.command == "configure-cluster":
+        configure_cluster(args.cluster)
     elif args.command == "matrix":
         deployment_matrix()
     else:

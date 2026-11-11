@@ -101,17 +101,23 @@ jobs:
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
     - uses: ./.github/actions/setup-project
+    - name: Load cluster settings
+      env:
+        AWS_CLUSTER_CONFIG: ${{ secrets.AWS_CLUSTER_CONFIG }}
+        CLUSTER: ${{ needs.prepare.outputs.cluster }}
+      run: uv run src/scripts/workflow_support.py configure-cluster "$CLUSTER"
+
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ env.AWS_REGION }}
     - name: Install kubectl
       uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e
       with:
         version: latest
     - name: Update kubeconfig
-      run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+      run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
     - name: Verify cluster identity
       env:
         CLUSTER: ${{ needs.prepare.outputs.cluster }}

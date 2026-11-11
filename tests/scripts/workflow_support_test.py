@@ -553,3 +553,119 @@ def test_in_progress_rerun_waits_for_target_instead_of_using_previous_attempt(
     run = run_record(run_attempt=2, status="in_progress")
     assert workflows.deployment_jobs(REPOSITORY, run, WEST) == []
     assert pages.call_count == 1
+
+
+@pytest.mark.parametrize("cluster", ["west", "east"])
+def test_configure_cluster_keeps_private_settings_in_job_env(
+    cluster: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configs = {
+        "west": {
+            "aws_region": "us-west-2",
+            "eks_cluster_name": "private-west",
+            "docker_repository": "west.example/repo",
+        },
+        "east": {
+            "aws_region": "us-east-1",
+            "eks_cluster_name": "private-east",
+            "docker_repository": "east.example/repo",
+        },
+    }
+    monkeypatch.setenv("AWS_CLUSTER_CONFIG", json.dumps(configs))
+    output = tmp_path / "env"
+    job_output = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_ENV", str(output))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(job_output))
+    workflows.configure_cluster(cluster)
+    selected = configs[cluster]
+    assert dict(line.split("=", 1) for line in output.read_text().splitlines()) == {
+        "AWS_REGION": selected["aws_region"],
+        "EKS_CLUSTER_NAME": selected["eks_cluster_name"],
+        "DOCKER_REPOSITORY": selected["docker_repository"],
+    }
+    assert capsys.readouterr().out == (
+        f"::add-mask::{selected['eks_cluster_name']}\n"
+        f"::add-mask::{selected['docker_repository']}\n"
+    )
+    assert not job_output.exists()
+
+
+@pytest.mark.parametrize(
+    "bad", ["missing", "malformed", "empty", "newline", "whitespace"]
+)
+def test_bad_cluster_settings_fail_without_fallback_or_output(
+    bad: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    entry = {
+        "aws_region": "us-east-1",
+        "eks_cluster_name": "private",
+        "docker_repository": "east.example/repo",
+    }
+    if bad == "empty":
+        entry["eks_cluster_name"] = ""
+    if bad == "whitespace":
+        entry["eks_cluster_name"] = " private "
+    if bad == "newline":
+        entry["docker_repository"] = "private\nINJECTED=value"
+    raw = (
+        "{"
+        if bad == "malformed"
+        else json.dumps({"other" if bad == "missing" else "east": entry})
+    )
+    monkeypatch.setenv("AWS_CLUSTER_CONFIG", raw)
+    monkeypatch.setenv("EKS_CLUSTER_NAME", "legacy-west")
+    output = tmp_path / "env"
+    monkeypatch.setenv("GITHUB_ENV", str(output))
+    with pytest.raises((KeyError, ValueError, AssertionError)):
+        workflows.configure_cluster("east")
+    assert not output.exists()
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "deploy-operational-updates.yml",
+        "deploy-staging.yml",
+        "manual-backfill.yml",
+        "manual-create-job-from-cronjob.yml",
+        "manual-get-jobs.yml",
+        "manual-get-pods.yml",
+    ],
+)
+def test_cluster_secret_loaded_in_target_job_before_aws(filename: str) -> None:
+    workflow = load_workflow(filename)
+    target = next(
+        job
+        for job in workflow["jobs"].values()
+        if any(
+            step.get("uses", "").startswith("aws-actions/configure-aws-credentials@")
+            for step in job["steps"]
+        )
+    )
+    steps = target["steps"]
+    load = next(
+        i for i, step in enumerate(steps) if "configure-cluster" in step.get("run", "")
+    )
+    auth = next(
+        i
+        for i, step in enumerate(steps)
+        if step.get("uses", "").startswith("aws-actions/configure-aws-credentials@")
+    )
+    assert load < auth
+    assert (
+        steps[load]["env"]["AWS_CLUSTER_CONFIG"] == "${{ secrets.AWS_CLUSTER_CONFIG }}"
+    )
+    assert steps[auth]["with"]["aws-region"] == "${{ env.AWS_REGION }}"
+    assert not any(
+        "secrets." + name in json.dumps(workflow)
+        for name in ("AWS_REGION", "EKS_CLUSTER_NAME", "DOCKER_REPOSITORY")
+    )
+    assert "AWS_CLUSTER_CONFIG" not in json.dumps(workflow["jobs"]["prepare"])
+    assert "outputs" not in target
