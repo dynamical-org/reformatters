@@ -60,7 +60,7 @@ def _reference_presence(
     store: IcechunkStore,
     keys_by_var: Mapping[str, _VarKeys],
     var_path: str,
-    out_loc: Mapping[str, Any],
+    out_loc: Mapping[Any, Any],
 ) -> Mapping[Any, bool]:
     var_keys = keys_by_var[var_path]
     keys = _var_chunk_keys(var_keys, out_loc)
@@ -115,7 +115,7 @@ def _checkpoint_key(
         [
             json.dumps(
                 {
-                    "version": 2,
+                    "version": 3,
                     "dataset_id": dataset_id,
                     "start": str(start),
                     "end": str(end),

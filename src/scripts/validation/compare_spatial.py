@@ -29,7 +29,9 @@ from scripts.validation.utils import (
     report_mean,
     resolve_output_dir,
     resolve_reference_url,
+    restrict_plot_coverage,
     scope_time_period,
+    select_plot_member,
     select_random_ensemble_member,
     select_var_slice,
     select_variables_for_plotting,
@@ -54,12 +56,12 @@ def align_reference_spatially(ds: xr.Dataset, reference_ds: xr.Dataset) -> xr.Da
     )
 
 
-def align_to_valid_time_forecast(
+def _select_forecast_snapshot(
     ds: xr.Dataset,
     reference_ds: xr.Dataset,
     init_time: str | None,
     lead_time: str | None,
-) -> tuple[xr.Dataset, xr.Dataset]:
+) -> xr.Dataset:
     rng = np.random.default_rng()
 
     if init_time is None:
@@ -75,35 +77,58 @@ def align_to_valid_time_forecast(
         # Prefer leads whose valid time the reference covers; a lead past the
         # reference's last analysis compares against a snapshot hours older.
         candidate_leads = ds.lead_time.values
-        ref_max = pd.Timestamp(reference_ds.time.max().item())
+        ref_min = (
+            pd.Timestamp(reference_ds.time.min().item())
+            if reference_ds.sizes["time"]
+            else pd.Timestamp.min
+        )
+        ref_max = (
+            pd.Timestamp(reference_ds.time.max().item())
+            if reference_ds.sizes["time"]
+            else pd.Timestamp.max
+        )
         covered = [
             lead
             for lead in candidate_leads
-            if selected_init_time + pd.Timedelta(lead) <= ref_max
+            if ref_min <= selected_init_time + pd.Timedelta(lead) <= ref_max
         ]
         selected_lead_time = rng.choice(covered or candidate_leads, 1)[0]
     else:
         selected_lead_time = parse_lead_time(lead_time)
 
-    ds = ds.sel(init_time=selected_init_time, lead_time=selected_lead_time)
-    valid_time = pd.Timestamp(ds.valid_time.item())
-    reference_ds = reference_ds.sel(time=valid_time, method="nearest")
-    return ds, reference_ds
+    return ds.sel(init_time=selected_init_time, lead_time=selected_lead_time)
 
 
-def align_to_valid_time_analysis(
-    ds: xr.Dataset, reference_ds: xr.Dataset, time: str | None
-) -> tuple[xr.Dataset, xr.Dataset]:
+def select_reference_time(
+    reference_ds: xr.Dataset, requested: pd.Timestamp
+) -> tuple[xr.Dataset, str | None]:
+    if not reference_ds.sizes["time"]:
+        raise ValueError(
+            f"Reference archive is empty; requested valid time {requested}"
+        )
+    selected = reference_ds.sel(time=requested, method="nearest")
+    actual = pd.Timestamp(selected.time.item())
+    drift = abs(actual - requested)
+    message = (
+        f"Requested valid time {requested}; reference time {actual}; difference {drift}"
+    )
+    if drift > pd.Timedelta(hours=24):
+        raise ValueError(f"{message} exceeds 24 hours")
+    warning = f"{message} exceeds 6 hours" if drift > pd.Timedelta(hours=6) else None
+    if warning is not None:
+        log.warning(warning)
+    return selected, warning
+
+
+def _select_analysis_snapshot(ds: xr.Dataset, time: str | None) -> xr.Dataset:
     if time is None:
         # Default to a recent-but-settled position (10 steps back); see
-        # align_to_valid_time_forecast. Tiny archives fall back to the first time.
+        # _select_forecast_snapshot. Tiny archives fall back to the first time.
         idx = max(-10, -ds.sizes["time"])
         selected_time = pd.Timestamp(ds.time.isel(time=idx).item())
     else:
         selected_time = pd.Timestamp(time)
-    ds = ds.sel(time=selected_time)
-    reference_ds = reference_ds.sel(time=selected_time, method="nearest")
-    return ds, reference_ds
+    return ds.sel(time=selected_time)
 
 
 def _downsample_for_plot(ds: xr.Dataset, max_plot_dim: int = 1000) -> xr.Dataset:
@@ -308,6 +333,43 @@ def _reference_data(
     return load_retried(ref_data)
 
 
+def _variable_spatial_snapshot(
+    ctx: RunContext,
+    var: str,
+    snapshot: xr.Dataset,
+    reference_ds: xr.Dataset,
+    stats: VariableStats,
+) -> tuple[xr.Dataset, xr.Dataset, bool]:
+    is_forecast = is_forecast_dataset(ctx.validation_ds)
+    append_dim = "init_time" if is_forecast else "time"
+    position = pd.Timestamp(snapshot[append_dim].item())
+    covered = restrict_plot_coverage(ctx, var, ctx.validation_ds, position)
+    covered, member = select_plot_member(covered, ctx.ensemble_member)
+    ds = covered.sel({append_dim: position})
+    if is_forecast:
+        lead = pd.Timedelta(snapshot.lead_time.item())
+        if lead not in ds.get_index("lead_time"):
+            lead = ds.lead_time.values[0]
+        ds = ds.sel(lead_time=lead)
+    ds = _downsample_for_plot(ds)
+    valid_time = pd.Timestamp(ds.valid_time.item() if is_forecast else ds.time.item())
+    stats.spatial_member = member
+    stats.spatial_valid_time = valid_time.isoformat()
+    stats.reference_time_warning = None
+    ref_ds = reference_ds
+    comparable = (
+        deterministic_reference_allowed(stats)
+        and var in ref_ds.data_vars
+        and (stats.level_dim is None or stats.level_dim in ref_ds[var].dims)
+    )
+    stats.ref_spatial_time_label = None
+    if comparable:
+        ref_ds, stats.reference_time_warning = select_reference_time(ref_ds, valid_time)
+        ref_time_label = pd.Timestamp(ref_ds.time.item()).isoformat()
+        stats.ref_spatial_time_label = ref_time_label
+    return ds, ref_ds, comparable
+
+
 def run_compare_spatial(ctx: RunContext) -> None:
     """Produce per-variable spatial comparison plots in ctx.output_dir."""
     assert ctx.reference_ds is not None, "compare-spatial requires a reference dataset"
@@ -315,65 +377,68 @@ def run_compare_spatial(ctx: RunContext) -> None:
     # Spatial plots are over a single member; ctx.validation_ds keeps the full
     # ensemble dim so the availability scan can see every member.
     validation_ds = ctx.validation_ds
-    if "ensemble_member" in validation_ds.dims:
-        if ctx.ensemble_member is None:
-            validation_ds, ctx.ensemble_member = select_random_ensemble_member(
-                validation_ds
-            )
-            log.info(f"Ensemble member (random): {ctx.ensemble_member}")
-        else:
-            validation_ds = validation_ds.sel(ensemble_member=ctx.ensemble_member)
+    if "ensemble_member" in validation_ds.dims and ctx.ensemble_member is None:
+        _, ctx.ensemble_member = select_random_ensemble_member(validation_ds)
+        log.info(f"Ensemble member (random): {ctx.ensemble_member}")
 
     is_forecast = is_forecast_dataset(validation_ds)
     spatially_aligned_ref = align_reference_spatially(validation_ds, ctx.reference_ds)
-
-    if is_forecast:
-        ds, ref_ds = align_to_valid_time_forecast(
+    snapshot = (
+        _select_forecast_snapshot(
             validation_ds, spatially_aligned_ref, ctx.init_time, ctx.lead_time
         )
-    else:
-        ds, ref_ds = align_to_valid_time_analysis(
-            validation_ds, spatially_aligned_ref, ctx.time
-        )
-    ds = _downsample_for_plot(ds)
-
-    val_time_label = _format_spatial_time_label(ds, is_forecast)
-    ref_time_label = pd.Timestamp(ref_ds.time.item()).strftime("%Y-%m-%dT%H:%M")
+        if is_forecast
+        else _select_analysis_snapshot(validation_ds, ctx.time)
+    )
+    ctx.spatial_time_label = _format_spatial_time_label(snapshot, is_forecast)
     val_label = validation_ds.attrs.get("name", "validation")
     ref_label = ctx.reference_ds.attrs.get("name", "reference")
-    ctx.spatial_time_label = val_time_label
-    ctx.ref_spatial_time_label = ref_time_label
-
-    n_vars = len(ctx.variables)
     log.info(
-        f"compare-spatial: {n_vars} variables at {val_time_label} "
-        f"(ref {ref_time_label})"
+        f"compare-spatial: {len(ctx.variables)} variables at {ctx.spatial_time_label}"
     )
 
     for var in ctx.variables:
         stats = ctx.stats_for(var)
         slice_sel = select_var_slice(ctx, var, stats)
         level_note = level_label(stats)
+        ds, ref_ds, comparable = _variable_spatial_snapshot(
+            ctx, var, snapshot, spatially_aligned_ref, stats
+        )
+        member = stats.spatial_member
+        assert stats.spatial_valid_time is not None
+        valid_time = pd.Timestamp(stats.spatial_valid_time)
+        val_time_label = _format_spatial_time_label(ds, is_forecast)
+        ref_time_label = stats.ref_spatial_time_label or "n/a"
 
         data = ds[var]
         if slice_sel:
             data = data.sel(slice_sel)
         data = load_retried(data)
-        ref_data = _reference_data(ref_ds, var, slice_sel, stats)
+        ref_data = (
+            _reference_data(ref_ds, var, slice_sel, stats) if comparable else None
+        )
         data_clean, ref_clean = _compute_spatial_stats(data, ref_data, stats)
 
-        stats.spatial_time_label = val_time_label
+        stats.spatial_time_label = f"{val_time_label}, valid={valid_time.isoformat()}"
+        if member is not None:
+            stats.spatial_time_label += f", member={member}"
         stats.spatial_plot = f"spatial_{var_slug(var)}.png"
 
         ds_title = val_label
-        if ctx.ensemble_member is not None:
-            ds_title += f" (ensemble {ctx.ensemble_member})"
-        ds_title += f"\n{var}{level_note} @ {val_time_label}"
+        if member is not None:
+            ds_title += f" (ensemble {member})"
+        ds_title += (
+            f"\n{var}{level_note} @ {val_time_label}\nvalid={valid_time.isoformat()}"
+        )
         ref_title = (
             f"{ref_label}\n{var}{level_note} @ {ref_time_label}"
             if ref_data is not None
             else "Validation only\nNo comparable reference"
         )
+
+        if stats.reference_time_warning is not None:
+            warning = stats.reference_time_warning.replace("; ", "\n")
+            ref_title += f"\nWARNING: {warning}"
 
         # Per-variable figure
         fig_v, axes_v = plt.subplots(1, 3, figsize=(15, 3.375), squeeze=False)

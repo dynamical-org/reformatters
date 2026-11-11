@@ -87,7 +87,7 @@ def _metadata_table(stats: VariableStats) -> list[str]:
 
 def _spatial_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     if stats.ref_available_spatial:
-        ref_clause = f"reference at {ctx.ref_spatial_time_label or 'n/a'}"
+        ref_clause = f"reference at {stats.ref_spatial_time_label or ctx.ref_spatial_time_label or 'n/a'}"
     else:
         ref_clause = (
             "reference not available"
@@ -115,6 +115,8 @@ def _spatial_table(stats: VariableStats, ctx: RunContext) -> list[str]:
                 stats.ref_spatial_max,
             )
         )
+    if stats.reference_time_warning is not None:
+        lines += ["", f"**Warning:** {stats.reference_time_warning}"]
     lines.append("")
     return lines
 
@@ -124,10 +126,16 @@ def _value_ts_table(stats: VariableStats, ctx: RunContext) -> list[str]:
     header = f"**Point time series** — {lo} - {hi}"
     if ctx.is_virtual:
         header += ", sampled"
-        if ctx.value_ts_lead_label is not None:
-            header += f" lead={ctx.value_ts_lead_label}"
-        if ctx.value_ts_member is not None:
-            header += f", member={ctx.value_ts_member}"
+        lead = stats.value_ts_lead_label or ctx.value_ts_lead_label
+        member = (
+            stats.value_ts_member
+            if stats.value_ts_member is not None
+            else ctx.value_ts_member
+        )
+        if lead is not None:
+            header += f" lead={lead}"
+        if member is not None:
+            header += f", member={member}"
         if stats.level_dim is not None:
             header += f", {stats.level_dim}={stats.level_value:g}"
     # std spreads over the non-time dims (lead / member); virtual and analysis stores
@@ -161,8 +169,13 @@ def _value_ts_table(stats: VariableStats, ctx: RunContext) -> list[str]:
 
 
 def _temporal_table(stats: VariableStats, ctx: RunContext) -> list[str]:
+    label = ctx.temporal_period_label or "n/a"
+    if stats.temporal_member is not None:
+        label += f", member={stats.temporal_member}"
+    if stats.temporal_lead_label is not None:
+        label += f", lead={stats.temporal_lead_label}"
     lines = [
-        f"**Temporal** — {ctx.temporal_period_label or 'n/a'}",
+        f"**Temporal** — {label}",
         "",
         "| Source | min | mean | max |",
         "|---|---|---|---|",
@@ -238,7 +251,7 @@ def _run_parameters_table(ctx: RunContext) -> list[str]:
 
     spatial_time = (
         f"{ctx.spatial_time_label or 'n/a'} "
-        f"(reference at {ctx.ref_spatial_time_label or 'n/a'})"
+        f"(member, lead and reference time recorded per variable)"
     )
 
     rows: list[tuple[str, str]] = [

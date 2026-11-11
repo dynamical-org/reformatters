@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import numpy as np
@@ -7,6 +8,12 @@ import pytest
 import xarray as xr
 
 from reformatters.common.template_utils import ignore_consolidated_metadata_spec_warning
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_1_degree_virtual.region_job import (
+    EcmwfIfsEnsForecast15Day01DegreeVirtualRegionJob,
+)
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_1_degree_virtual.template_config import (
+    EcmwfIfsEnsForecast15Day01DegreeVirtualTemplateConfig,
+)
 from reformatters.noaa.refs.forecast_hourly_virtual.template_config import (
     NoaaRefsForecastHourlyVirtualTemplateConfig,
 )
@@ -36,6 +43,10 @@ def statistic_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RunCon
     monkeypatch.setattr(
         "scripts.validation.scan_common.find_registered_dataset",
         Mock(return_value=Mock(template_config=Mock(data_vars=variables))),
+    )
+    monkeypatch.setattr(
+        "scripts.validation.value_timeseries.restrict_plot_coverage",
+        lambda ctx, var, ds, position: ds,
     )
     init = pd.date_range("2026-09-15", periods=3, freq="D")
     lead = pd.to_timedelta([0, 1, 2], unit="h")
@@ -124,3 +135,85 @@ def geographic_xy_store(tmp_path: Path) -> str:
     with ignore_consolidated_metadata_spec_warning():
         ds.to_zarr(store_path, zarr_format=3, consolidated=True)
     return str(store_path)
+
+
+@pytest.fixture
+def sparse_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RunContext:
+    config = EcmwfIfsEnsForecast15Day01DegreeVirtualTemplateConfig()
+    init = pd.date_range("2026-11-03", periods=2, freq="6h")
+    lead = pd.to_timedelta([0, 3, 150], unit="h")
+    ds = xr.Dataset(
+        coords={
+            "init_time": init,
+            "lead_time": lead,
+            "ensemble_member": [0, 25],
+            "latitude": [40.0, 30.0],
+            "longitude": [-100.0, -90.0],
+            "pressure_level": [500],
+            "valid_time": (
+                ("init_time", "lead_time"),
+                init.values[:, None] + lead.values[None, :],
+            ),
+        },
+        attrs={"dataset_id": config.dataset_id, "name": "Sparse forecast"},
+    )
+    dims = ("init_time", "lead_time", "ensemble_member", "latitude", "longitude")
+    shape = tuple(ds.sizes[d] for d in dims)
+    ds["temperature_2m"] = xr.DataArray(np.full(shape, 2.0), dims=dims)
+    ds["geopotential_height_surface"] = xr.DataArray(np.full(shape, np.nan), dims=dims)
+    ds["geopotential_height_surface"].loc[
+        {"lead_time": lead[0], "ensemble_member": 0}
+    ] = 100.0
+    ds["pressure_level/geopotential"] = xr.DataArray(
+        np.full((*shape, 1), np.nan), dims=(*dims, "pressure_level")
+    )
+    ds["pressure_level/geopotential"].loc[{"ensemble_member": 0}] = 5000.0
+    monkeypatch.setattr(
+        "scripts.validation.scan_common.find_registered_dataset",
+        lambda _: SimpleNamespace(
+            region_job_class=EcmwfIfsEnsForecast15Day01DegreeVirtualRegionJob,
+            template_config=config,
+        ),
+    )
+    times = pd.date_range("2026-11-03", "2026-11-10", freq="3h")
+    ref = xr.Dataset(
+        {
+            "temperature_2m": (
+                ("time", "latitude", "longitude"),
+                np.ones((len(times), 2, 2)),
+            ),
+            "geopotential_height_surface": (
+                ("time", "latitude", "longitude"),
+                np.full((len(times), 2, 2), 90.0),
+            ),
+            "pressure_level/geopotential": (
+                ("time", "latitude", "longitude", "pressure_level"),
+                np.full((len(times), 2, 2, 1), 4900.0),
+            ),
+        },
+        coords={
+            "time": times,
+            "latitude": ds.latitude,
+            "longitude": ds.longitude,
+            "pressure_level": ds.pressure_level,
+        },
+    )
+    return RunContext(
+        output_dir=tmp_path,
+        validation_url="s3://bucket/sparse/v1.icechunk",
+        reference_url=None,
+        validation_ds=ds,
+        reference_ds=ref,
+        started_at=pd.Timestamp.now(tz="UTC"),
+        point1_sel={"latitude": 0, "longitude": 0},
+        point2_sel={"latitude": 1, "longitude": 1},
+        point1_lat=40.0,
+        point1_lon=-100.0,
+        point2_lat=30.0,
+        point2_lon=-90.0,
+        ensemble_member=25,
+        variables=list(map(str, ds.data_vars)),
+        is_virtual=True,
+        init_time=str(init[0]),
+        lead_time="150",
+    )

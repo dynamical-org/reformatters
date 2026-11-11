@@ -1,4 +1,6 @@
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import icechunk
 import numpy as np
@@ -6,6 +8,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from scripts.validation import scan_common
 from scripts.validation.utils import (
     RunContext,
     _icechunk_storage,
@@ -21,6 +24,7 @@ from scripts.validation.utils import (
     parse_lead_time,
     parse_point_options,
     report_mean,
+    restrict_plot_coverage,
     select_var_slice,
     to_reference_longitude,
     var_slug,
@@ -360,3 +364,89 @@ def test_report_mean_near_cancellation_above_threshold() -> None:
         attrs={"standard_name": "wind_from_direction", "units": "degree"},
     )
     assert float(report_mean(data)) == pytest.approx(270.000005, abs=1e-7)
+
+
+@pytest.mark.parametrize("virtual", [False, True])
+def test_unregistered_plot_coverage_keeps_existing_behavior(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    virtual: bool,
+) -> None:
+
+    ds = xr.Dataset(
+        coords={
+            "init_time": pd.date_range("2026-11-03", periods=1),
+            "lead_time": pd.to_timedelta([0, 3], unit="h"),
+            "ensemble_member": [0, 25],
+        }
+    )
+    ds["test"] = xr.DataArray(
+        np.ones((1, 2, 2)), dims=("init_time", "lead_time", "ensemble_member")
+    )
+    monkeypatch.setattr(
+        "scripts.validation.scan_common.find_registered_dataset", lambda _: None
+    )
+    ctx = RunContext(
+        output_dir=tmp_path,
+        validation_url="unused",
+        reference_url=None,
+        validation_ds=ds,
+        reference_ds=None,
+        started_at=pd.Timestamp("2026-11-03"),
+        point1_sel={},
+        point2_sel={},
+        point1_lat=0,
+        point1_lon=0,
+        point2_lat=0,
+        point2_lon=0,
+        ensemble_member=25,
+        variables=["test"],
+        is_virtual=virtual,
+    )
+    assert restrict_plot_coverage(ctx, "test", ds, pd.Timestamp("2026-11-03")) is ds
+
+
+@pytest.mark.parametrize(
+    ("dim", "labels"),
+    [
+        ("ensemble_member", [99]),
+        ("lead_time", [pd.Timedelta("1h")]),
+    ],
+)
+def test_plot_coverage_preserves_empty_intersection(
+    sparse_context: RunContext,
+    dim: str,
+    labels: list[int | pd.Timedelta],
+) -> None:
+    ctx = sparse_context
+    position = pd.Timestamp(ctx.validation_ds.init_time.values[0])
+    var = "temperature_2m"
+    ctx.plot_coverage[position] = {var: {dim: labels}}
+    selected = restrict_plot_coverage(ctx, var, ctx.validation_ds, position)
+    assert selected.sizes[dim] == 0
+    assert selected[var].size == 0
+    assert ctx.validation_ds.sizes[dim] > 0
+
+
+def test_plot_coverage_without_coord_carriers_uses_job_variables(
+    sparse_context: RunContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ctx = sparse_context
+    position = pd.Timestamp(ctx.validation_ds.init_time.values[0])
+    dataset = scan_common.find_registered_dataset(ctx.validation_ds.attrs["dataset_id"])
+    assert dataset is not None
+    coord = SimpleNamespace(
+        variable_out_loc=lambda _var: {
+            "ensemble_member": (0,),
+            "lead_time": pd.Timedelta(0),
+        }
+    )
+    monkeypatch.setattr(
+        dataset.region_job_class, "source_file_coords", Mock(return_value=[coord])
+    )
+    for var in ctx.variables:
+        selected = restrict_plot_coverage(ctx, var, ctx.validation_ds, position)
+        assert selected.ensemble_member.values.tolist() == [0]
+        assert selected.get_index("lead_time").tolist() == [pd.Timedelta(0)]
+    assert set(ctx.plot_coverage[position]) == set(ctx.variables)

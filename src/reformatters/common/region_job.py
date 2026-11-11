@@ -109,6 +109,13 @@ class SourceFileCoord(FrozenBaseModel):
                 return coord
         return pd.Timestamp.min
 
+    def variable_out_loc(
+        self,
+        var: DataVar[Any],  # noqa: ARG002
+    ) -> Mapping[Dim, CoordinateValue | tuple[CoordinateValue, ...]]:
+        """Declared output coverage for a variable; omitted dimensions are unrestricted."""
+        return self.out_loc()
+
 
 class InitLeadSourceFileCoord(SourceFileCoord):
     """A source file holding one forecast step: the run it came from and how far ahead

@@ -9,6 +9,7 @@ import pytest
 import xarray as xr
 from matplotlib.figure import Figure
 
+from scripts.validation import value_timeseries
 from scripts.validation.utils import RunContext
 from scripts.validation.value_timeseries import (
     _compute_value_series,
@@ -186,7 +187,7 @@ def test_sample_virtual_points_pins_representative_slice() -> None:
     # Smallest nonzero lead (index 1) and middle level (index 1 of [1000, 500, 100]).
     assert da.lead_time.item() == ds.lead_time.values[1]
     assert da.pressure_level.item() == ds.pressure_level.values[1]
-    assert ctx.value_ts_lead_label == "6h"
+    assert stats.value_ts_lead_label == "6h"
     assert stats.level_dim == "pressure_level"
     assert stats.level_value == 500
     # Both points come from the same message; values match direct selection.
@@ -318,3 +319,53 @@ def test_full_period_wind_mean_wraps_across_time(tmp_path: Path) -> None:
     ctx = _ctx(ds, tmp_path)
     run_value_timeseries(ctx)
     assert ctx.stats["temperature_2m"].value_mean_p1 == pytest.approx(0.0, abs=1e-10)
+
+
+def test_sparse_value_samples_use_declared_member_and_lead(
+    sparse_context: RunContext,
+) -> None:
+    ctx = sparse_context
+    for var, member, lead, value in [
+        ("temperature_2m", 0, "3h", 2.0),
+        ("geopotential_height_surface", 0, "0h", 100.0),
+        ("pressure_level/geopotential", 0, "3h", 5000.0),
+    ]:
+        stats = ctx.stats_for(var)
+        sampled = _sample_virtual_points(ctx, var, stats)
+        assert sampled.ensemble_member.item() == member
+        assert pd.Timedelta(sampled.lead_time.item()) == pd.Timedelta(lead)
+        assert float(sampled.mean()) == value
+        assert stats.value_ts_lead_label == lead
+        assert stats.value_ts_member == member
+    assert ctx.value_ts_lead_label is None
+    assert ctx.value_ts_member is None
+
+
+def test_value_sample_resolves_coverage_at_each_initialization(
+    sparse_context: RunContext,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+
+    ctx = sparse_context
+    ctx.variables = ["temperature_2m"]
+    first = pd.Timestamp(ctx.validation_ds.init_time.values[0])
+    original = value_timeseries.restrict_plot_coverage
+
+    def restrict(
+        ctx: RunContext, var: str, ds: xr.Dataset, position: pd.Timestamp
+    ) -> xr.Dataset:
+        covered = original(ctx, var, ds, position)
+        member = 0 if position == first else 25
+        lead = pd.Timedelta("0h" if position == first else "150h")
+        return covered.sel(ensemble_member=[member], lead_time=[lead])
+
+    monkeypatch.setattr(value_timeseries, "restrict_plot_coverage", restrict)
+    stats = ctx.stats_for("temperature_2m")
+    sampled = _sample_virtual_points(ctx, "temperature_2m", stats)
+    assert sampled.dims == ("init_time", "point")
+    np.testing.assert_array_equal(sampled.ensemble_member, [0, 25])
+    np.testing.assert_array_equal(
+        sampled.lead_time, pd.to_timedelta([0, 150], unit="h")
+    )
+    assert stats.value_ts_member == "varies (0, 25)"
+    assert stats.value_ts_lead_label == "varies (0h, 150h)"

@@ -23,6 +23,9 @@ class _Coord:
     def out_loc(self) -> Mapping[str, Any]:
         return self.location
 
+    def variable_out_loc(self, _var: object) -> Mapping[str, Any]:
+        return self.location
+
 
 class _Job:
     append_dim = "init_time"
@@ -421,3 +424,51 @@ def test_root_and_scalar_presence_labels_are_validated(
     assert var_path in message
     assert f"missing={missing}" in message
     assert f"unexpected={unexpected}" in message
+
+
+def test_decode_uses_variable_specific_member_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loads = _spy_on_load(monkeypatch)
+    position = pd.Timestamp("2026-11-03")
+    dims = ("init_time", "ensemble_member", "y", "x")
+    ds = xr.Dataset(
+        {
+            "control": (dims, np.array([1.0, np.nan]).reshape(1, 2, 1, 1)),
+            "ordinary": (dims, np.full((1, 2, 1, 1), 2.0)),
+        },
+        coords={
+            "init_time": [position],
+            "ensemble_member": [0, 25],
+            "y": [0],
+            "x": [0],
+        },
+    )
+    context = _context(ds, ["control", "ordinary"], [{"init_time": position}])
+
+    def variable_out_loc(coord: _Coord, var: _Var) -> Mapping[str, Any]:
+        return {
+            **coord.out_loc(),
+            "ensemble_member": (0,) if var.path == "control" else (0, 25),
+        }
+
+    monkeypatch.setattr(_Coord, "variable_out_loc", variable_out_loc)
+    presence_calls: list[tuple[str, Mapping[str, Any]]] = []
+
+    def presence(var: str, loc: Mapping[str, Any]) -> Mapping[Any, bool]:
+        presence_calls.append((var, loc))
+        return {None: True}
+
+    result = validation.CheckVirtualDecodeHealth(
+        max_workers=1, reference_presence=presence
+    ).check(context)
+    assert result.passed, result.message
+    assert result.checked_count == 2
+    assert {call.name: call.indexes["ensemble_member"] for call in loads} == {
+        "control": [0],
+        "ordinary": [0, 25],
+    }
+    assert {var: loc["ensemble_member"] for var, loc in presence_calls} == {
+        "control": (0,),
+        "ordinary": (0, 25),
+    }

@@ -23,6 +23,7 @@ from reformatters.common.download import validate_s3_credentials
 from reformatters.common.retry import retry
 from reformatters.common.storage import virtual_chunk_credentials
 from reformatters.common.validation import open_flattened_dataset
+from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.google.weathernext3.forecast_virtual.template_config import (
     STATISTICS,
     GoogleWeathernext3DataVar,
@@ -224,6 +225,10 @@ class VariableStats:
     # Spatial comparison
     spatial_plot: str | None = None
     spatial_time_label: str | None = None
+    spatial_member: int | None = None
+    spatial_valid_time: str | None = None
+    ref_spatial_time_label: str | None = None
+    reference_time_warning: str | None = None
     val_spatial_min: float | None = None
     val_spatial_max: float | None = None
     val_spatial_mean: float | None = None
@@ -234,6 +239,8 @@ class VariableStats:
 
     # Value time series over the full period (per-timestep mean ± std at each point)
     value_ts_plot: str | None = None
+    value_ts_lead_label: str | None = None
+    value_ts_member: int | str | None = None
     value_mean_p1: float | None = None
     value_std_p1: float | None = None
     value_min_p1: float | None = None
@@ -245,6 +252,8 @@ class VariableStats:
 
     # Timeseries comparison
     temporal_plot: str | None = None
+    temporal_member: int | None = None
+    temporal_lead_label: str | None = None
     val_temporal_min_p1: float | None = None
     val_temporal_max_p1: float | None = None
     val_temporal_mean_p1: float | None = None
@@ -316,6 +325,9 @@ class RunContext:
         default_factory=dict
     )
     stats: dict[str, VariableStats] = field(default_factory=dict)
+    plot_coverage: dict[pd.Timestamp, dict[str, dict[str, list[Any]]]] = field(
+        default_factory=dict
+    )
 
     def stats_for(self, var: str) -> VariableStats:
         if var not in self.stats:
@@ -684,6 +696,67 @@ def select_random_ensemble_member(ds: xr.Dataset) -> tuple[xr.Dataset, int | Non
         ds.sel(ensemble_member=ensemble_member),
         ensemble_member,
     )
+
+
+def restrict_plot_coverage(
+    ctx: RunContext, var: str, ds: xr.Dataset, position: pd.Timestamp
+) -> xr.Dataset:
+    from scripts.validation.scan_common import find_registered_dataset  # noqa: PLC0415
+
+    if not ctx.is_virtual:
+        return ds
+    dataset = find_registered_dataset(ctx.validation_ds.attrs.get("dataset_id", ""))
+    if dataset is None or not issubclass(dataset.region_job_class, VirtualRegionJob):
+        return ds
+    if position not in ctx.plot_coverage:
+        config = dataset.template_config
+        coords = ctx.validation_ds.drop_vars(list(ctx.validation_ds.data_vars)).sel(
+            {config.append_dim: [position]}
+        )
+        job = dataset.region_job_class(
+            tmp_store=ctx.output_dir / "unused.zarr",
+            template_ds=xr.DataTree(coords),
+            data_vars=[v for v in config.data_vars if v.path in ctx.variables],
+            append_dim=config.append_dim,
+            region=slice(0, 1),
+            reformat_job_name="validation-plot-coverage",
+        )
+        coverage: dict[str, dict[str, set[Any]]] = {}
+        for coord in job.source_file_coords():
+            for data_var in getattr(coord, "data_vars", None) or job.data_vars:
+                for dim, values in coord.variable_out_loc(data_var).items():
+                    if dim not in ("ensemble_member", "lead_time"):
+                        continue
+                    labels = coverage.setdefault(data_var.path, {}).setdefault(
+                        dim, set()
+                    )
+                    for value in values if isinstance(values, tuple) else (values,):
+                        labels.add(value)
+        ctx.plot_coverage[position] = {
+            path: {dim: sorted(labels) for dim, labels in dims.items()}
+            for path, dims in coverage.items()
+        }
+    var_coverage = ctx.plot_coverage[position].get(var, {})
+    return ds.sel(
+        {
+            dim: [label for label in labels if label in ds.get_index(dim)]
+            for dim, labels in var_coverage.items()
+            if dim in ds.dims
+        }
+    )
+
+
+def select_plot_member(
+    ds: xr.Dataset, preferred: int | None
+) -> tuple[xr.Dataset, int | None]:
+    if "ensemble_member" not in ds.dims:
+        return ds, None
+    if preferred is None:
+        return select_random_ensemble_member(ds)
+    member = (
+        preferred if preferred in ds.ensemble_member else int(ds.ensemble_member[0])
+    )
+    return ds.sel(ensemble_member=member), member
 
 
 SPATIAL_DIMS = ("y", "x", "latitude", "longitude")
