@@ -51,7 +51,6 @@ class EcmwfIfsEnsForecastVirtualDataset(
                 name=f"{self.dataset_id.replace('-degree', '')}-update",
                 schedule=self.schedule,
                 concurrency_policy="Allow",
-                suspend=False,
                 pod_active_deadline=self.deadline,
                 active_deadline=self.deadline,
                 image=image_tag,
