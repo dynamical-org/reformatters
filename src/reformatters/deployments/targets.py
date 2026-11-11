@@ -14,7 +14,7 @@ class Cluster:
     resources: Sequence[OperationalResources]
     capacity_type: Literal["spot", "on-demand"]
     suspended: bool = False
-    environment: str = "prod"
+    github_environment: str = "prod"
     enabled: bool = True
 
     def configure_job[J: Job](self, job: J) -> J:
@@ -37,7 +37,7 @@ def clusters() -> tuple[Cluster, ...]:
                 *aws_us_west_2.CLUSTER_OPERATIONAL_ARCHIVERS,
             ],
             "spot",
-            environment="prod",
+            github_environment="prod",
         ),
         Cluster(
             "aws-us-east-1",
@@ -47,7 +47,7 @@ def clusters() -> tuple[Cluster, ...]:
             ],
             "on-demand",
             suspended=True,
-            environment="prod-us-east-1",
+            github_environment="prod-us-east-1",
             enabled=False,
         ),
     )

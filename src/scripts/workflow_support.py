@@ -33,14 +33,14 @@ def deployment_matrix() -> None:
     assert clusters[0].enabled, "The primary cluster must be enabled"
     matrix = {
         "include": [
-            {"cluster": cluster.name, "environment": cluster.environment}
+            {"cluster": cluster.name, "environment": cluster.github_environment}
             for cluster in clusters
             if cluster.enabled
         ]
     }
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.write(f"matrix={json.dumps(matrix)}\n")
-        output.write(f"primary_environment={clusters[0].environment}\n")
+        output.write(f"primary_environment={clusters[0].github_environment}\n")
 
 
 def prepare(args: argparse.Namespace) -> None:
@@ -65,7 +65,7 @@ def prepare(args: argparse.Namespace) -> None:
         assert not cluster.suspended, (
             f"{cluster.name} is policy-suspended; no workload was launched."
         )
-    outputs.update(cluster=cluster.name, environment=cluster.environment)
+    outputs.update(cluster=cluster.name, environment=cluster.github_environment)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.writelines(f"{key}={value}\n" for key, value in outputs.items())
 

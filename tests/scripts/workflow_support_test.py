@@ -248,7 +248,7 @@ def test_prepare_uses_target_metadata(
         argparse.Namespace(name="model")
     ]
     cluster = targets.Cluster(
-        "third", [resource], "spot", environment="third-env", enabled=enabled
+        "third", [resource], "spot", github_environment="third-env", enabled=enabled
     )
     monkeypatch.setattr(targets, "clusters", lambda: (cluster,))
     args = prepare_args(
@@ -294,11 +294,11 @@ def test_matrix_uses_ordered_enabled_metadata(
         targets,
         "clusters",
         lambda: (
-            targets.Cluster("third", [], "spot", environment="build-env"),
+            targets.Cluster("third", [], "spot", github_environment="build-env"),
             targets.Cluster(
-                "disabled", [], "spot", environment="disabled-env", enabled=False
+                "disabled", [], "spot", github_environment="disabled-env", enabled=False
             ),
-            targets.Cluster("fourth", [], "spot", environment="other-env"),
+            targets.Cluster("fourth", [], "spot", github_environment="other-env"),
         ),
     )
     output = tmp_path / "output"
