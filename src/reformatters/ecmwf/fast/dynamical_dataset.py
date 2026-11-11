@@ -73,9 +73,5 @@ class EcmwfFastDataset(DynamicalDataset[EcmwfDataVar, EcmwfFastSourceFileCoord])
             validation.CheckVirtualDecodeHealth(
                 sampled_leads=3,
                 max_workers=3,
-                reference_presence=lambda var_path, _out_loc: {
-                    None: var_path
-                    not in ("pressure_surface", "dew_point_temperature_2m")
-                },
             ),
         )
