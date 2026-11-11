@@ -492,7 +492,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             standard_name="volume_fraction_of_condensed_water_in_soil",
             level_value=1,
             legacy_soil_param="swvl1",
-            comment="ECMWF soil level 1, the uppermost soil layer.",
+            comment="ECMWF soil level 1, the uppermost soil layer. Applies over land only; over water the values are near zero, so mask with land_sea_mask_surface.",
         ),
         var(
             "volumetric_soil_moisture_layer_2",
@@ -503,7 +503,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             standard_name="volume_fraction_of_condensed_water_in_soil",
             level_value=2,
             legacy_soil_param="swvl2",
-            comment="ECMWF soil level 2, the second soil layer from the surface.",
+            comment="ECMWF soil level 2, the second soil layer from the surface. Applies over land only; over water the values are near zero, so mask with land_sea_mask_surface.",
         ),
         var(
             "land_sea_mask_surface",
@@ -621,7 +621,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             standard_name="volume_fraction_of_condensed_water_in_soil",
             level_value=3,
             legacy_soil_param="swvl3",
-            comment="ECMWF soil level 3.",
+            comment="ECMWF soil level 3. Applies over land only; over water the values are near zero, so mask with land_sea_mask_surface.",
         ),
         var(
             "soil_temperature_layer_4",
@@ -641,7 +641,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             standard_name="volume_fraction_of_condensed_water_in_soil",
             level_value=4,
             legacy_soil_param="swvl4",
-            comment="ECMWF soil level 4.",
+            comment="ECMWF soil level 4. Applies over land only; over water the values are near zero, so mask with land_sea_mask_surface.",
         ),
         var(
             "snow_albedo_surface",
@@ -755,6 +755,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             units="m",
             standard_name="lwe_thickness_of_surface_snow_amount",
             date_available=pd.Timestamp("2025-11-20T12:00:00"),
+            comment="Capped at 10 m; most of the Antarctic and Greenland ice sheets sit at this cap.",
         ),
         var(
             "sea_ice_thickness_surface",
@@ -780,7 +781,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             units="m s-1",
             standard_name="eastward_sea_water_velocity",
             date_available=IFS_CYCLE_49R1_CUTOVER,
-            comment="NaN where there is no ocean model value, including over land.",
+            comment="Applies over the ocean only; over land the values are NaN or near zero, so mask with land_sea_mask_surface.",
         ),
         var(
             "sea_water_velocity_v_surface",
@@ -789,7 +790,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             units="m s-1",
             standard_name="northward_sea_water_velocity",
             date_available=IFS_CYCLE_49R1_CUTOVER,
-            comment="NaN where there is no ocean model value, including over land.",
+            comment="Applies over the ocean only; over land the values are NaN or near zero, so mask with land_sea_mask_surface.",
         ),
         var(
             "net_short_wave_radiation_run_total_surface",
