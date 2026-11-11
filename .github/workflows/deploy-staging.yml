@@ -12,10 +12,37 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  IMAGE_TAG: "${{ secrets.DOCKER_REPOSITORY }}:${{ github.sha }}"
-
 jobs:
+  prepare:
+    name: Resolve staging target
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      cluster: ${{ steps.target.outputs.cluster }}
+      environment: ${{ steps.target.outputs.environment }}
+      dataset_id: ${{ steps.target.outputs.dataset_id }}
+      version: ${{ steps.target.outputs.version }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - name: Install uv
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
+      with:
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+    - name: Set up Python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version-file: .python-version
+    - name: Install the project
+      run: uv sync --all-extras --dev --locked
+    - name: Parse branch and resolve owner
+      id: target
+      env:
+        BRANCH: ${{ github.ref_name }}
+        AWS_US_EAST_1_DEPLOY_ENABLED: ${{ vars.AWS_US_EAST_1_DEPLOY_ENABLED }}
+      run: uv run src/scripts/workflow_support.py prepare --staging-branch "$BRANCH" --require-enabled
+
   quality:
     name: Code Quality (${{ matrix.suite }})
     runs-on: ubuntu-24.04
@@ -63,9 +90,12 @@ jobs:
 
   deploy:
     name: Deploy Staging
-    needs: quality
+    needs: [quality, prepare]
+    if: needs.prepare.outputs.cluster != 'aws-us-east-1' || vars.AWS_US_EAST_1_DEPLOY_ENABLED == 'true'
+    env:
+      IMAGE_TAG: "${{ secrets.DOCKER_REPOSITORY }}:${{ github.sha }}"
     runs-on: ubuntu-24.04
-    environment: prod
+    environment: ${{ needs.prepare.outputs.environment }}
     permissions:
       id-token: write
       contents: read
@@ -76,24 +106,6 @@ jobs:
         with:
           # Fetch main so deploy-staging can compare versions via git show
           fetch-depth: 0
-
-      - name: Parse branch name
-        id: parse
-        env:
-          BRANCH: ${{ github.ref_name }}
-        run: |
-          # Branch format: stage/{dataset_id}/v{version}
-          # Match the dataset and version components before exporting them.
-          if [[ ! "$BRANCH" =~ ^stage/([a-z0-9][a-z0-9-]*)/v([a-z0-9][a-z0-9.-]*)$ ]]; then
-            echo "::error::Could not parse dataset_id and version from branch '${BRANCH}'. Expected format: stage/{dataset_id}/v{version}"
-            exit 1
-          fi
-          DATASET_ID="${BASH_REMATCH[1]}"
-          VERSION="${BASH_REMATCH[2]}"
-
-          echo "dataset_id=${DATASET_ID}" >> "$GITHUB_OUTPUT"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Parsed dataset_id=${DATASET_ID}, version=${VERSION}"
 
       - name: Install uv
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
@@ -124,6 +136,11 @@ jobs:
         run: |
           aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
+      - name: Verify cluster identity
+        env:
+          CLUSTER: ${{ needs.prepare.outputs.cluster }}
+        run: uv run main verify-cluster "$CLUSTER"
+
       - name: Set up Depot CLI
         uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1
 
@@ -142,8 +159,8 @@ jobs:
 
       - name: Deploy staging
         env:
-          DATASET_ID: ${{ steps.parse.outputs.dataset_id }}
-          VERSION: ${{ steps.parse.outputs.version }}
+          DATASET_ID: ${{ needs.prepare.outputs.dataset_id }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: >
           uv run main deploy-staging
           "$DATASET_ID"

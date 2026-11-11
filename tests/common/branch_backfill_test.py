@@ -13,6 +13,7 @@ import zarr.errors
 from reformatters.common import template_utils
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
 from reformatters.common.zarr import copy_zarr_metadata
+from reformatters.deployments import targets
 from tests.common import parallel_writes_test
 from tests.common.dynamical_dataset_test import (
     ExampleDatasetStorageConfig,
@@ -45,6 +46,12 @@ def branch_dataset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ParallelD
 
 @pytest.fixture
 def submit_job(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    monkeypatch.setattr(
+        targets,
+        "cluster_for_resource",
+        Mock(return_value=targets.Cluster("test", [], "spot")),
+    )
+    monkeypatch.setattr(targets, "verify_cluster", Mock())
     monkeypatch.setattr(ParallelDataset, "_can_run_in_kubernetes", lambda self: True)
     monkeypatch.setattr(
         ExampleVirtualDataset, "_can_run_in_kubernetes", lambda self: True

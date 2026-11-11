@@ -1,4 +1,5 @@
 name: Deploy Operational Updates
+run-name: Deploy Operational Updates (${{ github.event.workflow_run.head_sha }})
 
 # Gate the production deploy on Code Quality passing on main.
 on:
@@ -18,14 +19,9 @@ permissions:
   id-token: write
   contents: read
 
-env:
-  # workflow_run's github.sha is the default-branch tip, so pin to the exact commit
-  # that passed Code Quality.
-  IMAGE_TAG: "${{ secrets.DOCKER_REPOSITORY }}:${{ github.event.workflow_run.head_sha }}"
-
 jobs:
-  deploy:
-    name: Deploy
+  build:
+    name: Build shared image
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
@@ -33,8 +29,11 @@ jobs:
       github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-24.04
     environment: prod
-
-    # Keep deploy-staging.yaml and these steps in sync
+    env:
+      CLUSTER: aws-us-west-2
+      IMAGE_TAG: "${{ secrets.DOCKER_REPOSITORY }}:${{ github.event.workflow_run.head_sha }}"
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,6 +68,9 @@ jobs:
         run: |
           aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
 
+      - name: Verify cluster identity
+        run: uv run main verify-cluster "$CLUSTER"
+
       - name: Set up Depot CLI
         uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1
 
@@ -85,5 +87,145 @@ jobs:
           context: .
           file: deploy/Dockerfile
 
+      - name: Record shared image digest
+        id: image
+        env:
+          DOCKER_REPOSITORY: ${{ secrets.DOCKER_REPOSITORY }}
+          IMAGE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          REPOSITORY_NAME="${DOCKER_REPOSITORY#*/}"
+          DIGEST=$(aws ecr describe-images --repository-name "$REPOSITORY_NAME" --image-ids "imageTag=$IMAGE_SHA" --query 'imageDetails[0].imageDigest' --output text)
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/shared-image"
+          printf '%s\n' "$DOCKER_REPOSITORY" > "$RUNNER_TEMP/shared-image/repository"
+          printf '%s\n' "$DIGEST" > "$RUNNER_TEMP/shared-image/digest"
+
+      - name: Share image metadata with east
+        if: vars.AWS_US_EAST_1_DEPLOY_ENABLED == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: shared-image
+          overwrite: true
+          path: ${{ runner.temp }}/shared-image/
+          retention-days: 1
+          if-no-files-found: error
+
+  deploy-west:
+    name: Deploy (aws-us-west-2)
+    needs: build
+    runs-on: ubuntu-24.04
+    environment: prod
+    env:
+      CLUSTER: aws-us-west-2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: "Set up Python"
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v6
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install the project
+        run: uv sync --all-extras --dev --locked
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5
+        with:
+          version: 'latest'
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+
+      - name: Verify cluster identity
+        run: uv run main verify-cluster "$CLUSTER"
+
       - name: Deploy
-        run: uv run main deploy --docker-image ${{ env.IMAGE_TAG }}
+        env:
+          DOCKER_REPOSITORY: ${{ secrets.DOCKER_REPOSITORY }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
+        run: uv run main deploy --cluster "$CLUSTER" --docker-image "$DOCKER_REPOSITORY@$IMAGE_DIGEST"
+
+  deploy-east:
+    name: Deploy (aws-us-east-1)
+    needs: build
+    if: vars.AWS_US_EAST_1_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    environment: prod-us-east-1
+    env:
+      CLUSTER: aws-us-east-1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: "Set up Python"
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v6
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install the project
+        run: uv sync --all-extras --dev --locked
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5
+        with:
+          version: 'latest'
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+
+      - name: Verify cluster identity
+        run: uv run main verify-cluster "$CLUSTER"
+
+      - name: Download shared image metadata
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: shared-image
+          path: ${{ runner.temp }}/shared-image/
+
+      - name: Install skopeo
+        run: sudo apt-get update && sudo apt-get install --yes skopeo
+
+      - name: Copy shared image to east ECR
+        env:
+          DOCKER_REPOSITORY: ${{ secrets.DOCKER_REPOSITORY }}
+          IMAGE_SHA: ${{ github.event.workflow_run.head_sha }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
+        run: bash src/scripts/copy_workflow_image.sh
+
+      - name: Deploy
+        env:
+          DOCKER_REPOSITORY: ${{ secrets.DOCKER_REPOSITORY }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
+        run: uv run main deploy --cluster "$CLUSTER" --docker-image "$DOCKER_REPOSITORY@$IMAGE_DIGEST"

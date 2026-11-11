@@ -55,6 +55,7 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike, Timestamp
 from reformatters.common.virtual_region_job import VirtualRegionJob
+from reformatters.deployments import targets
 
 DATA_VAR = TypeVar("DATA_VAR", bound=DataVar[Any])
 SOURCE_FILE_COORD = TypeVar("SOURCE_FILE_COORD", bound=SourceFileCoord)
@@ -421,6 +422,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         assert self._can_run_in_kubernetes(), (
             "backfill_kubernetes is only supported in prod environment"
         )
+        cluster = targets.cluster_for_resource(self.dataset_id)
+        targets.verify_cluster(cluster)
 
         if keep_branch is not None:
             self._validate_keep_branch(keep_branch, overwrite_chunks)
@@ -531,6 +534,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             dataset_id=self.dataset_id,
             workers_total=workers_total,
             parallelism=parallelism,
+            capacity_type=cluster.capacity_type,
             **reformat_job.model_dump(
                 include={
                     "cpu",
@@ -543,7 +547,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             ),
         )
         subprocess.run(
-            ["/usr/bin/kubectl", "apply", "-f", "-"],
+            ["/usr/bin/kubectl", "apply", "--namespace", "default", "-f", "-"],
             input=json.dumps(kubernetes_job.as_kubernetes_object()),
             text=True,
             check=True,

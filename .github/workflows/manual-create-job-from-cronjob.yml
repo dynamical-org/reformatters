@@ -70,17 +70,56 @@ concurrency:
   group: k8s-manual-${{ github.actor }}-${{ github.run_id }}
   cancel-in-progress: false
 permissions:
-  id-token: write
   contents: read
 jobs:
-  create-job:
-    name: Create Job
+  prepare:
+    name: Resolve target
     runs-on: ubuntu-24.04
-    environment: prod
+    permissions:
+      contents: read
+    outputs:
+      cluster: ${{ steps.target.outputs.cluster }}
+      environment: ${{ steps.target.outputs.environment }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - name: Install uv
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       with:
-        sparse-checkout: .
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+    - name: Set up Python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version-file: .python-version
+    - name: Install the project
+      run: uv sync --all-extras --dev --locked
+    - name: Resolve target
+      id: target
+      env:
+        TARGET: ${{ inputs.cronjob_name }}
+        AWS_US_EAST_1_DEPLOY_ENABLED: ${{ vars.AWS_US_EAST_1_DEPLOY_ENABLED }}
+      run: uv run src/scripts/workflow_support.py prepare --cronjob-name "$TARGET" --require-enabled
+  create-job:
+    needs: prepare
+    permissions:
+      contents: read
+      id-token: write
+    name: Create Job
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.prepare.outputs.environment }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - name: Install uv
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
+      with:
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+    - name: Set up Python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version-file: .python-version
+    - name: Install the project
+      run: uv sync --all-extras --dev --locked
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
       with:
@@ -92,6 +131,10 @@ jobs:
         version: latest
     - name: Update kubeconfig
       run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+    - name: Verify cluster identity
+      env:
+        CLUSTER: ${{ needs.prepare.outputs.cluster }}
+      run: uv run main verify-cluster "$CLUSTER"
     - name: Submit job (SEE LOGS)
       env:
         CRONJOB_NAME: ${{ github.event.inputs.cronjob_name }}
@@ -99,6 +142,12 @@ jobs:
       run: |
         #!/bin/bash
         set -euo pipefail
+
+        SUSPENDED=$(kubectl --namespace default get cronjob "$CRONJOB_NAME" -o jsonpath='{.spec.suspend}')
+        if [ "$SUSPENDED" = "true" ]; then
+          echo "::error::CronJob ${CRONJOB_NAME} is suspended; this workflow cannot launch it. Use an explicitly approved bounded Job for a quiet-window test."
+          exit 1
+        fi
 
         RANDOM_CHARS=$(openssl rand -hex 1)
 
@@ -118,7 +167,7 @@ jobs:
         JOB_NAME="${CRONJOB_TRUNCATED}-${USERNAME_TRUNCATED}-${RANDOM_CHARS}"
 
         echo "Creating job: ${JOB_NAME} from cronjob: ${CRONJOB_NAME}"
-        kubectl create job "--from=cronjob/${CRONJOB_NAME}" "${JOB_NAME}"
+        kubectl --namespace default create job "--from=cronjob/${CRONJOB_NAME}" "${JOB_NAME}"
 
         echo ""
         echo "## Job Created Successfully"

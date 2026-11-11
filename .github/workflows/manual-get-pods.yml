@@ -1,6 +1,15 @@
 name: 'Manual: Get Pods'
 'on':
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      cluster:
+        description: Cluster to inspect
+        required: true
+        type: choice
+        default: aws-us-west-2
+        options:
+        - aws-us-west-2
+        - aws-us-east-1
 permissions:
   id-token: write
   contents: read
@@ -8,11 +17,20 @@ jobs:
   get-pods:
     name: Get Pods
     runs-on: ubuntu-24.04
-    environment: prod
+    environment: ${{ inputs.cluster == 'aws-us-east-1' && 'prod-us-east-1' || 'prod' }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - name: Install uv
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
       with:
-        sparse-checkout: .
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+    - name: Set up Python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version-file: .python-version
+    - name: Install the project
+      run: uv sync --all-extras --dev --locked
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
       with:
@@ -24,13 +42,17 @@ jobs:
         version: latest
     - name: Update kubeconfig
       run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+    - name: Verify cluster identity
+      env:
+        CLUSTER: ${{ inputs.cluster }}
+      run: uv run main verify-cluster "$CLUSTER"
     - name: Get pods (SEE LOGS)
       run: |
         #!/bin/bash
         set -euo pipefail
 
         # Get pods and save output (capture both stdout and stderr for "No resources found" message)
-        OUTPUT=$(kubectl get pods --sort-by=.metadata.creationTimestamp 2>&1)
+        OUTPUT=$(kubectl --namespace default get pods --sort-by=.metadata.creationTimestamp 2>&1)
 
         # Print to logs (plaintext version of summary)
         echo "## Kubernetes Pods"

@@ -105,62 +105,18 @@ concurrency:
   group: k8s-manual-${{ github.actor }}-${{ github.run_id }}
   cancel-in-progress: false
 permissions:
-  id-token: write
   contents: read
   actions: read
 jobs:
-  backfill:
-    name: Backfill
+  prepare:
+    name: Resolve target
     runs-on: ubuntu-24.04
-    environment: prod
+    permissions:
+      contents: read
+    outputs:
+      cluster: ${{ steps.target.outputs.cluster }}
+      environment: ${{ steps.target.outputs.environment }}
     steps:
-    - name: Require main and wait for its deploy
-      env:
-        GH_TOKEN: ${{ github.token }}
-        GH_REPO: ${{ github.repository }}
-      run: |
-        #!/bin/bash
-        set -euo pipefail
-
-        if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
-          echo "::error::Backfills must run from main (got ${GITHUB_REF}); the worker image is built by main's deploy."
-          exit 1
-        fi
-
-        # The kubernetes workers run the image the deploy of this exact commit built,
-        # so wait for that deploy (Code Quality gates it) before submitting anything.
-        echo "Waiting up to 30 minutes for the deploy of ${GITHUB_SHA} so the backfill runs exactly that code..."
-        for _ in $(seq 1 60); do
-          DEPLOY=$(gh run list --workflow deploy-operational-updates.yml --commit "${GITHUB_SHA}" --json status,conclusion --jq 'if length > 0 then "\(.[0].status) \(.[0].conclusion)" else "" end')
-          if [ -n "${DEPLOY}" ]; then
-            read -r STATUS CONCLUSION <<< "${DEPLOY}"
-            if [ "${STATUS}" = "completed" ]; then
-              if [ "${CONCLUSION}" = "success" ]; then
-                echo "Deploy of ${GITHUB_SHA} succeeded."
-                exit 0
-              fi
-              echo "::error::The deploy of ${GITHUB_SHA} concluded '${CONCLUSION}'. Fix the deploy, then re-run this backfill."
-              exit 1
-            fi
-            echo "Deploy is ${STATUS}..."
-          else
-            QUALITY=$(gh run list --workflow code-quality.yml --commit "${GITHUB_SHA}" --json status,conclusion --jq 'if length > 0 then "\(.[0].status) \(.[0].conclusion)" else "" end')
-            if [ -n "${QUALITY}" ]; then
-              read -r STATUS CONCLUSION <<< "${QUALITY}"
-              if [ "${STATUS}" = "completed" ] && [ "${CONCLUSION}" != "success" ]; then
-                echo "::error::Code Quality concluded '${CONCLUSION}' for ${GITHUB_SHA}, so it will never deploy."
-                exit 1
-              fi
-              echo "Deploy not started yet (Code Quality is ${STATUS})..."
-            else
-              echo "Waiting for Code Quality and deploy runs to appear for ${GITHUB_SHA}..."
-            fi
-          fi
-          sleep 30
-        done
-
-        echo "::error::Timed out waiting for the deploy of ${GITHUB_SHA}."
-        exit 1
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
     - name: Install uv
       uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
@@ -173,6 +129,41 @@ jobs:
         python-version-file: .python-version
     - name: Install the project
       run: uv sync --all-extras --dev --locked
+    - name: Resolve target
+      id: target
+      env:
+        TARGET: ${{ inputs.dataset_id }}
+        AWS_US_EAST_1_DEPLOY_ENABLED: ${{ vars.AWS_US_EAST_1_DEPLOY_ENABLED }}
+      run: uv run src/scripts/workflow_support.py prepare --dataset-id "$TARGET" --backfill
+  backfill:
+    needs: prepare
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    name: Backfill
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.prepare.outputs.environment }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - name: Install uv
+      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
+      with:
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+    - name: Set up Python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+      with:
+        python-version-file: .python-version
+    - name: Install the project
+      run: uv sync --all-extras --dev --locked
+    - name: Require selected target deployment of this SHA
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        CLUSTER: ${{ needs.prepare.outputs.cluster }}
+        AWS_US_EAST_1_DEPLOY_ENABLED: ${{ vars.AWS_US_EAST_1_DEPLOY_ENABLED }}
+      run: uv run src/scripts/workflow_support.py wait-for-deploy "$CLUSTER"
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
       with:

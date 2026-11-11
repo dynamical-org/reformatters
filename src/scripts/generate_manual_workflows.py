@@ -7,6 +7,7 @@ from pathlib import Path
 from reformatters.__main__ import DYNAMICAL_DATASETS, OPERATIONAL_ARCHIVERS
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.logging import get_logger
+from reformatters.deployments.targets import clusters
 
 log = get_logger(__name__)
 
@@ -100,6 +101,13 @@ def main() -> None:
         "dataset_id",
         get_backfill_dataset_ids(),
     )
+
+    for filename in ("manual-get-jobs.yml", "manual-get-pods.yml"):
+        update_choice_options(
+            workflows_dir / filename,
+            "cluster",
+            [cluster.name for cluster in clusters()],
+        )
 
 
 if __name__ == "__main__":

@@ -58,12 +58,15 @@ If a dataset for the same provider/model already exists, reuse its shared config
 
 ### 2. Register your dataset
 
-Add an instance of your `DynamicalDataset` subclass to the `DYNAMICAL_DATASETS` constant in `src/reformatters/__main__.py`:
+Add an instance of your `DynamicalDataset` subclass to the owning cluster's
+`CLUSTER_DYNAMICAL_DATASETS` in `src/reformatters/deployments/`. The CLI merges
+these lists into the global registry; each dataset must belong to exactly one
+cluster. Shared storage configurations live in `deployments/storage.py`.
 
 ```python
 from reformatters.provider.model.variant import ProviderModelVariantDataset
 
-DYNAMICAL_DATASETS = [
+CLUSTER_DYNAMICAL_DATASETS = [
     ...,
     ProviderModelVariantDataset(
         primary_storage_config=ProviderModelIcechunkAwsOpenDataDatasetStorageConfig(),

@@ -2,7 +2,7 @@ import json
 import subprocess
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 
@@ -17,6 +17,7 @@ from reformatters.common.kubernetes_security import (
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.operational import OperationalResources
+from reformatters.deployments import targets
 
 log = get_logger(__name__)
 
@@ -26,7 +27,14 @@ def deploy_operational_resources(
     docker_image: str | None = None,
     dataset_id_filter: str | None = None,
     cronjob_transform: Callable[[kubernetes.CronJob], kubernetes.CronJob] | None = None,
+    cluster: targets.Cluster | None = None,
 ) -> None:
+    resources = list(resources)
+    if dataset_id_filter is not None:
+        resources = [r for r in resources if r.dataset_id == dataset_id_filter]
+        assert resources, f"Unknown dataset_id_filter={dataset_id_filter!r}"
+    if not resources:
+        return
     image_tag = docker_image or docker.build_and_push_image()
 
     reformat_jobs: list[kubernetes.CronJob] = []
@@ -43,11 +51,10 @@ def deploy_operational_resources(
             )
             continue
 
-        if dataset_id_filter is not None and resource.dataset_id != dataset_id_filter:
-            continue
-
         if cronjob_transform is not None:
             dataset_cronjobs = [cronjob_transform(cj) for cj in dataset_cronjobs]
+        if cluster is not None:
+            dataset_cronjobs = [cluster.configure_job(cj) for cj in dataset_cronjobs]
 
         reformat_jobs.extend(dataset_cronjobs)
 
@@ -80,8 +87,25 @@ def _apply_resources(resources: list[dict[str, Any]]) -> None:
 def register_commands(
     app: typer.Typer,
     datasets: Sequence[DynamicalDataset[Any, Any]],
-    archivers: Sequence[OperationalResources] = (),
 ) -> None:
+    @app.command()
+    def resolve_cluster(
+        dataset_id: str | None = None, cronjob_name: str | None = None
+    ) -> None:
+        assert (dataset_id is None) != (cronjob_name is None), (
+            "Specify exactly one of --dataset-id and --cronjob-name"
+        )
+        cluster = (
+            targets.cluster_for_resource(dataset_id)
+            if dataset_id is not None
+            else targets.cluster_for_cronjob(str(cronjob_name))
+        )
+        typer.echo(cluster.name)
+
+    @app.command()
+    def verify_cluster(cluster: str) -> None:
+        targets.verify_cluster(targets.get_cluster(cluster))
+
     @app.command()
     def verify_kubernetes_admission(bundle: Path, namespace: str = "default") -> None:
         """Probe admission using server-side dry runs; creates no resources."""
@@ -126,11 +150,20 @@ def register_commands(
 
     @app.command()
     def deploy(
+        cluster: Annotated[str, typer.Option()],
         docker_image: str | None = None,
         dataset_id: str | None = None,
     ) -> None:
+        target = targets.get_cluster(cluster)
+        if dataset_id is not None:
+            assert targets.cluster_for_resource(dataset_id).name == target.name, (
+                f"{dataset_id} is not assigned to {target.name}"
+            )
+        if not target.resources:
+            return
+        targets.verify_cluster(target)
         deploy_operational_resources(
-            [*datasets, *archivers], docker_image, dataset_id_filter=dataset_id
+            target.resources, docker_image, dataset_id_filter=dataset_id, cluster=target
         )
 
     @app.command()
@@ -141,6 +174,8 @@ def register_commands(
     ) -> None:
         """Deploy staging cronjobs for a single dataset version."""
         dataset = staging.find_dataset(datasets, dataset_id)
+        target = targets.cluster_for_resource(dataset_id)
+        targets.verify_cluster(target)
         staging.validate_version_matches_template(dataset, version)
         staging.validate_version_differs_from_main(dataset, version)
 
@@ -152,6 +187,7 @@ def register_commands(
             docker_image=docker_image,
             dataset_id_filter=dataset_id,
             cronjob_transform=transform,
+            cluster=target,
         )
 
     @app.command()
@@ -170,4 +206,5 @@ def register_commands(
                 "Run with --force to execute."
             )
             return
+        targets.verify_cluster(targets.cluster_for_resource(dataset_id))
         staging.cleanup_staging_resources(dataset_id, version)

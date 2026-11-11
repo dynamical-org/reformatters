@@ -115,7 +115,15 @@ def cleanup_staging_resources(
     # Delete kubernetes cronjobs
     log.info(f"Deleting kubernetes cronjobs: {cronjob_names}")
     subprocess.run(  # noqa: S603
-        ["/usr/bin/kubectl", "delete", "cronjob", *cronjob_names, "--ignore-not-found"],
+        [
+            "/usr/bin/kubectl",
+            "delete",
+            "cronjob",
+            *cronjob_names,
+            "--namespace",
+            "default",
+            "--ignore-not-found",
+        ],
         check=True,
     )
 

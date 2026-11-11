@@ -10,6 +10,10 @@ Container image inputs in `deploy/Dockerfile` are pinned to multi-platform diges
 
 ### Setup
 
+See [cluster deployments](cluster_deployments.md) for registry ownership, the
+administrator-owned cluster identity prerequisite, regional GitHub environments,
+and a staged handoff between clusters.
+
 1. Install `docker` and `kubectl`. Make sure `docker` can be found at `/usr/bin/docker` and `kubectl` at `/usr/bin/kubectl`.
 1. Setup a docker image repository and export the `DOCKER_REPOSITORY` environment variable in your local shell. e.g. `export DOCKER_REPOSITORY=container.registry/<project-id>/reformatters/main`. Follow your registry's instructions to allow your docker to authenticate and push images to the registry.
 1. Setup a kubernetes cluster and configure kubectl to point to your cluster. e.g. `aws eks update-kubeconfig --region <region> --name <cluster-name>`, `gcloud container clusters get-credentials <cluster-name> --region <region> --project <project>`, etc.

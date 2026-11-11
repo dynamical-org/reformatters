@@ -56,6 +56,7 @@ class Job(pydantic.BaseModel):
 
     secret_names: Sequence[str] = pydantic.Field(default_factory=list)
     service_account_name: str | None = None
+    capacity_type: Literal["spot", "on-demand"] = "spot"
 
     def mounted_secret_names(self) -> Sequence[str]:
         """Secrets mounted as JSON files at /secrets/<name>.json in the pod."""
@@ -211,7 +212,7 @@ class Job(pydantic.BaseModel):
                         ],
                         "nodeSelector": {
                             "eks.amazonaws.com/compute-type": "auto",
-                            "karpenter.sh/capacity-type": "spot",
+                            "karpenter.sh/capacity-type": self.capacity_type,
                         },
                         "restartPolicy": "Never",
                         **(
