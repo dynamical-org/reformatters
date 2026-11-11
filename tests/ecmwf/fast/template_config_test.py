@@ -120,11 +120,11 @@ def test_model_specific_forecast_axes() -> None:
         EcmwfAifsEnsForecastFastTemplateConfig(),
     ],
 )
-def test_commercial_license_is_exact_and_confined_to_license(
+def test_license_is_exact_and_confined_to_license(
     config: EcmwfFastTemplateConfig,
 ) -> None:
     attrs = config.dataset_attributes.model_dump()
-    assert attrs.pop("license") == "LicenseRef-Commercial"
+    assert attrs.pop("license") == "CC-BY-4.0"
     assert "licen" not in json.dumps(attrs).lower()
     with pytest.raises(ValidationError):
         DatasetAttributes(**attrs, license="LicenseRef-Unapproved")
