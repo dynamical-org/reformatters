@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from itertools import pairwise
 from pathlib import Path
-from threading import Barrier, Event, Lock, Thread
+from threading import Barrier, Event, Lock, Thread, local
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -259,6 +259,7 @@ def test_application_retry_events_measure_attempts_and_actual_backoff_without_er
         etag: str | None,
         *,
         application_attempt: int,
+        timing: region_job._FetchTiming,
     ) -> list[VirtualRef]:
         nonlocal clock
         attempts.append(application_attempt)
@@ -266,6 +267,25 @@ def test_application_retry_events_measure_attempts_and_actual_backoff_without_er
         assert size == len(data)
         assert etag == ETAG
         clock += application_attempt * 2
+        timing.ranges.extend(
+            [
+                region_job._RangeTiming(
+                    i,
+                    i * 10,
+                    (i + 1) * 10,
+                    "start",
+                    0.2,
+                    application_attempt * (i + 1),
+                    application_attempt * (i + 1),
+                    10,
+                    "complete",
+                    None,
+                    None,
+                )
+                for i in range(2)
+            ]
+        )
+        timing.drain_s = 1.5
         if application_attempt == 1:
             raise error
         return []
@@ -290,18 +310,23 @@ def test_application_retry_events_measure_attempts_and_actual_backoff_without_er
         for r in caplog.records
     ]
     assert [e["event"] for e in events] == [
-        "fetch_attempt_start",
-        "fetch_attempt_failed",
-        "fetch_attempt_start",
-        "fetch_attempt_complete",
+        "fetch_attempt",
+        "range_fetch",
+        "range_fetch",
+        "fetch_attempt",
     ]
-    assert [e["application_attempt"] for e in events] == [1, 1, 2, 2]
-    assert events[1]["elapsed_s"] == 2.0
-    assert events[1]["backoff_s"] == 0.125
-    assert events[1]["error_type"] == "GenericError"
-    assert events[1]["cause_type"] == "TimeoutError"
-    assert events[1]["retrying"] is True
+    assert [e["application_attempt"] for e in events] == [1, 1, 1, 2]
+    assert events[0]["elapsed_s"] == 2.0
+    assert events[0]["backoff_s"] == 0.125
+    assert events[0]["error_type"] == "GenericError"
+    assert events[0]["cause_type"] == "TimeoutError"
+    assert events[0]["retrying"] is True
+    assert events[0]["slowest_range_index"] == 1
+    assert events[0]["slowest_range_s"] == 2.0
+    assert events[0]["drain_s"] == 1.5
     assert events[-1]["elapsed_s"] == 4.0
+    assert events[-1]["retrying"] is False
+    assert events[-1]["error_type"] is None
     assert not any(
         word in caplog.text
         for word in (
@@ -348,7 +373,7 @@ def test_application_terminal_events_preserve_retry_policy_and_exception(
     failures = [
         json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
         for r in caplog.records
-        if '"event": "fetch_attempt_failed"' in r.getMessage()
+        if '"event": "fetch_attempt"' in r.getMessage()
     ]
     assert len(failures) == attempts
     assert failures[-1]["application_attempt"] == attempts
@@ -395,12 +420,18 @@ def test_range_events_measure_headers_body_and_failure_without_secrets(
     monkeypatch.setattr(region_job, "TARGET_RANGE_CHUNK", len(data))
     monkeypatch.setattr(region_job, "monotonic", lambda: clock)
     monkeypatch.setattr(region_job.obstore, "get", get)
+    timing = region_job._FetchTiming()
     with caplog.at_level("INFO"):
         if failure_phase is None:
             assert (
                 b"".join(
                     region_job._ranged_chunks(
-                        STORE, coord.key, len(data), ETAG, application_attempt=2
+                        STORE,
+                        coord.key,
+                        len(data),
+                        ETAG,
+                        application_attempt=2,
+                        timing=timing,
                     )
                 )
                 == data
@@ -411,42 +442,189 @@ def test_range_events_measure_headers_body_and_failure_without_secrets(
             ):
                 list(
                     region_job._ranged_chunks(
-                        STORE, coord.key, len(data), ETAG, application_attempt=2
+                        STORE,
+                        coord.key,
+                        len(data),
+                        ETAG,
+                        application_attempt=2,
+                        timing=timing,
                     )
                 )
     events = [
         json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
         for r in caplog.records
     ]
-    assert events[0]["event"] == "range_start"
-    assert events[-1]["event"] == "range_executor_drained"
-    for event in events[:-1]:
-        assert event["application_attempt"] == 2
-        assert event["range_index"] == event["range_start"] == 0
-        assert event["range_end_exclusive"] == event["range_bytes"] == len(data)
-    headers = [e for e in events if e["event"] == "range_headers"]
-    assert len(headers) == (failure_phase != "headers")
-    if headers:
-        assert headers[0]["elapsed_s"] == 2.0
-    bodies = [e for e in events if e["event"] == "range_body_complete"]
-    assert len(bodies) == (failure_phase in (None, "body_validation"))
-    if bodies:
-        assert bodies[0]["elapsed_s"] == 5.0
-        assert bodies[0]["bytes_received"] == len(data) - (
-            failure_phase == "body_validation"
-        )
-    failures = [e for e in events if e["event"] == "range_failed"]
-    assert len(failures) == (failure_phase is not None)
-    if failures:
-        assert failures[0]["phase"] == failure_phase
-        assert failures[0]["bytes_received"] == (
-            len(data) - 1 if failure_phase == "body_validation" else None
-        )
+    assert len(events) == (failure_phase is not None)
+    (result,) = timing.ranges
+    assert result.range_index == result.range_start == 0
+    assert result.range_end_exclusive == len(data)
+    assert result.headers_s == (None if failure_phase == "headers" else 2.0)
+    assert result.body_s == (
+        5.0 if failure_phase in (None, "body_validation") else None
+    )
+    assert result.phase == (failure_phase or "complete")
+    assert result.bytes_received == (
+        len(data) - (failure_phase == "body_validation")
+        if failure_phase in (None, "body_validation")
+        else None
+    )
+    assert all(
+        value is None or isinstance(value, (str, int, float)) for value in result
+    )
+    assert timing.drain_s is not None
+    if events:
+        assert events[0]["event"] == "range_fetch"
+        assert events[0]["application_attempt"] == 2
+        assert events[0]["phase"] == failure_phase
+        assert events[0]["bytes_received"] == result.bytes_received
     assert all(owner() is None for owner in owners)
     assert not any(
         word in caplog.text
         for word in ("private", "credential", "secret", "Authorization")
     )
+
+
+@pytest.mark.parametrize("elapsed", [29.999, 30.0, 30.001])
+def test_slow_range_details_include_threshold_boundary(
+    ranged_job: tuple[EcmwfFastRegionJob, EcmwfFastSourceFileCoord, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    elapsed: float,
+) -> None:
+    _, coord, data = ranged_job
+    clock = 0.0
+    owners: list[weakref.ReferenceType[Payload]] = []
+
+    class TimedResponse(Response):
+        def bytes(self) -> Payload:
+            nonlocal clock
+            clock = elapsed
+            return super().bytes()
+
+    def get(store: ObjectStore, key: str, *, options: dict[str, Any]) -> Response:
+        return TimedResponse(data, options["range"], owners)
+
+    monkeypatch.setattr(region_job, "TARGET_RANGE_CHUNK", len(data))
+    monkeypatch.setattr(region_job, "monotonic", lambda: clock)
+    monkeypatch.setattr(region_job.obstore, "get", get)
+    with caplog.at_level("INFO"):
+        assert (
+            b"".join(region_job._ranged_chunks(STORE, coord.key, len(data), ETAG))
+            == data
+        )
+    details = [
+        json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
+        for r in caplog.records
+    ]
+    assert region_job.SLOW_RANGE_SECONDS == 30.0
+    assert len(details) == (elapsed >= 30.0)
+    if details:
+        assert details[0]["event"] == "range_fetch"
+        assert details[0]["elapsed_s"] == elapsed
+        assert details[0]["error_type"] is None
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_slow_or_failed_range_detail_precedes_sibling_drain(
+    ranged_job: tuple[EcmwfFastRegionJob, EcmwfFastSourceFileCoord, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+    failed: bool,
+) -> None:
+    _, coord, data = ranged_job
+    clock = local()
+    blocked, reported, release = Event(), Event(), Event()
+    owners: list[weakref.ReferenceType[Payload]] = []
+    details = []
+
+    class TimedResponse(Response):
+        def bytes(self) -> Payload:
+            clock.value = 30.0
+            return super().bytes()
+
+    def get(store: ObjectStore, key: str, *, options: dict[str, Any]) -> Response:
+        if options["range"][0] == 0:
+            if failed:
+                raise GenericError("not logged")
+            return TimedResponse(data, options["range"], owners)
+        blocked.set()
+        assert release.wait(5)
+        return Response(data, options["range"], owners)
+
+    def event(name: str, **fields: object) -> None:
+        assert name == "range_fetch"
+        details.append(fields)
+        reported.set()
+
+    monkeypatch.setattr(region_job, "TARGET_RANGE_CHUNK", (len(data) + 1) // 2)
+    monkeypatch.setattr(region_job, "monotonic", lambda: getattr(clock, "value", 0.0))
+    monkeypatch.setattr(region_job.obstore, "get", get)
+    monkeypatch.setattr(region_job, "log_virtual_event", event)
+    with ThreadPoolExecutor(1) as driver:
+        pending = driver.submit(
+            lambda: list(region_job._ranged_chunks(STORE, coord.key, len(data), ETAG))
+        )
+        try:
+            assert blocked.wait(5)
+            assert reported.wait(5)
+            assert not pending.done()
+            assert len(details) == 1
+        finally:
+            release.set()
+        if failed:
+            with pytest.raises(GenericError):
+                pending.result(timeout=5)
+        else:
+            assert b"".join(pending.result(timeout=5)) == data
+    assert len(details) == 1
+
+
+def test_retry_details_include_other_ranges_once_without_duplicate_failures_or_slow_ranges(
+    ranged_job: tuple[EcmwfFastRegionJob, EcmwfFastSourceFileCoord, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    job, coord, data = ranged_job
+    clock = local()
+    attempts: dict[int, int] = {}
+    owners: list[weakref.ReferenceType[Payload]] = []
+
+    class TimedResponse(Response):
+        elapsed: float = 1.0
+
+        def bytes(self) -> Payload:
+            clock.value += self.elapsed - 0.5
+            return super().bytes()
+
+    def get(store: ObjectStore, key: str, *, options: dict[str, Any]) -> Response:
+        index = next(i for i in range(4) if options["range"][0] == len(data) * i // 4)
+        attempts[index] = attempts.get(index, 0) + 1
+        clock.value = getattr(clock, "value", 0.0) + 0.5
+        if index == 0 and attempts[index] == 1:
+            raise GenericError("secret error text")
+        response = TimedResponse(data, options["range"], owners)
+        response.elapsed = 31.0 if index == 1 and attempts[index] == 1 else 1.0
+        return response
+
+    monkeypatch.setattr(region_job, "monotonic", lambda: getattr(clock, "value", 0.0))
+    monkeypatch.setattr(region_job.obstore, "get", get)
+    with caplog.at_level("INFO"):
+        assert len(job.file_refs(coord, len(data))) == 9
+    events = [
+        json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
+        for r in caplog.records
+        if r.getMessage().startswith("Virtual pipeline ")
+    ]
+    summaries = [e for e in events if e["event"] == "fetch_attempt"]
+    assert len(summaries) == 2
+    assert summaries[0]["retrying"] is True
+    assert summaries[0]["slowest_range_index"] == 1
+    assert summaries[0]["slowest_range_s"] == 31.0
+    assert summaries[1]["retrying"] is False
+    details = [e for e in events if e["event"] == "range_fetch"]
+    assert sorted(e["range_index"] for e in details) == [0, 1, 2, 3]
+    assert all(e["application_attempt"] == 1 for e in details)
+    assert "secret error text" not in caplog.text
+    assert all(owner() is None for owner in owners)
 
 
 @pytest.mark.parametrize(
@@ -766,6 +944,14 @@ def test_lazy_fetch_preserves_scanned_regex_and_phase_metrics(
     assert int(match.group(3)) == len(data)
     assert tuple(float(match.group(i)) for i in (5, 6, 7)) == (0.0, 2.75, 2.5)
     assert all(owner() is None for owner in owners)
+    events = [
+        json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
+        for r in caplog.records
+        if r.getMessage().startswith("Virtual pipeline ")
+    ]
+    assert [e["event"] for e in events] == ["request", "fetch_attempt"]
+    assert events[-1]["range_count"] == 4
+    assert events[-1]["drain_s"] is not None
 
 
 def test_single_range_conditional_206_covers_whole_file(
