@@ -75,7 +75,7 @@ def test_water_accumulation_units() -> None:
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda d: d.dataset_id)
 def test_operational_configuration(dataset: EcmwfIfsEnsForecastVirtualDataset) -> None:
     (cron,) = dataset.operational_kubernetes_resources("test-image")
-    assert cron.suspend
+    assert not cron.suspend
     assert cron.concurrency_policy == "Allow"
     assert cron.workers_total == cron.parallelism == 1
     fine = dataset.template_config.resolution == "0p1"
