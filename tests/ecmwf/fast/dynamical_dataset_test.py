@@ -81,10 +81,10 @@ def test_schedule_deadline_currency_and_repair_window(
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda d: d.dataset_id)
-@pytest.mark.parametrize("missing_old_index", [None, *range(7)])
-def test_decode_health_exempts_only_the_two_new_variables(
+@pytest.mark.parametrize("missing_index", [None, *range(9)])
+def test_decode_health_checks_every_variable(
     dataset: EcmwfFastDataset,
-    missing_old_index: int | None,
+    missing_index: int | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     loads = _spy_on_load(monkeypatch)
@@ -94,7 +94,7 @@ def test_decode_health_exempts_only_the_two_new_variables(
         {
             var.name: (
                 ("init_time", "latitude", "longitude"),
-                np.full((1, 1, 1), np.nan if i >= 7 or i == missing_old_index else 1.0),
+                np.full((1, 1, 1), np.nan if i == missing_index else 1.0),
             )
             for i, var in enumerate(variables)
         },
@@ -107,20 +107,18 @@ def test_decode_health_exempts_only_the_two_new_variables(
         if isinstance(c, validation.CheckVirtualDecodeHealth)
     )
     result = check.check(context)
-    assert result.passed == (missing_old_index is None), result.message
-    assert result.checked_count == 7
-    assert {call.name for call in loads} == {v.name for v in variables[:7]}
-    if missing_old_index is not None:
+    assert result.passed == (missing_index is None), result.message
+    assert result.checked_count == 9
+    assert {call.name for call in loads} == {v.name for v in variables}
+    if missing_index is not None:
         assert (
-            f"{variables[missing_old_index].name}: every sampled chunk decoded entirely NaN"
+            f"{variables[missing_index].name}: every sampled chunk decoded entirely NaN"
             in result.message
         )
-    else:
-        assert "2 variable(s) had no reference" in result.message
 
 
 @pytest.mark.parametrize("dataset", DATASETS, ids=lambda d: d.dataset_id)
-def test_decode_health_can_lift_exemption_while_older_inits_have_nan_additions(
+def test_decode_health_checks_newest_init_with_missing_historical_variables(
     dataset: EcmwfFastDataset, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     loads = _spy_on_load(monkeypatch)
@@ -141,7 +139,7 @@ def test_decode_health_can_lift_exemption_while_older_inits_have_nan_additions(
         if isinstance(c, validation.CheckVirtualDecodeHealth)
     )
     assert check.positions == 1
-    check = check.model_copy(update={"reference_presence": None})
+    assert check.reference_presence is None
     context = _context(
         ds, [v.path for v in variables], [{"init_time": init} for init in inits]
     )
