@@ -25,22 +25,11 @@ jobs:
       version: ${{ steps.target.outputs.version }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-    - name: Install uv
-      uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
-      with:
-        enable-cache: true
-        cache-dependency-glob: uv.lock
-    - name: Set up Python
-      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
-      with:
-        python-version-file: .python-version
-    - name: Install the project
-      run: uv sync --all-extras --dev --locked
+    - uses: ./.github/actions/setup-project
     - name: Parse branch and resolve owner
       id: target
       env:
         BRANCH: ${{ github.ref_name }}
-        AWS_US_EAST_1_DEPLOY_ENABLED: ${{ vars.AWS_US_EAST_1_DEPLOY_ENABLED }}
       run: uv run src/scripts/workflow_support.py prepare --staging-branch "$BRANCH" --require-enabled
 
   quality:
@@ -59,19 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-
-      - name: "Set up Python"
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v6
-        with:
-          python-version-file: ".python-version"
-
-      - name: Install the project
-        run: uv sync --all-extras --dev --locked
+      - uses: ./.github/actions/setup-project
 
       - name: Install this project
         run: "uv pip install -e ."
@@ -91,8 +68,8 @@ jobs:
   deploy:
     name: Deploy Staging
     needs: [quality, prepare]
-    if: needs.prepare.outputs.cluster != 'aws-us-east-1' || vars.AWS_US_EAST_1_DEPLOY_ENABLED == 'true'
     env:
+      DYNAMICAL_CLUSTER: ${{ needs.prepare.outputs.cluster }}
       IMAGE_TAG: "${{ secrets.DOCKER_REPOSITORY }}:${{ github.sha }}"
     runs-on: ubuntu-24.04
     environment: ${{ needs.prepare.outputs.environment }}
@@ -107,19 +84,7 @@ jobs:
           # Fetch main so deploy-staging can compare versions via git show
           fetch-depth: 0
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-
-      - name: "Set up Python"
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v6
-        with:
-          python-version-file: ".python-version"
-
-      - name: Install the project
-        run: uv sync --all-extras --dev --locked
+      - uses: ./.github/actions/setup-project
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6

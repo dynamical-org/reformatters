@@ -10,10 +10,6 @@ Container image inputs in `deploy/Dockerfile` are pinned to multi-platform diges
 
 ### Setup
 
-See [cluster deployments](cluster_deployments.md) for registry ownership, the
-administrator-owned cluster identity prerequisite, regional GitHub environments,
-and a staged handoff between clusters.
-
 1. Install `docker` and `kubectl`. Make sure `docker` can be found at `/usr/bin/docker` and `kubectl` at `/usr/bin/kubectl`.
 1. Setup a docker image repository and export the `DOCKER_REPOSITORY` environment variable in your local shell. e.g. `export DOCKER_REPOSITORY=container.registry/<project-id>/reformatters/main`. Follow your registry's instructions to allow your docker to authenticate and push images to the registry.
 1. Setup a kubernetes cluster and configure kubectl to point to your cluster. e.g. `aws eks update-kubeconfig --region <region> --name <cluster-name>`, `gcloud container clusters get-credentials <cluster-name> --region <region> --project <project>`, etc.
@@ -54,3 +50,26 @@ and a staged handoff between clusters.
      pod-security.kubernetes.io/enforce=restricted \
      pod-security.kubernetes.io/enforce-version=v1.36
    ```
+
+### Cluster selection
+
+`deployments/targets.py` lists cluster names, GitHub environments, capacity policy
+and whether workflow deployment is enabled. Its first entry is the primary build
+environment. Each environment supplies the same secret names: `AWS_ROLE_TO_ASSUME`,
+`AWS_REGION`, `EKS_CLUSTER_NAME`, `DOCKER_REPOSITORY`, and the shared `DEPOT_PROJECT`.
+Each deployment module owns its configured datasets, archivers and storage configs.
+
+Before submission, the current kubeconfig must match the administrator-owned
+`default/reformatters-cluster-identity` ConfigMap's `data.cluster`. Give deployers
+read access to that named ConfigMap, not permission to change it. Workers receive
+`DYNAMICAL_CLUSTER` in their pod environment for Sentry attribution.
+
+```sh
+uv run main verify-cluster <cluster>
+uv run main deploy --cluster <cluster> --docker-image <image>
+```
+
+Dataset-specific commands resolve their cluster from registry membership. Cluster
+suspension applies to deployed CronJobs, not explicit backfill Jobs. Moving a
+running dataset also requires suspending and draining its old writers; changing
+registry membership does not remove existing Kubernetes resources.

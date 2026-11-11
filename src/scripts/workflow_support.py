@@ -11,12 +11,9 @@ from typing import Any
 from urllib.parse import urlencode
 
 from reformatters.common.logging import get_logger
+from reformatters.deployments import targets
 
 log = get_logger(__name__)
-CLUSTER_ENVIRONMENTS = {
-    "aws-us-west-2": "prod",
-    "aws-us-east-1": "prod-us-east-1",
-}
 
 
 def parse_staging_branch(branch: str) -> tuple[str, str]:
@@ -25,23 +22,25 @@ def parse_staging_branch(branch: str) -> tuple[str, str]:
     return match[1], match[2]
 
 
-def resolve_target(option: str, value: str) -> str:
-    result = subprocess.run(  # noqa: S603
-        ["uv", "run", "main", "resolve-cluster", option, value],  # noqa: S607
-        check=True,
-        capture_output=True,
-        text=True,
+def require_enabled(cluster: targets.Cluster) -> None:
+    assert cluster.enabled, (
+        f"{cluster.name} deployment is disabled; no workload was launched."
     )
-    cluster = result.stdout.strip()
-    assert cluster in CLUSTER_ENVIRONMENTS, f"Unexpected resolved cluster: {cluster!r}"
-    return cluster
 
 
-def require_enabled(cluster: str, enabled: str) -> None:
-    assert cluster != "aws-us-east-1" or enabled == "true", (
-        "aws-us-east-1 deployment is disabled. Set repository variable "
-        "AWS_US_EAST_1_DEPLOY_ENABLED=true only after east is ready; no workload was launched."
-    )
+def deployment_matrix() -> None:
+    clusters = targets.clusters()
+    assert clusters[0].enabled, "The primary cluster must be enabled"
+    matrix = {
+        "include": [
+            {"cluster": cluster.name, "environment": cluster.environment}
+            for cluster in clusters
+            if cluster.enabled
+        ]
+    }
+    with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+        output.write(f"matrix={json.dumps(matrix)}\n")
+        output.write(f"primary_environment={clusters[0].environment}\n")
 
 
 def prepare(args: argparse.Namespace) -> None:
@@ -49,18 +48,24 @@ def prepare(args: argparse.Namespace) -> None:
     if args.staging_branch is not None:
         dataset_id, version = parse_staging_branch(args.staging_branch)
         outputs.update(dataset_id=dataset_id, version=version)
-        cluster = resolve_target("--dataset-id", dataset_id)
+        cluster = targets.cluster_for_resource(dataset_id)
     elif args.dataset_id is not None:
-        cluster = resolve_target("--dataset-id", args.dataset_id)
+        cluster = targets.cluster_for_resource(args.dataset_id)
+    elif args.cronjob_name is not None:
+        cluster = targets.cluster_for_cronjob(args.cronjob_name)
     else:
-        cluster = resolve_target("--cronjob-name", args.cronjob_name)
+        cluster = targets.get_cluster(args.cluster)
     if args.backfill:
         assert os.environ["GITHUB_REF"] == "refs/heads/main", (
             "Backfills must run from main; the worker image is built by main's deploy."
         )
     if args.backfill or args.require_enabled:
-        require_enabled(cluster, os.environ.get("AWS_US_EAST_1_DEPLOY_ENABLED", ""))
-    outputs.update(cluster=cluster, environment=CLUSTER_ENVIRONMENTS[cluster])
+        require_enabled(cluster)
+    if args.cronjob_name is not None and args.require_enabled:
+        assert not cluster.suspended, (
+            f"{cluster.name} is policy-suspended; no workload was launched."
+        )
+    outputs.update(cluster=cluster.name, environment=cluster.environment)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         output.writelines(f"{key}={value}\n" for key, value in outputs.items())
 
@@ -153,7 +158,7 @@ def deployment_jobs(
 
 def wait_for_deploy(cluster: str) -> None:
     assert os.environ["GITHUB_REF"] == "refs/heads/main", "Backfills must run from main"
-    require_enabled(cluster, os.environ.get("AWS_US_EAST_1_DEPLOY_ENABLED", ""))
+    require_enabled(targets.get_cluster(cluster))
     repository, sha = os.environ["GH_REPO"], os.environ["GITHUB_SHA"]
     for _ in range(60):
         quality = select_run(
@@ -192,13 +197,21 @@ def main() -> None:
     source.add_argument("--dataset-id")
     source.add_argument("--cronjob-name")
     source.add_argument("--staging-branch")
+    source.add_argument(
+        "--cluster", choices=[cluster.name for cluster in targets.clusters()]
+    )
     prep.add_argument("--backfill", action="store_true")
     prep.add_argument("--require-enabled", action="store_true")
     wait = commands.add_parser("wait-for-deploy")
-    wait.add_argument("cluster", choices=CLUSTER_ENVIRONMENTS)
+    wait.add_argument(
+        "cluster", choices=[cluster.name for cluster in targets.clusters()]
+    )
+    commands.add_parser("matrix")
     args = parser.parse_args()
     if args.command == "prepare":
         prepare(args)
+    elif args.command == "matrix":
+        deployment_matrix()
     else:
         wait_for_deploy(args.cluster)
 

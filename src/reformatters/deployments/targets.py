@@ -14,9 +14,13 @@ class Cluster:
     resources: Sequence[OperationalResources]
     capacity_type: Literal["spot", "on-demand"]
     suspended: bool = False
+    environment: str = "prod"
+    enabled: bool = True
 
     def configure_job[J: Job](self, job: J) -> J:
-        configured = job.model_copy(update={"capacity_type": self.capacity_type})
+        configured = job.model_copy(
+            update={"capacity_type": self.capacity_type, "cluster": self.name}
+        )
         if isinstance(configured, CronJob):
             configured.suspend = configured.suspend or self.suspended
         return configured
@@ -33,6 +37,7 @@ def clusters() -> tuple[Cluster, ...]:
                 *aws_us_west_2.CLUSTER_OPERATIONAL_ARCHIVERS,
             ],
             "spot",
+            environment="prod",
         ),
         Cluster(
             "aws-us-east-1",
@@ -42,6 +47,8 @@ def clusters() -> tuple[Cluster, ...]:
             ],
             "on-demand",
             suspended=True,
+            environment="prod-us-east-1",
+            enabled=False,
         ),
     )
 

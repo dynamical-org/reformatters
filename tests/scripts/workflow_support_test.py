@@ -1,5 +1,4 @@
 import argparse
-import hashlib
 import json
 import os
 import subprocess
@@ -12,6 +11,7 @@ import pytest
 import yaml
 from yaml.resolver import BaseResolver
 
+from reformatters.deployments import targets
 from scripts import workflow_support as workflows
 
 REPOSITORY = "dynamical/reformatters"
@@ -164,16 +164,19 @@ def test_wait_uses_current_run_attempt_and_selected_job(
     assert "/runs/10/attempts/3/jobs?" in pages.call_args.args[0]
 
 
-@pytest.mark.parametrize("enabled", ["", "false", "True", "1"])
-def test_disabled_east_fails_before_api_access(
-    enabled: str, monkeypatch: pytest.MonkeyPatch
+def test_disabled_target_fails_before_api_access(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
-    monkeypatch.setenv("AWS_US_EAST_1_DEPLOY_ENABLED", enabled)
+    monkeypatch.setattr(
+        targets,
+        "get_cluster",
+        Mock(return_value=targets.Cluster("third", [], "spot", enabled=False)),
+    )
     api = Mock()
     monkeypatch.setattr(workflows, "workflow_runs", api)
-    with pytest.raises(AssertionError, match="AWS_US_EAST_1_DEPLOY_ENABLED=true"):
-        workflows.wait_for_deploy(EAST)
+    with pytest.raises(AssertionError, match="third deployment is disabled"):
+        workflows.wait_for_deploy("third")
     api.assert_not_called()
 
 
@@ -211,56 +214,122 @@ def test_staging_branch_rejects_unsafe_input(branch: str) -> None:
         workflows.parse_staging_branch(branch)
 
 
-@pytest.mark.parametrize("cluster", [WEST, EAST])
-def test_prep_resolves_environment_without_credentials(
-    cluster: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def prepare_args(**overrides: object) -> argparse.Namespace:
+    return argparse.Namespace(
+        **{
+            "dataset_id": None,
+            "cronjob_name": None,
+            "staging_branch": None,
+            "cluster": None,
+            "backfill": False,
+            "require_enabled": False,
+            **overrides,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "source", ["dataset_id", "cronjob_name", "staging_branch", "cluster"]
+)
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.mark.parametrize("mutation", ["read", "require_enabled", "backfill"])
+def test_prepare_uses_target_metadata(
+    source: str,
+    enabled: bool,
+    mutation: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     output = tmp_path / "output"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
-    resolve = Mock(return_value=cluster)
-    monkeypatch.setattr(workflows, "resolve_target", resolve)
-    workflows.prepare(
-        argparse.Namespace(
-            staging_branch="stage/model/v1.2",
-            dataset_id=None,
-            cronjob_name=None,
-            backfill=False,
-            require_enabled=False,
-        )
-    )
-    resolve.assert_called_once_with("--dataset-id", "model")
-    assert output.read_text() == (
-        f"dataset_id=model\nversion=1.2\ncluster={cluster}\nenvironment={workflows.CLUSTER_ENVIRONMENTS[cluster]}\n"
-    )
-
-
-def test_resolver_passes_input_as_one_argument(monkeypatch: pytest.MonkeyPatch) -> None:
-    command = Mock(return_value=subprocess.CompletedProcess([], 0, stdout=f"{WEST}\n"))
-    monkeypatch.setattr(workflows.subprocess, "run", command)
-    value = "bad; touch /tmp/should-not-exist"
-    assert workflows.resolve_target("--cronjob-name", value) == WEST
-    assert command.call_args.args[0] == [
-        "uv",
-        "run",
-        "main",
-        "resolve-cluster",
-        "--cronjob-name",
-        value,
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
+    resource = Mock(dataset_id="model")
+    resource.operational_kubernetes_resources.return_value = [
+        argparse.Namespace(name="model")
     ]
-    assert command.call_args.kwargs["check"]
-    assert not command.call_args.kwargs.get("shell")
+    cluster = targets.Cluster(
+        "third", [resource], "spot", environment="third-env", enabled=enabled
+    )
+    monkeypatch.setattr(targets, "clusters", lambda: (cluster,))
+    args = prepare_args(
+        backfill=mutation == "backfill", require_enabled=mutation == "require_enabled"
+    )
+    setattr(
+        args,
+        source,
+        {"staging_branch": "stage/model/v1.2", "cluster": "third"}.get(source, "model"),
+    )
+    if not enabled and mutation != "read":
+        with pytest.raises(AssertionError, match="third deployment is disabled"):
+            workflows.prepare(args)
+        assert not output.exists()
+    else:
+        workflows.prepare(args)
+        values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+        assert values["cluster"] == "third"
+        assert values["environment"] == "third-env"
+        if source == "staging_branch":
+            assert values["dataset_id"] == "model"
+            assert values["version"] == "1.2"
 
 
-def test_resolver_fails_closed_on_unknown_output(
-    monkeypatch: pytest.MonkeyPatch,
+def test_backfill_requires_main(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GITHUB_REF", "refs/heads/feature")
+    output = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    monkeypatch.setattr(
+        targets, "get_cluster", Mock(return_value=targets.Cluster("third", [], "spot"))
+    )
+    with pytest.raises(AssertionError, match="Backfills must run from main"):
+        workflows.prepare(prepare_args(cluster="third", backfill=True))
+    assert not output.exists()
+
+
+def test_matrix_uses_ordered_enabled_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        workflows.subprocess,
-        "run",
-        Mock(return_value=subprocess.CompletedProcess([], 0, stdout="unknown\n")),
+        targets,
+        "clusters",
+        lambda: (
+            targets.Cluster("third", [], "spot", environment="build-env"),
+            targets.Cluster(
+                "disabled", [], "spot", environment="disabled-env", enabled=False
+            ),
+            targets.Cluster("fourth", [], "spot", environment="other-env"),
+        ),
     )
-    with pytest.raises(AssertionError, match="Unexpected resolved cluster"):
-        workflows.resolve_target("--dataset-id", "model")
+    output = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    workflows.deployment_matrix()
+    values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+    assert values["primary_environment"] == "build-env"
+    assert json.loads(values["matrix"]) == {
+        "include": [
+            {"cluster": "third", "environment": "build-env"},
+            {"cluster": "fourth", "environment": "other-env"},
+        ]
+    }
+
+
+def test_matrix_rejects_disabled_primary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        targets,
+        "clusters",
+        lambda: (
+            targets.Cluster("third", [], "spot", enabled=False),
+            targets.Cluster("fourth", [], "spot"),
+        ),
+    )
+    output = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    with pytest.raises(AssertionError, match="primary cluster must be enabled"):
+        workflows.deployment_matrix()
+    assert not output.exists()
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -297,323 +366,154 @@ def test_workflows_have_unique_keys_and_pinned_actions(name: str) -> None:
         assert job["steps"]
         for step in job["steps"]:
             if "uses" in step:
+                if step["uses"].startswith("./"):
+                    assert (
+                        WORKFLOWS.parent.parent / step["uses"] / "action.yml"
+                    ).exists()
+                    continue
                 _, sha = step["uses"].split("@")
                 assert len(sha) == 40
                 int(sha, 16)
 
 
-def test_operational_jobs_are_independent_and_east_skips_when_disabled() -> None:
+def test_setup_composite_has_explicit_shells() -> None:
+    action = load_workflow("../actions/setup-project/action.yml")
+    for step in action["runs"]["steps"]:
+        if "run" in step:
+            assert step["shell"] == "bash"
+
+
+def test_operational_deploy_preserves_trigger_and_target_isolation() -> None:
     workflow = load_workflow("deploy-operational-updates.yml")
     assert (
         workflow["run-name"]
         == "Deploy Operational Updates (${{ github.event.workflow_run.head_sha }})"
     )
     jobs = workflow["jobs"]
-    for cluster, job_id, environment in [
-        (WEST, "deploy-west", "prod"),
-        (EAST, "deploy-east", "prod-us-east-1"),
-    ]:
-        job = jobs[job_id]
-        assert job["name"] == f"Deploy ({cluster})"
-        assert job["needs"] == "build"
-        assert job["environment"] == environment
-        assert job["env"]["CLUSTER"] == cluster
-        for step in job["steps"]:
-            if step.get("uses", "").startswith("actions/checkout@"):
-                assert (
-                    step["with"]["ref"] == "${{ github.event.workflow_run.head_sha }}"
-                )
-        assert '--cluster "$CLUSTER"' in job["steps"][-1]["run"]
-    assert jobs["deploy-east"]["if"] == "vars.AWS_US_EAST_1_DEPLOY_ENABLED == 'true'"
-    assert "if" not in jobs["deploy-west"]
-    build = jobs["build"]
-    assert all(
-        predicate in build["if"]
-        for predicate in [
-            "conclusion == 'success'",
-            "event == 'push'",
-            "head_repository.full_name == github.repository",
-            "head_branch == 'main'",
-        ]
-    )
-    steps = build["steps"]
-    verify = next(
-        i for i, step in enumerate(steps) if "verify-cluster" in step.get("run", "")
-    )
-    builds = [
-        i
-        for i, step in enumerate(steps)
-        if step.get("uses", "").startswith("depot/build-push-action@")
-    ]
-    assert len(builds) == 1
-    assert verify < builds[0]
-    assert steps[builds[0]]["with"]["platforms"] == "linux/amd64,linux/arm64"
-    upload = next(
-        step
-        for step in steps
-        if step.get("uses", "").startswith("actions/upload-artifact@")
-    )
-    assert upload["continue-on-error"] is True
-    assert upload["with"]["name"] == "shared-image"
-    assert upload["with"]["overwrite"] is True
-    east_steps = jobs["deploy-east"]["steps"]
-    download = next(
-        step
-        for step in east_steps
-        if step.get("uses", "").startswith("actions/download-artifact@")
-    )
-    assert download["with"]["name"] == upload["with"]["name"]
-    assert not any(step.get("uses", "").startswith("depot/") for step in east_steps)
-    east_verify = next(
-        i
-        for i, step in enumerate(east_steps)
-        if "verify-cluster" in step.get("run", "")
-    )
-    east_copy = next(
-        i
-        for i, step in enumerate(east_steps)
-        if "copy_workflow_image.sh" in step.get("run", "")
-    )
-    assert east_verify < east_copy
-
-
-@pytest.mark.parametrize(
-    ("name", "job_id"),
-    [
-        ("manual-backfill.yml", "backfill"),
-        ("manual-create-job-from-cronjob.yml", "create-job"),
-        ("deploy-staging.yml", "deploy"),
-    ],
-)
-def test_dataset_workflows_resolve_before_environment_credentials(
-    name: str, job_id: str
-) -> None:
-    jobs = load_workflow(name)["jobs"]
-    prep = jobs["prepare"]
-    assert "environment" not in prep
-    assert prep["permissions"] == {"contents": "read"}
-    assert "secrets." not in json.dumps(prep)
-    assert not any(
-        step.get("uses", "").startswith("aws-actions/") for step in prep["steps"]
-    )
-    job = jobs[job_id]
-    assert "prepare" in job["needs"]
-    assert job["environment"] == "${{ needs.prepare.outputs.environment }}"
-    if job_id == "backfill":
-        gate = next(
-            i
-            for i, step in enumerate(job["steps"])
-            if "wait-for-deploy" in step.get("run", "")
+    assert jobs["deploy"]["name"] == "Deploy (${{ matrix.cluster }})"
+    assert jobs["deploy"]["strategy"]["fail-fast"] is False
+    for predicate in (
+        "conclusion == 'success'",
+        "event == 'push'",
+        "head_repository.full_name == github.repository",
+        "head_branch == 'main'",
+    ):
+        assert predicate in jobs["prepare"]["if"]
+    for job in jobs.values():
+        checkout = next(
+            step
+            for step in job["steps"]
+            if step.get("uses", "").startswith("actions/checkout@")
         )
-        credentials = next(
-            i
-            for i, step in enumerate(job["steps"])
-            if step.get("uses", "").startswith("aws-actions/configure-aws-credentials@")
-        )
-        assert gate < credentials
-    if job_id == "deploy":
-        assert "AWS_US_EAST_1_DEPLOY_ENABLED == 'true'" in job["if"]
-        verify = next(
-            i
-            for i, step in enumerate(job["steps"])
-            if "verify-cluster" in step.get("run", "")
-        )
-        build = next(
-            i
-            for i, step in enumerate(job["steps"])
-            if step.get("uses", "").startswith("depot/build-push-action@")
-        )
-        assert verify < build
+        assert checkout["with"]["ref"] == "${{ github.event.workflow_run.head_sha }}"
 
 
-@pytest.mark.parametrize(
-    ("name", "job_id"),
-    [
-        ("manual-create-job-from-cronjob.yml", "create-job"),
-        ("manual-get-jobs.yml", "get-jobs"),
-        ("manual-get-pods.yml", "get-pods"),
-    ],
-)
-def test_raw_kubectl_has_preflight_and_explicit_namespace(
-    name: str, job_id: str
-) -> None:
-    job = load_workflow(name)["jobs"][job_id]
-    verified = False
-    for step in job["steps"]:
-        command = step.get("run", "")
-        if "verify-cluster" in command:
-            verified = True
-        if "kubectl " in command:
-            assert verified
-            assert "kubectl --namespace default " in command
-    assert verified
-
-
-@pytest.mark.parametrize("name", ["manual-get-jobs.yml", "manual-get-pods.yml"])
-def test_generic_reads_expose_clusters_and_environment_selection(name: str) -> None:
-    workflow = load_workflow(name)
-    assert workflow["on"]["workflow_dispatch"]["inputs"]["cluster"]["options"] == [
-        WEST,
-        EAST,
-    ]
-    job = next(iter(workflow["jobs"].values()))
-    assert (
-        job["environment"]
-        == "${{ inputs.cluster == 'aws-us-east-1' && 'prod-us-east-1' || 'prod' }}"
-    )
-
-
-@pytest.mark.parametrize("wrong_digest", [False, True])
-def test_copy_preserves_digest_and_cleans_secure_auth_files(
-    wrong_digest: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    manifest = '{"manifests":["amd64","arm64"]}'
-    digest = "sha256:" + hashlib.sha256(manifest.encode()).hexdigest()
-    image_dir = tmp_path / "shared-image"
-    image_dir.mkdir()
-    source = "111111111111.dkr.ecr.us-west-2.amazonaws.com/reformatters/main"
-    target = "222222222222.dkr.ecr.us-east-1.amazonaws.com/reformatters/main"
-    (image_dir / "repository").write_text(source)
-    (image_dir / "digest").write_text(digest)
-    binaries = tmp_path / "bin"
-    binaries.mkdir()
-    (binaries / "aws").write_text(
-        '#!/bin/bash\nprintf "%s\\n" "$*" >> "$CALLS"\nprintf fake-password\n'
-    )
-    (binaries / "skopeo").write_text("""#!/bin/bash
-set -euo pipefail
-printf '%s\\n' "$*" >> "$CALLS"
-case "$1" in
-  login)
-    cat >/dev/null
-    [[ "$(stat -c %a "$(dirname "$3")")" == 700 ]]
-    printf '{}' > "$3"
-    [[ "$(stat -c %a "$3")" == 600 ]]
-    ;;
-  copy)
-    while [[ "$1" != --digestfile ]]; do shift; done
-    printf '%s' "$COPIED_DIGEST" > "$2"
-    ;;
-  inspect) printf '%s' "$MANIFEST" ;;
-esac
-""")
-    for binary in binaries.iterdir():
-        binary.chmod(0o755)
-    calls = tmp_path / "calls"
-    monkeypatch.setenv("PATH", f"{binaries}:{os.environ['PATH']}")
-    for key, value in {
-        "RUNNER_TEMP": str(tmp_path),
-        "IMAGE_SHA": SHA,
-        "IMAGE_DIGEST": digest,
-        "DOCKER_REPOSITORY": target,
-        "CALLS": str(calls),
-        "MANIFEST": manifest,
-        "COPIED_DIGEST": "sha256:" + "0" * 64 if wrong_digest else digest,
-    }.items():
-        monkeypatch.setenv(key, value)
-    result = subprocess.run(
-        ["/bin/bash", "src/scripts/copy_workflow_image.sh"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert (result.returncode != 0) == wrong_digest, result.stderr
-    commands = calls.read_text()
-    assert "copy --all --preserve-digests --src-authfile" in commands
-    assert f"docker://{source}@{digest} docker://{target}:{SHA}" in commands
-    assert "get-login-password --region us-west-2" in commands
-    assert "get-login-password --region us-east-1" in commands
-    assert "fake-password" not in commands
-    assert not list(tmp_path.glob("ecr-auth.*"))
-
-
-def test_manual_cron_requires_enabled_before_outputs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    output = tmp_path / "output"
-    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
-    monkeypatch.setenv("AWS_US_EAST_1_DEPLOY_ENABLED", "false")
-    monkeypatch.setattr(workflows, "resolve_target", Mock(return_value=EAST))
-    with pytest.raises(AssertionError, match="deployment is disabled"):
-        workflows.prepare(
-            argparse.Namespace(
-                staging_branch=None,
-                dataset_id=None,
-                cronjob_name="example-update",
-                backfill=False,
-                require_enabled=True,
-            )
-        )
-    assert not output.exists()
-
-
-def test_wait_times_out_without_a_matching_deploy(
+@pytest.mark.parametrize("failure", ["identity", "push", "digest", None])
+def test_publication_preflight_and_digest_gate(
+    failure: str | None,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
-    monkeypatch.setenv("GITHUB_SHA", SHA)
-    monkeypatch.setenv("GH_REPO", REPOSITORY)
-    monkeypatch.setattr(workflows, "workflow_runs", Mock(return_value=[]))
-    sleep = Mock()
-    monkeypatch.setattr(workflows.time, "sleep", sleep)
-    with pytest.raises(TimeoutError, match=f"Deploy \\({WEST}\\) of {SHA}"):
-        workflows.wait_for_deploy(WEST)
-    assert sleep.call_count == 60
-    sleep.assert_called_with(30)
-
-
-@pytest.mark.parametrize("suspended", ["true", "false", ""])
-def test_manual_cron_rejects_suspended_before_create(
-    suspended: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    job = load_workflow("manual-create-job-from-cronjob.yml")["jobs"]["create-job"]
-    command = next(
-        step["run"]
-        for step in job["steps"]
-        if step.get("name") == "Submit job (SEE LOGS)"
+    steps = load_workflow("deploy-operational-updates.yml")["jobs"]["deploy"]["steps"]
+    start = next(
+        i for i, step in enumerate(steps) if "verify-cluster" in step.get("run", "")
     )
-    assert "--require-enabled" in job_prepare_command(
-        "manual-create-job-from-cronjob.yml"
+    assert start < next(
+        i for i, step in enumerate(steps) if "depot push" in step.get("run", "")
     )
-    script = tmp_path / "submit.sh"
-    script.write_text(command.replace("${{ github.repository }}", REPOSITORY))
-    binary = tmp_path / "kubectl"
-    binary.write_text("""#!/bin/bash
-set -euo pipefail
-printf '%s\\n' "$*" >> "$CALLS"
-if [[ "$*" == *'get cronjob'* ]]; then printf '%s' "$SUSPENDED"; fi
-""")
-    binary.chmod(0o755)
-    calls = tmp_path / "calls"
+    command = "set -euo pipefail\n" + "\n".join(
+        step["run"] for step in steps[start:] if "run" in step
+    )
+    script = tmp_path / "publish.sh"
+    script.write_text(command)
+    for name, body in {
+        "uv": 'printf "uv %s\\n" "$*" >> "$CALLS"; if [[ "$*" == *verify-cluster* && "$FAILURE" == identity ]]; then exit 1; fi',
+        "depot": 'printf "depot %s\\n" "$*" >> "$CALLS"; if [[ "$FAILURE" == push ]]; then exit 1; fi',
+        "aws": 'printf "%s\\n" "$DEST_DIGEST"',
+    }.items():
+        binary = tmp_path / name
+        binary.write_text("#!/bin/bash\nset -euo pipefail\n" + body + "\n")
+        binary.chmod(0o755)
+    digest = "sha256:" + "a" * 64
     for key, value in {
         "PATH": f"{tmp_path}:{os.environ['PATH']}",
-        "CALLS": str(calls),
-        "SUSPENDED": suspended,
-        "CRONJOB_NAME": "example-update",
-        "USERNAME": "operator",
-        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+        "CALLS": str(tmp_path / "calls"),
+        "CLUSTER": "third",
+        "DEPOT_PROJECT": "shared",
+        "DOCKER_REPOSITORY": "registry/repo",
+        "IMAGE_SHA": SHA,
+        "BUILD_ID": "saved-build",
+        "IMAGE_DIGEST": digest,
+        "DEST_DIGEST": "sha256:" + "b" * 64 if failure == "digest" else digest,
+        "FAILURE": failure or "",
     }.items():
         monkeypatch.setenv(key, value)
     result = subprocess.run(  # noqa: S603
         ["/bin/bash", str(script)], capture_output=True, text=True, check=False
     )
-    assert (result.returncode != 0) == (suspended == "true"), result.stderr
-    commands = calls.read_text().splitlines()
-    assert (
-        commands[0]
-        == "--namespace default get cronjob example-update -o jsonpath={.spec.suspend}"
-    )
-    assert any("create job" in line for line in commands) == (suspended != "true")
-    if suspended == "true":
-        assert "is suspended" in result.stdout
+    assert (result.returncode == 0) == (failure is None), result.stderr
+    calls = (tmp_path / "calls").read_text()
+    assert ("depot push" in calls) == (failure != "identity")
+    assert ("uv run main deploy --cluster third" in calls) == (failure is None)
+    if failure is None:
+        assert (
+            f"depot push --project shared -t registry/repo:{SHA} saved-build" in calls
+        )
+        assert f"--docker-image registry/repo:{SHA}@{digest}" in calls
 
 
-def job_prepare_command(name: str) -> str:
-    return next(
-        step["run"]
-        for step in load_workflow(name)["jobs"]["prepare"]["steps"]
-        if "workflow_support.py prepare" in step.get("run", "")
+@pytest.mark.parametrize(
+    "name",
+    [
+        "deploy-operational-updates.yml",
+        "deploy-staging.yml",
+        "manual-backfill.yml",
+        "manual-create-job-from-cronjob.yml",
+        "manual-get-jobs.yml",
+        "manual-get-pods.yml",
+    ],
+)
+def test_resolution_has_no_environment_credentials(name: str) -> None:
+    prep = load_workflow(name)["jobs"]["prepare"]
+    assert "environment" not in prep
+    assert "secrets." not in json.dumps(prep)
+    assert prep.get("permissions", {"contents": "read"}) == {"contents": "read"}
+    assert not any(
+        step.get("uses", "").startswith("aws-actions/") for step in prep["steps"]
     )
+
+
+def test_backfill_gate_precedes_submission() -> None:
+    steps = load_workflow("manual-backfill.yml")["jobs"]["backfill"]["steps"]
+    gate = next(
+        i for i, step in enumerate(steps) if "wait-for-deploy" in step.get("run", "")
+    )
+    submission = next(
+        i
+        for i, step in enumerate(steps)
+        if step.get("name") == "Start backfill (SEE LOGS)"
+    )
+    assert gate < submission
+
+
+@pytest.mark.parametrize("suspended", [True, False])
+def test_manual_cron_checks_cluster_policy(
+    suspended: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cluster = targets.Cluster("third", [], "spot", suspended=suspended)
+    monkeypatch.setattr(targets, "cluster_for_cronjob", Mock(return_value=cluster))
+    output = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    args = prepare_args(cronjob_name="example-update", require_enabled=True)
+    if suspended:
+        with pytest.raises(AssertionError, match="third is policy-suspended"):
+            workflows.prepare(args)
+        assert not output.exists()
+    else:
+        workflows.prepare(args)
+        assert output.exists()
 
 
 def test_partial_rerun_retains_omitted_target_success(

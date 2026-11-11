@@ -28,6 +28,27 @@ from reformatters.common.kubernetes import (
 )
 
 
+@pytest.mark.parametrize("cluster", [None, "aws-us-east-1"])
+def test_job_cluster_env(cluster: str | None) -> None:
+    job = Job(
+        command=["update"],
+        image="test-image",
+        dataset_id="test-dataset",
+        cluster=cluster,
+        cpu="1",
+        memory="1Gi",
+        workers_total=1,
+        parallelism=1,
+    )
+    container = job.as_kubernetes_object()["spec"]["template"]["spec"]["containers"][0]
+    cluster_env = [
+        env for env in container["env"] if env["name"] == "DYNAMICAL_CLUSTER"
+    ]
+    assert cluster_env == (
+        [{"name": "DYNAMICAL_CLUSTER", "value": cluster}] if cluster is not None else []
+    )
+
+
 def test_as_kubernetes_object_comprehensive() -> None:
     """Test that as_kubernetes_object returns the expected structure and configuration."""
     job = Job(

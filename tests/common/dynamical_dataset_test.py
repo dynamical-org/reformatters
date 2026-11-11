@@ -1,3 +1,4 @@
+import json
 import subprocess
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
@@ -769,6 +770,8 @@ def test_backfill_kubernetes(
     ]
     _, kwargs = mock_run.call_args
     input_str = kwargs["input"]
+    container = json.loads(input_str)["spec"]["template"]["spec"]["containers"][0]
+    assert {"name": "DYNAMICAL_CLUSTER", "value": "test"} in container["env"]
 
     # workers_total = ceil(5/2) == 3
     assert '"completions": 3' in input_str

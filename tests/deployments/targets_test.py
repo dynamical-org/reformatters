@@ -40,6 +40,9 @@ def test_east_policy_with_real_dataset(initially_suspended: bool) -> None:
     rendered = configured.as_kubernetes_object()
     assert rendered["spec"]["suspend"] is True
     job_spec = rendered["spec"]["jobTemplate"]["spec"]
+    assert {"name": "DYNAMICAL_CLUSTER", "value": east.name} in job_spec["template"][
+        "spec"
+    ]["containers"][0]["env"]
     assert "suspend" not in job_spec
     assert (
         job_spec["template"]["spec"]["nodeSelector"]["karpenter.sh/capacity-type"]

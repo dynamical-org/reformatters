@@ -38,6 +38,7 @@ class Job(pydantic.BaseModel):
     command: Annotated[Sequence[str], pydantic.Field(min_length=1)]
     image: Annotated[str, pydantic.Field(min_length=1)]
     dataset_id: Annotated[str, pydantic.Field(min_length=1)]
+    cluster: str | None = None
 
     cpu: Annotated[str, pydantic.Field(min_length=1)]
     memory: Annotated[str, pydantic.Field(min_length=1)]
@@ -130,6 +131,16 @@ class Job(pydantic.BaseModel):
                                 ],
                                 "env": [
                                     {"name": "DYNAMICAL_ENV", "value": "prod"},
+                                    *(
+                                        [
+                                            {
+                                                "name": "DYNAMICAL_CLUSTER",
+                                                "value": self.cluster,
+                                            }
+                                        ]
+                                        if self.cluster is not None
+                                        else []
+                                    ),
                                     {
                                         "name": "DYNAMICAL_SENTRY_DSN",
                                         "valueFrom": {

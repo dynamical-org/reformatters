@@ -532,6 +532,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             command=command,
             image=image_tag,
             dataset_id=self.dataset_id,
+            cluster=cluster.name,
             workers_total=workers_total,
             parallelism=parallelism,
             capacity_type=cluster.capacity_type,

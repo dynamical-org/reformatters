@@ -52,8 +52,11 @@ if Config.is_sentry_enabled:
     cron_job_name = os.getenv("CRON_JOB_NAME")
     job_name = os.getenv("JOB_NAME")
     pod_name = os.getenv("POD_NAME")
+    cluster = os.getenv("DYNAMICAL_CLUSTER")
 
     def before_log(log: Log, _hint: Hint) -> Log | None:
+        if cluster:
+            log["attributes"]["cluster"] = cluster
         if cron_job_name:
             log["attributes"]["cron_job_name"] = cron_job_name
         if job_name:
@@ -84,6 +87,8 @@ if Config.is_sentry_enabled:
     sentry_sdk.set_tag("cron_job_name", cron_job_name)
     sentry_sdk.set_tag("job_name", job_name)
     sentry_sdk.set_tag("pod_name", pod_name)
+    if cluster:
+        sentry_sdk.set_tag("cluster", cluster)
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)

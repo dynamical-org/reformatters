@@ -13,15 +13,9 @@ spec:
         - key: karpenter.sh/capacity-type
           operator: In
           values: ["on-demand"]
-        - key: eks.amazonaws.com/instance-family
-          operator: In
-          values: ["m8g"]
         - key: eks.amazonaws.com/instance-generation
           operator: Gt
           values: ["7"]
         - key: kubernetes.io/arch
           operator: In
           values: ["arm64"]
-  limits:
-    cpu: "5000"
-    memory: 10000Gi
