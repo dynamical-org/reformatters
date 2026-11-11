@@ -8,12 +8,13 @@ from concurrent.futures import (
     wait,
 )
 from contextvars import copy_context
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import partial
 from queue import Empty, SimpleQueue
 from threading import Event, Thread
 from time import monotonic
-from typing import ClassVar
+from typing import ClassVar, NamedTuple
 
 import obstore
 import pandas as pd
@@ -28,7 +29,7 @@ from reformatters.common.download import (
     source_access,
 )
 from reformatters.common.logging import get_logger
-from reformatters.common.retry import retry
+from reformatters.common.retry import exponential_backoff_time
 from reformatters.common.types import Timedelta
 from reformatters.common.virtual_region_job import (
     VirtualRef,
@@ -57,6 +58,27 @@ log = get_logger(__name__)
 
 
 TARGET_RANGE_CHUNK = 64 * 1024**2
+SLOW_RANGE_SECONDS = 30.0
+
+
+class _RangeTiming(NamedTuple):
+    range_index: int
+    range_start: int
+    range_end_exclusive: int
+    started_at: str
+    headers_s: float | None
+    body_s: float | None
+    elapsed_s: float
+    bytes_received: int | None
+    phase: str
+    error_type: str | None
+    cause_type: str | None
+
+
+@dataclass
+class _FetchTiming:
+    ranges: list[_RangeTiming] = field(default_factory=list)
+    drain_s: float | None = None
 
 
 class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord]):
@@ -296,16 +318,77 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
         assert listed is None or listed[0] == file_size, (
             "File size differs from its discovery observation"
         )
-        return retry(
-            partial(
-                self._stream_file_refs, coord, file_size, listed[1] if listed else None
-            ),
-            max_attempts=2,
-            retryable_exceptions=(InterruptedGribStreamError, GenericError),
-        )
+        for attempt in (1, 2):
+            started = monotonic()
+            timing = _FetchTiming()
+            retrying = False
+            backoff = None
+            error_type = cause_type = None
+            try:
+                refs = self._stream_file_refs(
+                    coord,
+                    file_size,
+                    listed[1] if listed else None,
+                    application_attempt=attempt,
+                    timing=timing,
+                )
+            except BaseException as error:
+                error_type = type(error).__name__
+                cause_type = (
+                    type(error.__cause__).__name__
+                    if error.__cause__ is not None
+                    else None
+                )
+                retrying = attempt == 1 and isinstance(
+                    error, (InterruptedGribStreamError, GenericError)
+                )
+                backoff = exponential_backoff_time(0) if retrying else None
+                if not retrying:
+                    raise
+            else:
+                return refs
+            finally:
+                slowest = max(timing.ranges, key=lambda r: r.elapsed_s, default=None)
+                log_virtual_event(
+                    "fetch_attempt",
+                    key=coord.key,
+                    application_attempt=attempt,
+                    elapsed_s=monotonic() - started,
+                    range_count=len(timing.ranges),
+                    slowest_range_index=slowest.range_index if slowest else None,
+                    slowest_range_s=slowest.elapsed_s if slowest else None,
+                    drain_s=timing.drain_s,
+                    retrying=retrying,
+                    backoff_s=backoff,
+                    error_type=error_type,
+                    cause_type=cause_type,
+                )
+                if retrying:
+                    for result in timing.ranges:
+                        if (
+                            result.error_type is None
+                            and result.elapsed_s < SLOW_RANGE_SECONDS
+                        ):
+                            log_virtual_event(
+                                "range_fetch",
+                                key=coord.key,
+                                application_attempt=attempt,
+                                range_bytes=result.range_end_exclusive
+                                - result.range_start,
+                                **result._asdict(),
+                            )
+            assert backoff is not None
+            time.sleep(backoff)
+        raise AssertionError("unreachable")
 
     def _stream_file_refs(
-        self, coord: EcmwfFastSourceFileCoord, file_size: int, etag: str | None
+        self,
+        coord: EcmwfFastSourceFileCoord,
+        file_size: int,
+        etag: str | None,
+        *,
+        application_attempt: int = 1,
+        timing: _FetchTiming | None = None,
     ) -> list[VirtualRef]:
         store = s3_store_from_secret(
             SOURCE_PREFIX,
@@ -335,6 +418,7 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
                     "request",
                     file=coord.get_url(),
                     key=coord.key,
+                    application_attempt=application_attempt,
                     requested_at=datetime.now(UTC).isoformat(),
                     last_modified=last_modified.isoformat()
                     if last_modified is not None
@@ -346,7 +430,14 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
             reader = None
             try:
                 if self.processing_mode == "update":
-                    chunks = _ranged_chunks(store, coord.key, file_size, etag)
+                    chunks = _ranged_chunks(
+                        store,
+                        coord.key,
+                        file_size,
+                        etag,
+                        application_attempt=application_attempt,
+                        timing=timing,
+                    )
                     reader = StreamReader(chunks)
                     request_seconds = 0.0
                 else:
@@ -396,43 +487,39 @@ class EcmwfFastRegionJob(VirtualRegionJob[EcmwfDataVar, EcmwfFastSourceFileCoord
 
 
 def _ranged_chunks(
-    store: ObjectStore, key: str, size: int, etag: str | None
+    store: ObjectStore,
+    key: str,
+    size: int,
+    etag: str | None,
+    *,
+    application_attempt: int = 1,
+    timing: _FetchTiming | None = None,
 ) -> Generator[Buffer]:
     if not etag or etag.startswith("W/"):
         raise SourceContractError("Source listing lacks a strong ETag")
     count = min(10, (size + TARGET_RANGE_CHUNK - 1) // TARGET_RANGE_CHUNK)
     assert count > 0
+    timing = timing if timing is not None else _FetchTiming()
     buffers: list[Buffer] = [b""] * count
     futures: list[Future[None]] = []
     errors: list[BaseException] = []
 
-    def fetch(index: int) -> None:
-        start, end = size * index // count, size * (index + 1) // count
-        response = payload = None
-        try:
-            response = obstore.get(
-                store, key, options={"range": (start, end), "if_match": etag}
-            )
-            if response.range != (start, end):
-                raise SourceContractError("Source returned a different range")
-            if response.meta["size"] != size:
-                raise SourceContractError("Source size differs from listing")
-            if response.meta["e_tag"] != etag:
-                raise SourceContractError("Source ETag differs from pinned version")
-            payload = response.bytes()
-            if len(payload) < end - start:
-                raise InterruptedGribStreamError("Source range body was truncated")
-            if len(payload) > end - start:
-                raise SourceContractError(
-                    "Source range body exceeds requested interval"
-                )
-            buffers[index] = payload
-        finally:
-            response = payload = None
+    fetch = partial(
+        _fetch_range,
+        store=store,
+        key=key,
+        size=size,
+        etag=etag,
+        buffers=buffers,
+        application_attempt=application_attempt,
+        timing=timing,
+    )
 
     try:
         with ThreadPoolExecutor(count) as pool:
             futures.extend(pool.submit(fetch, index) for index in range(count))
+            drain_started = monotonic()
+        timing.drain_s = monotonic() - drain_started
         for future in futures:
             error = future.exception()
             if error is not None:
@@ -458,3 +545,78 @@ def _ranged_chunks(
         buffers.clear()
         futures.clear()
         errors.clear()
+
+
+def _fetch_range(
+    index: int,
+    *,
+    store: ObjectStore,
+    key: str,
+    size: int,
+    etag: str,
+    buffers: list[Buffer],
+    application_attempt: int,
+    timing: _FetchTiming,
+) -> None:
+    count = len(buffers)
+    start, end = size * index // count, size * (index + 1) // count
+    started = monotonic()
+    started_at = datetime.now(UTC).isoformat()
+    phase = "headers"
+    headers_s = body_s = None
+    received = None
+    error_type = cause_type = None
+    response = payload = None
+    try:
+        response = obstore.get(
+            store, key, options={"range": (start, end), "if_match": etag}
+        )
+        headers_s = monotonic() - started
+        phase = "response_validation"
+        if response.range != (start, end):
+            raise SourceContractError("Source returned a different range")
+        if response.meta["size"] != size:
+            raise SourceContractError("Source size differs from listing")
+        if response.meta["e_tag"] != etag:
+            raise SourceContractError("Source ETag differs from pinned version")
+        phase = "body"
+        payload = response.bytes()
+        received = len(payload)
+        body_s = monotonic() - started
+        phase = "body_validation"
+        if len(payload) < end - start:
+            raise InterruptedGribStreamError("Source range body was truncated")
+        if len(payload) > end - start:
+            raise SourceContractError("Source range body exceeds requested interval")
+        buffers[index] = payload
+        phase = "complete"
+    except BaseException as error:
+        error_type = type(error).__name__
+        cause_type = (
+            type(error.__cause__).__name__ if error.__cause__ is not None else None
+        )
+        raise
+    finally:
+        response = payload = None
+        result = _RangeTiming(
+            index,
+            start,
+            end,
+            started_at,
+            headers_s,
+            body_s,
+            monotonic() - started,
+            received,
+            phase,
+            error_type,
+            cause_type,
+        )
+        timing.ranges.append(result)
+        if error_type is not None or result.elapsed_s >= SLOW_RANGE_SECONDS:
+            log_virtual_event(
+                "range_fetch",
+                key=key,
+                application_attempt=application_attempt,
+                range_bytes=end - start,
+                **result._asdict(),
+            )
