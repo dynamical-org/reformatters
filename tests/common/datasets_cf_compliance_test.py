@@ -450,6 +450,10 @@ CF_STANDARD_NAMES_PENDING_PUBLICATION: dict[str, str] = {
 }
 
 ALLOWED_MISSING_STANDARD_NAME: set[str] = {
+    "snow_albedo_surface",
+    "sea_surface_height",
+    "net_long_wave_radiation_run_total_atmosphere_top",
+    "total_column_rain_water_atmosphere",
     # RRFS ceiling requires cloud-cover criteria; CF cloud_base_altitude does not.
     # CF condensed soil water includes ice; WTMP includes inland water as well as sea water.
     # CF surface_snow_density is snow cover; RRFS SDEN is the density of falling snow.
@@ -522,12 +526,9 @@ ALLOWED_MISSING_STANDARD_NAME: set[str] = {
     "qa",
     # snowfall_surface is a snow depth rate (m s-1); CF has no standard name for this quantity
     "snowfall_surface",
-    # ECMWF S2S soil moisture is a mass per soil volume (kg m-3), snow albedo a
-    # percentage and snow density a mass per snow volume; CF names none of them.
+    # ECMWF S2S soil moisture is a mass per soil volume (kg m-3); CF does not name it.
     "soil_moisture_0_20cm",
     "soil_moisture_0_100cm",
-    "snow_albedo_surface",
-    "snow_density_surface",
     # HRRR forecast-48-hour-virtual single-level/surface fields with no CF standard name.
     "column_integrated_mass_density_atmosphere",
     "critical_angle_0_500m",
@@ -1803,6 +1804,14 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
     if var.name in {"soil_type_surface", "vegetation_type_surface"}
     for attribute in ("flag_values", "flag_meanings")
 }
+# RRFS snow density is falling snow; CF surface_snow_density is the snowpack.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (key, "standard_name", dataset.dataset_id)
+    for dataset in _RRFS_DATASETS
+    for var in dataset.template_config.data_vars
+    if var.name == "new_snow_density_surface"
+    for key in (var.attrs.short_name, var.attrs.long_name)
+}
 
 
 _REFS_PRODUCTS_DATASET_IDS = (
@@ -1887,6 +1896,32 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
         "Average of the ensemble mean and probability-matched mean of total precipitation",
     )
     for dataset_id in _REFS_PRODUCTS_DATASET_IDS
+}
+
+
+_IFS_ENS_VIRTUAL_DATASET_IDS = {
+    f"ecmwf-ifs-ens-forecast-{days}-day-{resolution}-degree-virtual"
+    for days in (6, 15)
+    for resolution in ("0-25", "0-1")
+}
+# IFS land-sea masks are fractional, and snow diagnostics are instantaneous rather
+# than the daily materialized product's time averages.
+CROSS_DATASET_CONSISTENCY_EXCEPTIONS |= {
+    (name, attr, dataset_id)
+    for dataset_id in _IFS_ENS_VIRTUAL_DATASET_IDS
+    for names, attrs in (
+        (
+            ("land_sea_mask_surface", "lsm", "Land-sea mask"),
+            ("standard_name", "flag_values", "flag_meanings"),
+        ),
+        (
+            ("snow_density_surface", "rsn", "Snow density"),
+            ("step_type",),
+        ),
+        (("snow_albedo_surface",), ("step_type",)),
+    )
+    for name in names
+    for attr in attrs
 }
 
 

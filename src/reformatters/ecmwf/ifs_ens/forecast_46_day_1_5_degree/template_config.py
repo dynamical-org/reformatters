@@ -804,6 +804,7 @@ class EcmwfIfsEnsForecast46Day15DegreeTemplateConfig(
                 attrs=DataVarAttrs(
                     short_name="rsn",
                     long_name="Snow density",
+                    standard_name="surface_snow_density",
                     units="kg m-3",
                     step_type="avg",
                     comment="Mean snow density over the previous 24 hours. Missing where the surface carries no snowpack, including snow-free land.",

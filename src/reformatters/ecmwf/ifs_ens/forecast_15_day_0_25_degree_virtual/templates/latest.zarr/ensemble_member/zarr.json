@@ -1,0 +1,54 @@
+{
+  "shape": [
+    51
+  ],
+  "data_type": "int16",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        51
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": -1,
+  "codecs": [
+    {
+      "name": "bytes",
+      "configuration": {
+        "endian": "little"
+      }
+    },
+    {
+      "name": "blosc",
+      "configuration": {
+        "typesize": 4,
+        "cname": "zstd",
+        "clevel": 3,
+        "shuffle": "shuffle",
+        "blocksize": 0
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Ensemble member",
+    "standard_name": "realization",
+    "units": "1",
+    "statistics_approximate": {
+      "min": 0,
+      "max": 50
+    }
+  },
+  "dimension_names": [
+    "ensemble_member"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

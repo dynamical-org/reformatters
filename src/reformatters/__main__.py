@@ -48,11 +48,23 @@ from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
 from reformatters.ecmwf.ifs_ens.forecast_0_25_degree_fast import (
     EcmwfIfsEnsForecast025DegreeFastDataset,
 )
+from reformatters.ecmwf.ifs_ens.forecast_6_day_0_1_degree_virtual.dynamical_dataset import (
+    EcmwfIfsEnsForecast6Day01DegreeVirtualDataset,
+)
+from reformatters.ecmwf.ifs_ens.forecast_6_day_0_25_degree_virtual.dynamical_dataset import (
+    EcmwfIfsEnsForecast6Day025DegreeVirtualDataset,
+)
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_1_degree_virtual.dynamical_dataset import (
+    EcmwfIfsEnsForecast15Day01DegreeVirtualDataset,
+)
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.deprecated_zarr_v3 import (
     EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset,
 )
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast15Day025DegreeDataset,
+)
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree_virtual.dynamical_dataset import (
+    EcmwfIfsEnsForecast15Day025DegreeVirtualDataset,
 )
 from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast46Day15DegreeDataset,
@@ -403,6 +415,18 @@ DYNAMICAL_DATASETS: Sequence[DynamicalDataset[Any, Any]] = [
         replica_storage_configs=[SourceCoopZarrDatasetStorageConfig()],
     ),
     # ECMWF
+    EcmwfIfsEnsForecast6Day025DegreeVirtualDataset(
+        primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig()
+    ),
+    EcmwfIfsEnsForecast6Day01DegreeVirtualDataset(
+        primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig()
+    ),
+    EcmwfIfsEnsForecast15Day025DegreeVirtualDataset(
+        primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig()
+    ),
+    EcmwfIfsEnsForecast15Day01DegreeVirtualDataset(
+        primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig()
+    ),
     EcmwfIfsEnsForecast15Day025DegreeDataset(
         primary_storage_config=EcmwfIfsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),

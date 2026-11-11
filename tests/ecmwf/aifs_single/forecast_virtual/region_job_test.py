@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from reformatters.ecmwf import ecmwf_virtual_source as source_module
 from reformatters.ecmwf.aifs_single.forecast_virtual import (
     region_job as region_job_module,
 )
@@ -147,9 +148,7 @@ def _fake_listing(
             if (coord.init_time, coord.lead_time) in present[location_prefix]
         ]
 
-    monkeypatch.setattr(
-        region_job_module, "discover_available_by_obstore_listing", fake
-    )
+    monkeypatch.setattr(source_module, "discover_available_by_obstore_listing", fake)
     return listed
 
 
@@ -375,9 +374,7 @@ def test_discover_available_lists_gcs_requiring_index(
         captured.update(kwargs)
         return [(pending[0], 9000)]
 
-    monkeypatch.setattr(
-        region_job_module, "discover_available_by_obstore_listing", fake
-    )
+    monkeypatch.setattr(source_module, "discover_available_by_obstore_listing", fake)
     job = make_job(template_ds, data_vars=data_vars)
 
     result = job.discover_available([coord])
@@ -503,9 +500,7 @@ def test_update_loop_offers_only_unresolved_gcs_coords_on_later_ticks(
             return [(c, 1000) for c in pending if c.lead_time == _LEAD_6H]
         return []
 
-    monkeypatch.setattr(
-        region_job_module, "discover_available_by_obstore_listing", fake
-    )
+    monkeypatch.setattr(source_module, "discover_available_by_obstore_listing", fake)
     job = make_job(template_ds, data_vars=data_vars, processing_mode="update")
     job = job.model_copy(update={"tick_interval": pd.Timedelta(0)})
 

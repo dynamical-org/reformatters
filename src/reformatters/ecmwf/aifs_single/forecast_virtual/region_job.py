@@ -4,31 +4,31 @@ from typing import ClassVar, Final, assert_never
 import icechunk
 import pandas as pd
 import xarray as xr
-from pydantic import PrivateAttr
 
 from reformatters.common.config_models import ROOT
 from reformatters.common.download import (
     gcs_download_to_disk,
-    gcs_store,
     s3_download_to_disk,
-    s3_store,
 )
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     CoordinateValue,
-    InitLeadSourceFileCoord,
 )
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import Dim, Timedelta
 from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
-from reformatters.common.virtual_source_listing import (
-    discover_available_by_obstore_listing,
-)
 from reformatters.ecmwf.aifs_single.template_config import (
     aifs_single_stream_path,
 )
 from reformatters.ecmwf.ecmwf_grib_index import parse_index_file
-from reformatters.ecmwf.ecmwf_utils import EcmwfOpenDataSource
+from reformatters.ecmwf.ecmwf_virtual_source import (
+    GCS_LOCATION_PREFIX,
+    S3_LOCATION_PREFIX,
+    S3_REGION,
+    EcmwfVirtualSourceFileCoord,
+    discover_ecmwf_available,
+    ecmwf_virtual_chunk_containers,
+)
 
 from .template_config import (
     EcmwfAifsSingleVirtualDataVar,
@@ -36,9 +36,6 @@ from .template_config import (
 
 log = get_logger(__name__)
 
-GCS_LOCATION_PREFIX = "gs://ecmwf-open-data/"
-S3_LOCATION_PREFIX = "s3://ecmwf-forecasts/"
-S3_REGION = "eu-central-1"
 # Inits before this date may reference s3://ecmwf-forecasts/ for files the GCS
 # mirror lacks; inits on or after it reference GCS only.
 S3_FALLBACK_BEFORE: Final = pd.Timestamp("2025-03-01")
@@ -49,28 +46,13 @@ def aifs_single_virtual_chunk_containers() -> tuple[
 ]:
     """Fresh container objects per call; icechunk containers can't be shared
     pydantic defaults."""
-    return (
-        icechunk.VirtualChunkContainer(GCS_LOCATION_PREFIX, icechunk.gcs_store()),
-        icechunk.VirtualChunkContainer(
-            S3_LOCATION_PREFIX, icechunk.s3_store(region=S3_REGION)
-        ),
-    )
+    return ecmwf_virtual_chunk_containers(s3_fallback_before=S3_FALLBACK_BEFORE)
 
 
-class EcmwfAifsSingleForecastVirtualSourceFileCoord(InitLeadSourceFileCoord):
+class EcmwfAifsSingleForecastVirtualSourceFileCoord(EcmwfVirtualSourceFileCoord):
     """One AIFS Single forecast file (init_time, lead_time) and the vars it packs."""
 
     data_vars: Sequence[EcmwfAifsSingleVirtualDataVar]
-    # Private so discover_available can switch the source of the pending coord
-    # itself; the write loop tracks pending coords by identity.
-    _source: EcmwfOpenDataSource = PrivateAttr(default="gcs")
-
-    @property
-    def source(self) -> EcmwfOpenDataSource:
-        return self._source
-
-    def fall_back_to_s3(self) -> None:
-        self._source = "s3"
 
     def _get_base_url(self) -> str:
         match self.source:
@@ -156,41 +138,10 @@ class EcmwfAifsSingleForecastVirtualRegionJob(
         S3_FALLBACK_BEFORE, files S3 can serve that GCS cannot; a fallback coord
         is switched to its S3 URL in place. `pending` must be GCS-sourced: a coord
         already switched to S3 is never offered again."""
-        available = discover_available_by_obstore_listing(
+        return discover_ecmwf_available(
             pending,
-            store=gcs_store(GCS_LOCATION_PREFIX),
-            location_prefix=GCS_LOCATION_PREFIX,
-            require_index=True,
+            s3_fallback_before=S3_FALLBACK_BEFORE,
         )
-        on_gcs = {id(coord) for coord, _ in available}
-        # S3 is listed through copies so a coord GCS lacks and S3 also lacks keeps
-        # its GCS URL and stays pending.
-        s3_probes: dict[
-            int,
-            tuple[
-                EcmwfAifsSingleForecastVirtualSourceFileCoord,
-                EcmwfAifsSingleForecastVirtualSourceFileCoord,
-            ],
-        ] = {}
-        for coord in pending:
-            if id(coord) in on_gcs or coord.init_time >= S3_FALLBACK_BEFORE:
-                continue
-            s3_probe = coord.model_copy()
-            s3_probe.fall_back_to_s3()
-            s3_probes[id(s3_probe)] = (s3_probe, coord)
-        if not s3_probes:
-            return available
-        on_s3 = discover_available_by_obstore_listing(
-            [s3_probe for s3_probe, _ in s3_probes.values()],
-            store=s3_store(S3_LOCATION_PREFIX, region=S3_REGION),
-            location_prefix=S3_LOCATION_PREFIX,
-            require_index=True,
-        )
-        for s3_probe, file_size in on_s3:
-            _, coord = s3_probes[id(s3_probe)]
-            coord.fall_back_to_s3()
-            available.append((coord, file_size))
-        return available
 
     def file_refs(
         self,
