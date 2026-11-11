@@ -41,7 +41,7 @@
     "short_name": "svn",
     "standard_name": "northward_sea_water_velocity",
     "units": "m s-1",
-    "comment": "NaN where there is no ocean model value, including over land.",
+    "comment": "Applies over the ocean only; over land the values are NaN or near zero, so mask with land_sea_mask_surface.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="

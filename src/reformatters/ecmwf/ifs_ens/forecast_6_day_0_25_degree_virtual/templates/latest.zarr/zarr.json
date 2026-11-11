@@ -3121,7 +3121,7 @@
           "short_name": "sve",
           "standard_name": "eastward_sea_water_velocity",
           "units": "m s-1",
-          "comment": "NaN where there is no ocean model value, including over land.",
+          "comment": "Applies over the ocean only; over land the values are NaN or near zero, so mask with land_sea_mask_surface.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3180,7 +3180,7 @@
           "short_name": "svn",
           "standard_name": "northward_sea_water_velocity",
           "units": "m s-1",
-          "comment": "NaN where there is no ocean model value, including over land.",
+          "comment": "Applies over the ocean only; over land the values are NaN or near zero, so mask with land_sea_mask_surface.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3484,6 +3484,7 @@
           "short_name": "sd",
           "standard_name": "lwe_thickness_of_surface_snow_amount",
           "units": "m",
+          "comment": "Capped at 10 m, the value held over ice sheets and glaciers.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4456,7 +4457,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "ECMWF soil level 1, the uppermost soil layer.",
+          "comment": "ECMWF soil level 1, the uppermost soil layer. Applies over land only; over water the values are near zero, so mask with land_sea_mask_surface.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4515,7 +4516,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "ECMWF soil level 2, the second soil layer from the surface.",
+          "comment": "ECMWF soil level 2, the second soil layer from the surface. Applies over land only; over water the values are near zero, so mask with land_sea_mask_surface.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4574,7 +4575,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "ECMWF soil level 3.",
+          "comment": "ECMWF soil level 3. Applies over land only; over water the values are near zero, so mask with land_sea_mask_surface.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -4633,7 +4634,7 @@
           "short_name": "vsw",
           "standard_name": "volume_fraction_of_condensed_water_in_soil",
           "units": "1",
-          "comment": "ECMWF soil level 4.",
+          "comment": "ECMWF soil level 4. Applies over land only; over water the values are near zero, so mask with land_sea_mask_surface.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

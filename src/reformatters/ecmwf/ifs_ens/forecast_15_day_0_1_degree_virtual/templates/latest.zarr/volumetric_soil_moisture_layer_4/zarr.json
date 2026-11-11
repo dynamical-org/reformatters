@@ -41,7 +41,7 @@
     "short_name": "vsw",
     "standard_name": "volume_fraction_of_condensed_water_in_soil",
     "units": "1",
-    "comment": "ECMWF soil level 4.",
+    "comment": "ECMWF soil level 4. Applies over land only; over water the values are near zero, so mask with land_sea_mask_surface.",
     "step_type": "instant",
     "coordinates": "expected_forecast_length spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
