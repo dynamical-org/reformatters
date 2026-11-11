@@ -1210,13 +1210,18 @@ class CheckVirtualDecodeHealth(Validator):
         results = []
         skipped: set[str] = set()
         for var in file_vars:
+            var_loc = coord.variable_out_loc(var)
             presence = (
-                self.reference_presence(var.path, cast("Mapping[str, Any]", loc))
+                self.reference_presence(var.path, cast("Mapping[str, Any]", var_loc))
                 if self.reference_presence is not None
                 else None
             )
             da = ds[var.path]
-            selection = {dim: value for dim, value in loc.items() if dim in da.dims}
+            selection = {
+                dim: list(value) if isinstance(value, tuple) else value
+                for dim, value in var_loc.items()
+                if dim in da.dims
+            }
             da = self._sample_levels(da.sel(selection), var.path, presence)
             if presence is not None and not any(presence.values()):
                 skipped.add(var.path)

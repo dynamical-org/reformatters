@@ -194,3 +194,19 @@ def test_present_comparison_data_has_no_absence_annotation() -> None:
         assert not ax.texts
     finally:
         plt.close(fig)
+
+
+def test_sparse_temporal_selection_is_per_variable(sparse_context: RunContext) -> None:
+    ctx = sparse_context
+    run_compare_timeseries(ctx)
+    static = ctx.stats["geopotential_height_surface"]
+    ordinary = ctx.stats["temperature_2m"]
+    control = ctx.stats["pressure_level/geopotential"]
+    assert static.temporal_member == control.temporal_member == 0
+    assert ordinary.temporal_member == 25
+    assert static.temporal_lead_label == "0h"
+    assert ordinary.temporal_lead_label is None
+    assert static.val_temporal_mean_p1 == 100.0
+    assert ordinary.val_temporal_mean_p1 == 2.0
+    assert control.val_temporal_mean_p1 == 5000.0
+    assert ctx.ensemble_member == 25

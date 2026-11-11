@@ -258,7 +258,10 @@ def _var_chunk_keys(keys: _VarKeys, out_loc: Mapping[Any, Any]) -> list[str]:
         keys.dims, keys.chunks, keys.chunk_counts, strict=True
     ):
         if dim in out_loc:
-            position = keys.indexes[dim].get_loc(out_loc[dim])
+            label = out_loc[dim]
+            if isinstance(label, tuple):
+                label = label[len(label) // 2]
+            position = keys.indexes[dim].get_loc(label)
             assert isinstance(position, int)
             indices.append((position // chunk_size,))
         elif dim == keys.level_dim:
@@ -298,7 +301,7 @@ def _var_probes(
                 continue
             probes.extend(
                 (var.path, position, key)
-                for key in _var_chunk_keys(keys, coord.out_loc())
+                for key in _var_chunk_keys(keys, coord.variable_out_loc(var))
             )
     return probes
 
@@ -444,7 +447,7 @@ def _checkpoint_path(
     scope = "all" if variables is None else digest(sorted(variables), length=8)
     return (
         checkpoint_dir
-        / f"{dataset_id}_levels-v2_{start:%Y%m%dT%H%M}_{end:%Y%m%dT%H%M}_{scope}.json"
+        / f"{dataset_id}_coverage-v3_{start:%Y%m%dT%H%M}_{end:%Y%m%dT%H%M}_{scope}.json"
     )
 
 

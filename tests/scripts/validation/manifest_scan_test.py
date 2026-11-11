@@ -15,6 +15,9 @@ import zarr
 from zarr.storage import MemoryStore
 
 from reformatters.common import validation
+from reformatters.ecmwf.ifs_ens.virtual_region_job import (
+    EcmwfIfsEnsForecastVirtualSourceFileCoord,
+)
 from reformatters.noaa.refs.forecast_hourly_virtual.template_config import (
     NoaaRefsForecastHourlyVirtualTemplateConfig,
 )
@@ -40,6 +43,7 @@ from scripts.validation.manifest_scan import (
 )
 from scripts.validation.scan_common import evenly_spaced_subset
 from scripts.validation.utils import RunContext, choose_statistic
+from tests.ecmwf.ifs_ens.virtual.conftest import get_var
 
 
 def test_find_registered_dataset_from_worker_thread() -> None:
@@ -117,6 +121,9 @@ class _Coord:
         if self._lead_time is not None:
             loc["lead_time"] = self._lead_time
         return loc
+
+    def variable_out_loc(self, _var: object) -> dict[str, Any]:
+        return self.out_loc()
 
     @property
     def append_dim_coord(self) -> pd.Timestamp:
@@ -644,7 +651,7 @@ def test_checkpoint_path_separates_variable_filters(tmp_path: Path) -> None:
 
     assert unfiltered != filtered
     assert unfiltered.name.startswith(
-        f"{dataset_id}_levels-v2_20240101T0000_20240401T0000"
+        f"{dataset_id}_coverage-v3_20240101T0000_20240401T0000"
     )
 
 
@@ -729,3 +736,65 @@ def test_resolve_bounds_clamps_a_start_before_the_dataset() -> None:
     )
 
     assert (start, end) == (pd.Timestamp("2020-10-01"), pd.Timestamp("2021-01-01"))
+
+
+@pytest.mark.parametrize(
+    ("control_present", "ordinary_present"),
+    [(True, True), (False, True), (True, False)],
+)
+def test_declared_member_probes_preserve_real_gaps(
+    control_present: bool,
+    ordinary_present: bool,
+) -> None:
+    position = pd.Timestamp("2024-04-01")
+    control = get_var("geopotential_height_surface")
+    ordinary = get_var("temperature_2m")
+    dims = ("init_time", "lead_time", "ensemble_member")
+    ds = xr.Dataset(
+        coords={
+            "init_time": [position],
+            "lead_time": [pd.Timedelta(0)],
+            "ensemble_member": [0, 25],
+        }
+    )
+    store = MemoryStore()
+    group = zarr.open_group(store, mode="w")
+    for var, present, member in [
+        (control, control_present, 0),
+        (ordinary, ordinary_present, 1),
+    ]:
+        ds[var.path] = xr.DataArray(np.zeros((1, 1, 2), dtype="float32"), dims=dims)
+        ds[var.path].encoding["chunks"] = (1, 1, 1)
+        array = group.create_array(
+            var.path, shape=(1, 1, 2), chunks=(1, 1, 1), dtype="f4"
+        )
+        if present:
+            array[0, 0, member] = 1.0
+        array[0, 0, 0 if var is ordinary else 1] = 1.0
+    coord = EcmwfIfsEnsForecastVirtualSourceFileCoord(
+        init_time=position,
+        lead_time=pd.Timedelta(0),
+        resolution="0p25",
+        family="enfo",
+        ensemble_members=(0, 25),
+        pressure_levels=(),
+        data_vars=[control, ordinary],
+    )
+    template = xr.DataTree(ds)
+    job = Mock(data_vars=[control, ordinary], template_ds=template)
+    probes = _var_probes(job, [(coord, True)], group, {})
+    assert {key for _, _, key in probes} == {
+        f"{control.path}/c/0/0/0",
+        f"{ordinary.path}/c/0/0/1",
+    }
+    availability: dict[str, dict[pd.Timestamp, bool]] = {}
+    _flush_var_probes(cast("Any", store), probes, availability)
+    assert availability == {
+        control.path: {position: control_present},
+        ordinary.path: {position: ordinary_present},
+    }
+    for var, expected in [(control, control_present), (ordinary, ordinary_present)]:
+        keys = _var_keys(template, group, var)
+        assert _reference_presence(
+            cast("Any", store), {var.path: keys}, var.path, coord.variable_out_loc(var)
+        ) == {None: expected}

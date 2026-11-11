@@ -27,6 +27,7 @@ from scripts.validation.utils import (
     point_option,
     report_mean,
     resolve_output_dir,
+    restrict_plot_coverage,
     scope_time_period,
     select_var_slice,
     select_variables_for_plotting,
@@ -131,14 +132,13 @@ def _sample_virtual_points(
     """One decode per sampled position, both run points read from that one message.
 
     The value time series exists to surface magnitude shifts (e.g. a units change), so
-    at each strided position one message suffices. Pins a representative (lead, member,
-    level) slice so the whole-period series is a single, comparable slice rather than
-    sweeping the vertical profile / lead / member with position. A chunk is a full
-    spatial field, so both points come from the same decode; the result has a final
-    `point` dim of size 2.
+    at each strided position one message suffices. Pins a declared (lead, member,
+    level) slice at each initialization, following coverage changes across the archive.
+    A chunk is a full spatial field, so both points come from the same decode; the
+    result has a final `point` dim of size 2.
     """
+    append_dim = "init_time" if "init_time" in ctx.validation_ds[var].dims else "time"
     da = ctx.validation_ds[var]
-    append_dim = "init_time" if "init_time" in da.dims else "time"
     stride = max(1, da.sizes[append_dim] // VIRTUAL_VALUE_TS_SAMPLES)
     da = da.isel({append_dim: slice(None, None, stride)})
 
@@ -151,20 +151,41 @@ def _sample_virtual_points(
         assert isinstance(loc, int)
         indexers[dim] = loc
 
-    for dim in map(str, da.dims):
-        if dim == append_dim or dim in SPATIAL_DIMS or dim in indexers:
-            continue
+    sampled_locations: dict[str, list[int]] = {}
+    for position in pd.to_datetime(da[append_dim].values):
+        covered = restrict_plot_coverage(ctx, var, ctx.validation_ds, position)[var]
+        for dim in map(str, da.dims):
+            if dim == append_dim or dim in SPATIAL_DIMS or dim in indexers:
+                continue
+            labels = covered.get_index(dim)
+            # Smallest nonzero lead skips structural lead-0 NaNs; static fields use lead 0.
+            label = (
+                next((v for v in labels if v != pd.Timedelta(0)), labels[0])
+                if dim == "lead_time"
+                else labels[0]
+            )
+            loc = da.get_index(dim).get_loc(label)
+            assert isinstance(loc, int)
+            sampled_locations.setdefault(dim, []).append(loc)
+    for dim, locations in sampled_locations.items():
+        choices = list(dict.fromkeys(locations))
+        indexers[dim] = (
+            choices[0]
+            if len(choices) == 1
+            else xr.DataArray(locations, dims=append_dim)
+        )
         if dim == "lead_time":
-            # Smallest nonzero lead: skips the lead-0 structural NaN of accumulated
-            # vars, uniform for all vars.
-            lead_index = 1 if da.sizes[dim] > 1 else 0
-            indexers[dim] = lead_index
-            lead_value = da[dim].values[lead_index]
-            ctx.value_ts_lead_label = format_lead_time(pd.Timedelta(lead_value))
-        else:
-            indexers[dim] = 0
-            if dim == "ensemble_member":
-                ctx.value_ts_member = int(da[dim].values[0])
+            leads = [format_lead_time(pd.Timedelta(da[dim].values[i])) for i in choices]
+            stats.value_ts_lead_label = (
+                leads[0] if len(leads) == 1 else f"varies ({', '.join(leads)})"
+            )
+        elif dim == "ensemble_member":
+            members = [int(da[dim].values[i]) for i in choices]
+            stats.value_ts_member = (
+                members[0]
+                if len(members) == 1
+                else f"varies ({', '.join(map(str, members))})"
+            )
     return da.isel(indexers)
 
 
@@ -258,6 +279,10 @@ def run_value_timeseries(ctx: RunContext) -> None:
                     ax, data, time_dim, ctx.validation_ds[time_dim]
                 )
             title = f"{var}{level_label(stats)}"
+            if stats.value_ts_lead_label is not None:
+                title += f" lead={stats.value_ts_lead_label}"
+            if stats.value_ts_member is not None:
+                title += f", member={stats.value_ts_member}"
             fig_v.suptitle(
                 f"{title} — full-period mean ± std" if has_std else title, fontsize=11
             )

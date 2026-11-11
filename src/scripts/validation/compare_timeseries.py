@@ -13,6 +13,7 @@ from scripts.validation.utils import (
     annotate_empty_timeseries,
     deterministic_reference_allowed,
     end_date_option,
+    format_lead_time,
     get_two_random_points,
     init_time_option,
     is_forecast_dataset,
@@ -28,7 +29,9 @@ from scripts.validation.utils import (
     report_mean,
     resolve_output_dir,
     resolve_reference_url,
+    restrict_plot_coverage,
     scope_time_period,
+    select_plot_member,
     select_random_ensemble_member,
     select_var_slice,
     select_variables_for_plotting,
@@ -252,14 +255,9 @@ def run_compare_timeseries(ctx: RunContext) -> None:
     # Temporal plots are over a single member; ctx.validation_ds keeps the full
     # ensemble dim so the availability scan can see every member.
     validation_ds = ctx.validation_ds
-    if "ensemble_member" in validation_ds.dims:
-        if ctx.ensemble_member is None:
-            validation_ds, ctx.ensemble_member = select_random_ensemble_member(
-                validation_ds
-            )
-            log.info(f"Ensemble member (random): {ctx.ensemble_member}")
-        else:
-            validation_ds = validation_ds.sel(ensemble_member=ctx.ensemble_member)
+    if "ensemble_member" in validation_ds.dims and ctx.ensemble_member is None:
+        _, ctx.ensemble_member = select_random_ensemble_member(validation_ds)
+        log.info(f"Ensemble member (random): {ctx.ensemble_member}")
 
     (
         validation_subset,
@@ -285,8 +283,29 @@ def run_compare_timeseries(ctx: RunContext) -> None:
         stats = ctx.stats_for(var)
         slice_sel = select_var_slice(ctx, var, stats)
         level_note = level_label(stats)
+        append_dim = "init_time" if "init_time" in validation_subset.coords else "time"
+        position = pd.Timestamp(validation_subset[append_dim].values.reshape(-1)[0])
+        var_subset = restrict_plot_coverage(ctx, var, validation_subset, position)
+        var_subset, member = select_plot_member(var_subset, ctx.ensemble_member)
+        stats.temporal_member = member
+        var_title_suffix = title_suffix
+        if member is not None:
+            var_title_suffix += f", member={member}"
+        if "lead_time" in var_subset.dims and var_subset.sizes["lead_time"] == 1:
+            stats.temporal_lead_label = format_lead_time(
+                pd.Timedelta(var_subset.lead_time.item())
+            )
+            var_title_suffix += f", lead={stats.temporal_lead_label}"
+        var_reference = reference_subset
+        if "valid_time" in var_subset.coords:
+            var_reference = ctx.reference_ds.sel(
+                time=slice(
+                    pd.Timestamp(var_subset.valid_time.min().item()),
+                    pd.Timestamp(var_subset.valid_time.max().item()),
+                )
+            )
         val_p1, ref_p1, val_p2, ref_p2 = _load_timeseries_for_var(
-            var, ctx, validation_subset, reference_subset, slice_sel
+            var, ctx, var_subset, var_reference, slice_sel
         )
         _store_temporal_stats(stats, val_p1, val_p2, ref_p1, ref_p2)
         units = stats.units or ""
@@ -323,7 +342,7 @@ def run_compare_timeseries(ctx: RunContext) -> None:
             else f"{val_label} (validation only)"
         )
         fig_v.suptitle(
-            f"{var}{level_note}\n{comparison_label}\n{title_suffix}",
+            f"{var}{level_note}\n{comparison_label}\n{var_title_suffix}",
             fontsize=11,
         )
         out_path = ctx.output_dir / f"temporal_{var_slug(var)}.png"

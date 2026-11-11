@@ -535,3 +535,17 @@ def test_real_temperature_alias_decodes_with_configured_celsius_filter(
     )
     value = ds.temperature_2m.sel(latitude=-5, longitude=-60).item()
     assert value == pytest.approx(36.296060180664085)
+
+
+def test_variable_output_coverage_uses_declared_members() -> None:
+    ordinary = get_var("temperature_2m")
+    control = get_var("geopotential_height_surface")
+    coord = source_coord([ordinary, control], init="2024-04-01", lead=0)
+    assert coord.variable_out_loc(ordinary) == {
+        **coord.out_loc(),
+        "ensemble_member": (0, 1, 50),
+    }
+    assert coord.variable_out_loc(control) == {
+        **coord.out_loc(),
+        "ensemble_member": (0,),
+    }

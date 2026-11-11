@@ -82,6 +82,12 @@ class EcmwfIfsEnsForecastVirtualSourceFileCoord(EcmwfVirtualSourceFileCoord):
             if not var.internal_attrs.control_only or m == 0
         )
 
+    def variable_out_loc(
+        self, var: DataVar[Any]
+    ) -> Mapping[Dim, CoordinateValue | tuple[CoordinateValue, ...]]:
+        assert isinstance(var, EcmwfIfsEnsVirtualDataVar)
+        return {**self.out_loc(), "ensemble_member": self.members_for(var)}
+
 
 class EcmwfIfsEnsForecastVirtualRegionJob(
     VirtualRegionJob[
