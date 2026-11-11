@@ -238,6 +238,217 @@ def test_response_contract_and_retry(
     assert all(owner() is None for owner in owners)
 
 
+def test_application_retry_events_measure_attempts_and_actual_backoff_without_error_text(
+    ranged_job: tuple[EcmwfFastRegionJob, EcmwfFastSourceFileCoord, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    job, coord, data = ranged_job
+    clock = 0.0
+    attempts = []
+    sleeps = []
+    error = GenericError(
+        "https://user:password@example.invalid/?token=secret Authorization: hidden"
+    )
+    error.__cause__ = TimeoutError("private cause")
+
+    def stream(
+        self: EcmwfFastRegionJob,
+        source: EcmwfFastSourceFileCoord,
+        size: int,
+        etag: str | None,
+        *,
+        application_attempt: int,
+    ) -> list[VirtualRef]:
+        nonlocal clock
+        attempts.append(application_attempt)
+        assert source is coord
+        assert size == len(data)
+        assert etag == ETAG
+        clock += application_attempt * 2
+        if application_attempt == 1:
+            raise error
+        return []
+
+    def sleep(delay: float) -> None:
+        nonlocal clock
+        sleeps.append(delay)
+        clock += delay
+
+    backoff = MagicMock(return_value=0.125)
+    monkeypatch.setattr(type(job), "_stream_file_refs", stream)
+    monkeypatch.setattr(region_job, "monotonic", lambda: clock)
+    monkeypatch.setattr(region_job, "exponential_backoff_time", backoff)
+    monkeypatch.setattr(region_job.time, "sleep", sleep)
+    with caplog.at_level("INFO"):
+        assert job.file_refs(coord, len(data)) == []
+    assert attempts == [1, 2]
+    assert sleeps == [0.125]
+    backoff.assert_called_once_with(0)
+    events = [
+        json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
+        for r in caplog.records
+    ]
+    assert [e["event"] for e in events] == [
+        "fetch_attempt_start",
+        "fetch_attempt_failed",
+        "fetch_attempt_start",
+        "fetch_attempt_complete",
+    ]
+    assert [e["application_attempt"] for e in events] == [1, 1, 2, 2]
+    assert events[1]["elapsed_s"] == 2.0
+    assert events[1]["backoff_s"] == 0.125
+    assert events[1]["error_type"] == "GenericError"
+    assert events[1]["cause_type"] == "TimeoutError"
+    assert events[1]["retrying"] is True
+    assert events[-1]["elapsed_s"] == 4.0
+    assert not any(
+        word in caplog.text
+        for word in (
+            "password",
+            "token",
+            "secret",
+            "Authorization",
+            "private cause",
+            "example.invalid",
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        GenericError("hidden"),
+        InterruptedGribStreamError("hidden"),
+        SourceContractError("hidden"),
+        SourceAccessError("hidden"),
+        AssertionError("hidden"),
+        KeyboardInterrupt("hidden"),
+    ],
+)
+def test_application_terminal_events_preserve_retry_policy_and_exception(
+    ranged_job: tuple[EcmwfFastRegionJob, EcmwfFastSourceFileCoord, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    error: BaseException,
+) -> None:
+    job, coord, data = ranged_job
+    stream = MagicMock(side_effect=error)
+    sleep = MagicMock()
+    backoff = MagicMock(return_value=0.125)
+    monkeypatch.setattr(type(job), "_stream_file_refs", stream)
+    monkeypatch.setattr(region_job.time, "sleep", sleep)
+    monkeypatch.setattr(region_job, "exponential_backoff_time", backoff)
+    with caplog.at_level("INFO"), pytest.raises(type(error)) as caught:
+        job.file_refs(coord, len(data))
+    assert caught.value is error
+    attempts = 2 if isinstance(error, (GenericError, InterruptedGribStreamError)) else 1
+    assert stream.call_count == attempts
+    assert sleep.call_count == backoff.call_count == attempts - 1
+    failures = [
+        json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
+        for r in caplog.records
+        if '"event": "fetch_attempt_failed"' in r.getMessage()
+    ]
+    assert len(failures) == attempts
+    assert failures[-1]["application_attempt"] == attempts
+    assert failures[-1]["retrying"] is False
+    assert failures[-1]["backoff_s"] is None
+    assert "hidden" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "failure_phase", [None, "headers", "body", "response_validation", "body_validation"]
+)
+def test_range_events_measure_headers_body_and_failure_without_secrets(
+    ranged_job: tuple[EcmwfFastRegionJob, EcmwfFastSourceFileCoord, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failure_phase: str | None,
+) -> None:
+    _, coord, data = ranged_job
+    clock = 0.0
+    owners: list[weakref.ReferenceType[Payload]] = []
+    error = GenericError("https://private.invalid/?credential=secret")
+    error.__cause__ = ConnectionError("Authorization: private")
+
+    class MeasuredResponse(Response):
+        def bytes(self) -> Payload:
+            nonlocal clock
+            clock = 5.0
+            if failure_phase == "body":
+                raise error
+            return super().bytes()
+
+    def get(store: ObjectStore, key: str, *, options: dict[str, Any]) -> Response:
+        nonlocal clock
+        clock = 2.0
+        if failure_phase == "headers":
+            raise error
+        response = MeasuredResponse(data, options["range"], owners)
+        if failure_phase == "response_validation":
+            response.range = (0, 1)
+        if failure_phase == "body_validation":
+            response.length_change = -1
+        return response
+
+    monkeypatch.setattr(region_job, "TARGET_RANGE_CHUNK", len(data))
+    monkeypatch.setattr(region_job, "monotonic", lambda: clock)
+    monkeypatch.setattr(region_job.obstore, "get", get)
+    with caplog.at_level("INFO"):
+        if failure_phase is None:
+            assert (
+                b"".join(
+                    region_job._ranged_chunks(
+                        STORE, coord.key, len(data), ETAG, application_attempt=2
+                    )
+                )
+                == data
+            )
+        else:
+            with pytest.raises(
+                (GenericError, SourceContractError, InterruptedGribStreamError)
+            ):
+                list(
+                    region_job._ranged_chunks(
+                        STORE, coord.key, len(data), ETAG, application_attempt=2
+                    )
+                )
+    events = [
+        json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
+        for r in caplog.records
+    ]
+    assert events[0]["event"] == "range_start"
+    assert events[-1]["event"] == "range_executor_drained"
+    for event in events[:-1]:
+        assert event["application_attempt"] == 2
+        assert event["range_index"] == event["range_start"] == 0
+        assert event["range_end_exclusive"] == event["range_bytes"] == len(data)
+    headers = [e for e in events if e["event"] == "range_headers"]
+    assert len(headers) == (failure_phase != "headers")
+    if headers:
+        assert headers[0]["elapsed_s"] == 2.0
+    bodies = [e for e in events if e["event"] == "range_body_complete"]
+    assert len(bodies) == (failure_phase in (None, "body_validation"))
+    if bodies:
+        assert bodies[0]["elapsed_s"] == 5.0
+        assert bodies[0]["bytes_received"] == len(data) - (
+            failure_phase == "body_validation"
+        )
+    failures = [e for e in events if e["event"] == "range_failed"]
+    assert len(failures) == (failure_phase is not None)
+    if failures:
+        assert failures[0]["phase"] == failure_phase
+        assert failures[0]["bytes_received"] == (
+            len(data) - 1 if failure_phase == "body_validation" else None
+        )
+    assert all(owner() is None for owner in owners)
+    assert not any(
+        word in caplog.text
+        for word in ("private", "credential", "secret", "Authorization")
+    )
+
+
 @pytest.mark.parametrize(
     "fatal",
     [PermissionDeniedError, UnauthenticatedError, SourceAccessError, AssertionError],
