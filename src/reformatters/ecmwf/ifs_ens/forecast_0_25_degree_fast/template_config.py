@@ -16,7 +16,7 @@ class EcmwfIfsEnsForecast025DegreeFastTemplateConfig(EcmwfFastTemplateConfig):
             name="ECMWF IFS ENS forecast, 0.25 degree, fast",
             description="Weather forecasts from the ECMWF IFS ENS, published with low latency.",
             attribution="ECMWF IFS ENS forecast data processed by dynamical.org.",
-            license="LicenseRef-Commercial",
+            license="CC-BY-4.0",
             spatial_domain="Global",
             spatial_resolution="0.25 degrees (~20km)",
             time_domain="Most recent 12 forecast initializations",

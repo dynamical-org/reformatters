@@ -5,7 +5,7 @@
     "name": "ECMWF AIFS ENS forecast, fast",
     "description": "Weather forecasts from the ECMWF AIFS ENS, published with low latency.",
     "attribution": "ECMWF AIFS ENS forecast data processed by dynamical.org.",
-    "license": "LicenseRef-Commercial",
+    "license": "CC-BY-4.0",
     "spatial_domain": "Global",
     "spatial_resolution": "0.25 degrees (~20km)",
     "time_domain": "Most recent 12 forecast initializations",
