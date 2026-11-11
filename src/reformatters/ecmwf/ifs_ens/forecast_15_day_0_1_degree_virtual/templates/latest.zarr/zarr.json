@@ -3308,7 +3308,7 @@
           "long_name": "Snow albedo",
           "short_name": "asn",
           "units": "percent",
-          "comment": "Meaningful only where snow is present; snow-free cells hold placeholder values.",
+          "comment": "Applies only where snow is present (snow_water_equivalent_surface > 0); snow-free cells hold placeholder values that also occur over snow.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -3367,7 +3367,7 @@
           "short_name": "rsn",
           "standard_name": "surface_snow_density",
           "units": "kg m-3",
-          "comment": "Meaningful only where snow is present; snow-free cells hold placeholder values.",
+          "comment": "Applies only where snow is present (snow_water_equivalent_surface > 0); snow-free cells hold placeholder values that also occur over snow.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

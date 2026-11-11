@@ -648,7 +648,10 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             param="asn",
             long_name="Snow albedo",
             units="percent",
-            comment="Meaningful only where snow is present; snow-free cells hold placeholder values.",
+            comment=(
+                "Applies only where snow is present (snow_water_equivalent_surface > 0); "
+                "snow-free cells hold placeholder values that also occur over snow."
+            ),
             filters=[ScaleOffset(offset=0, scale=0.01).to_dict()],
         ),
         var(
@@ -739,7 +742,10 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             long_name="Snow density",
             units="kg m-3",
             standard_name="surface_snow_density",
-            comment="Meaningful only where snow is present; snow-free cells hold placeholder values.",
+            comment=(
+                "Applies only where snow is present (snow_water_equivalent_surface > 0); "
+                "snow-free cells hold placeholder values that also occur over snow."
+            ),
             date_available=pd.Timestamp("2026-02-11T12:00:00"),
         ),
         var(
