@@ -8,7 +8,10 @@ import xarray as xr
 from scripts.validation import compare_spatial
 from scripts.validation.compare_spatial import (
     _compute_spatial_stats,
+    _select_analysis_snapshot,
+    _select_forecast_snapshot,
     _spatial_color_range,
+    _variable_spatial_snapshot,
     align_reference_spatially,
     run_compare_spatial,
     select_reference_time,
@@ -155,7 +158,6 @@ def test_spatial_statistics_preserve_values_and_extrema(wind: bool) -> None:
         )
 
 
-@pytest.mark.parametrize("forecast", [False, True])
 @pytest.mark.parametrize("direction", [-1, 1])
 @pytest.mark.parametrize(
     ("delta", "outcome"),
@@ -168,7 +170,6 @@ def test_spatial_statistics_preserve_values_and_extrema(wind: bool) -> None:
     ],
 )
 def test_reference_time_drift_boundaries(
-    forecast: bool,
     direction: int,
     delta: str,
     outcome: str,
@@ -178,34 +179,16 @@ def test_reference_time_drift_boundaries(
     requested = pd.Timestamp("2026-11-03T12")
     actual = requested + direction * pd.Timedelta(delta)
     reference = xr.Dataset(coords={"time": [actual]})
-    if forecast:
-        ds = xr.Dataset(
-            coords={
-                "init_time": [requested - pd.Timedelta("3h")],
-                "lead_time": [pd.Timedelta("3h")],
-                "valid_time": (("init_time", "lead_time"), [[requested]]),
-            }
-        )
-
-        def align() -> tuple[xr.Dataset, xr.Dataset]:
-            return compare_spatial.align_to_valid_time_forecast(
-                ds, reference, None, "3"
-            )
-    else:
-        ds = xr.Dataset(coords={"time": [requested]})
-
-        def align() -> tuple[xr.Dataset, xr.Dataset]:
-            return compare_spatial.align_to_valid_time_analysis(ds, reference, None)
-
     warning = Mock()
     monkeypatch.setattr(compare_spatial.log, "warning", warning)
     if outcome == "fail":
         with pytest.raises(ValueError, match="exceeds 24 hours") as error:
-            align()
+            select_reference_time(reference, requested)
         assert str(requested) in str(error.value)
         assert str(actual) in str(error.value)
     else:
-        _, selected = align()
+        selected, message = select_reference_time(reference, requested)
+        assert (message is not None) == (outcome == "warn")
         assert pd.Timestamp(selected.time.item()) == actual
         assert warning.call_count == (1 if outcome == "warn" else 0)
 
@@ -268,3 +251,70 @@ def test_variable_without_reference_skips_drift_check(
     assert stats.val_spatial_mean == 2.0
     assert not stats.ref_available_spatial
     assert stats.reference_time_warning is None
+
+
+@pytest.mark.parametrize("unit", ["ns", "us"])
+@pytest.mark.parametrize("virtual", [False, True])
+def test_spatial_snapshot_preserves_requested_lead_and_checks_reference(
+    sparse_context: RunContext,
+    unit: str,
+    virtual: bool,
+) -> None:
+    ctx = sparse_context
+    ctx.is_virtual = virtual
+    ctx.validation_ds = ctx.validation_ds.assign_coords(
+        lead_time=ctx.validation_ds.lead_time.values.astype(f"timedelta64[{unit}]")
+    )
+    assert ctx.validation_ds.lead_time.dtype == np.dtype(f"timedelta64[{unit}]")
+    assert ctx.reference_ds is not None
+    snapshot = _select_forecast_snapshot(
+        ctx.validation_ds, ctx.reference_ds, ctx.init_time, "150"
+    )
+    var = "temperature_2m"
+    stats = ctx.stats_for(var)
+    selected, reference, comparable = _variable_spatial_snapshot(
+        ctx, var, snapshot, ctx.reference_ds, stats
+    )
+    assert pd.Timedelta(selected.lead_time.item()) == pd.Timedelta("150h")
+    assert pd.Timestamp(selected.valid_time.item()) == pd.Timestamp("2026-11-09T06")
+    assert pd.Timestamp(reference.time.item()) == pd.Timestamp("2026-11-09T06")
+    assert comparable
+    assert stats.spatial_valid_time == "2026-11-09T06:00:00"
+    stale_reference = ctx.reference_ds.isel(time=slice(0, 1))
+    with pytest.raises(ValueError, match="exceeds 24 hours") as error:
+        _variable_spatial_snapshot(ctx, var, snapshot, stale_reference, stats)
+    assert "2026-11-09 06:00:00" in str(error.value)
+    assert "2026-11-03 00:00:00" in str(error.value)
+
+
+@pytest.mark.parametrize("time", [None, "2026-11-03T06:00:00"])
+def test_analysis_snapshot_selects_requested_time_and_checks_reference(
+    sparse_context: RunContext,
+    time: str | None,
+) -> None:
+    ctx = sparse_context
+    ctx.is_virtual = False
+    ctx.validation_ds = (
+        ctx.validation_ds[["temperature_2m"]]
+        .isel(lead_time=0, ensemble_member=0, drop=True)
+        .drop_vars("valid_time")
+        .rename({"init_time": "time"})
+    )
+    assert ctx.reference_ds is not None
+    requested = pd.Timestamp(time or "2026-11-03T00:00:00")
+    snapshot = _select_analysis_snapshot(ctx.validation_ds, time)
+    stats = ctx.stats_for("temperature_2m")
+    selected, reference, comparable = _variable_spatial_snapshot(
+        ctx, "temperature_2m", snapshot, ctx.reference_ds, stats
+    )
+    assert pd.Timestamp(selected.time.item()) == requested
+    assert pd.Timestamp(reference.time.item()) == requested
+    assert stats.spatial_valid_time == requested.isoformat()
+    assert comparable
+    stale_reference = ctx.reference_ds.isel(time=slice(0, 1)).assign_coords(
+        time=[requested - pd.Timedelta("25h")]
+    )
+    with pytest.raises(ValueError, match="exceeds 24 hours"):
+        _variable_spatial_snapshot(
+            ctx, "temperature_2m", snapshot, stale_reference, stats
+        )

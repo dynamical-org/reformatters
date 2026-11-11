@@ -120,36 +120,15 @@ def select_reference_time(
     return selected, warning
 
 
-def align_to_valid_time_forecast(
-    ds: xr.Dataset,
-    reference_ds: xr.Dataset,
-    init_time: str | None,
-    lead_time: str | None,
-) -> tuple[xr.Dataset, xr.Dataset]:
-    ds = _select_forecast_snapshot(ds, reference_ds, init_time, lead_time)
-    reference_ds, _ = select_reference_time(
-        reference_ds, pd.Timestamp(ds.valid_time.item())
-    )
-    return ds, reference_ds
-
-
 def _select_analysis_snapshot(ds: xr.Dataset, time: str | None) -> xr.Dataset:
     if time is None:
         # Default to a recent-but-settled position (10 steps back); see
-        # align_to_valid_time_forecast. Tiny archives fall back to the first time.
+        # _select_forecast_snapshot. Tiny archives fall back to the first time.
         idx = max(-10, -ds.sizes["time"])
         selected_time = pd.Timestamp(ds.time.isel(time=idx).item())
     else:
         selected_time = pd.Timestamp(time)
     return ds.sel(time=selected_time)
-
-
-def align_to_valid_time_analysis(
-    ds: xr.Dataset, reference_ds: xr.Dataset, time: str | None
-) -> tuple[xr.Dataset, xr.Dataset]:
-    ds = _select_analysis_snapshot(ds, time)
-    reference_ds, _ = select_reference_time(reference_ds, pd.Timestamp(ds.time.item()))
-    return ds, reference_ds
 
 
 def _downsample_for_plot(ds: xr.Dataset, max_plot_dim: int = 1000) -> xr.Dataset:
@@ -368,7 +347,7 @@ def _variable_spatial_snapshot(
     covered, member = select_plot_member(covered, ctx.ensemble_member)
     ds = covered.sel({append_dim: position})
     if is_forecast:
-        lead = snapshot.lead_time.item()
+        lead = pd.Timedelta(snapshot.lead_time.item())
         if lead not in ds.get_index("lead_time"):
             lead = ds.lead_time.values[0]
         ds = ds.sel(lead_time=lead)
