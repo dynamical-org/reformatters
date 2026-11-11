@@ -3484,7 +3484,7 @@
           "short_name": "sd",
           "standard_name": "lwe_thickness_of_surface_snow_amount",
           "units": "m",
-          "comment": "Capped at 10 m, the value held over ice sheets and glaciers.",
+          "comment": "Capped at 10 m; most of the Antarctic and Greenland ice sheets sit at this cap.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

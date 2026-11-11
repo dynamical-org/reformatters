@@ -755,7 +755,7 @@ def _data_vars(grid: tuple[int, int]) -> list[EcmwfIfsEnsVirtualDataVar]:
             units="m",
             standard_name="lwe_thickness_of_surface_snow_amount",
             date_available=pd.Timestamp("2025-11-20T12:00:00"),
-            comment="Capped at 10 m, the value held over ice sheets and glaciers.",
+            comment="Capped at 10 m; most of the Antarctic and Greenland ice sheets sit at this cap.",
         ),
         var(
             "sea_ice_thickness_surface",
