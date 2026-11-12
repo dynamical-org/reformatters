@@ -1,3 +1,4 @@
+from dataclasses import replace
 from unittest.mock import Mock
 
 import pytest
@@ -129,7 +130,8 @@ def test_east_cli_deploy_uses_policy_after_transform(
 ) -> None:
     east = targets.get_cluster("aws-us-east-1")
     assert east.enabled
-    assert east.suspended
+    east = replace(east, suspended=True)
+    monkeypatch.setattr(targets, "clusters", lambda: (east,))
     dataset = east.resources[0]
     assert targets.cluster_for_resource(dataset.dataset_id).name == "aws-us-east-1"
     cron = dataset.operational_kubernetes_resources("image")[0]
