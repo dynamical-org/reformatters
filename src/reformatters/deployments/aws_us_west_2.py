@@ -13,7 +13,6 @@ from reformatters.eccc.hrdps.forecast import EcccHrdpsForecastDataset
 from reformatters.ecmwf.aifs_ens.forecast import (
     EcmwfAifsEnsForecastDataset,
 )
-from reformatters.ecmwf.aifs_ens.forecast_fast import EcmwfAifsEnsForecastFastDataset
 from reformatters.ecmwf.aifs_single.forecast import (
     EcmwfAifsSingleForecastDataset,
 )
@@ -22,9 +21,6 @@ from reformatters.ecmwf.aifs_single.forecast_virtual import (
 )
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     EcmwfIfsEns46DayGribArchiver,
-)
-from reformatters.ecmwf.ifs_ens.forecast_0_25_degree_fast import (
-    EcmwfIfsEnsForecast025DegreeFastDataset,
 )
 from reformatters.ecmwf.ifs_ens.forecast_6_day_0_1_degree_virtual.dynamical_dataset import (
     EcmwfIfsEnsForecast6Day01DegreeVirtualDataset,
@@ -424,20 +420,6 @@ CLUSTER_DYNAMICAL_DATASETS: list[DynamicalDataset[Any, Any]] = [
     ),
     EcmwfAifsEnsForecastDataset(
         primary_storage_config=EcmwfAifsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
-    ),
-    EcmwfIfsEnsForecast025DegreeFastDataset(
-        primary_storage_config=StorageConfig(
-            base_path="s3://dynamical-ecmwf-ifs-ens",
-            k8s_secret_name="dynamical-ecmwf-output-r2-storage-options-key",  # noqa: S106
-            format=DatasetFormat.ICECHUNK,
-        ),
-    ),
-    EcmwfAifsEnsForecastFastDataset(
-        primary_storage_config=StorageConfig(
-            base_path="s3://dynamical-ecmwf-aifs-ens",
-            k8s_secret_name="dynamical-ecmwf-output-r2-storage-options-key",  # noqa: S106
-            format=DatasetFormat.ICECHUNK,
-        ),
     ),
     # DWD
     DwdIconEuForecast5DayDataset(

@@ -82,11 +82,14 @@ def test_identity_mismatch_fails(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_empty_cluster_does_not_build_or_contact_kubernetes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        targets, "clusters", lambda: (targets.Cluster("empty", [], "on-demand"),)
+    )
     verify = Mock(side_effect=AssertionError("Unexpected Kubernetes access"))
     build = Mock(side_effect=AssertionError("Unexpected image build"))
     monkeypatch.setattr(targets, "verify_cluster", verify)
     monkeypatch.setattr(deploy.docker, "build_and_push_image", build)
-    result = CliRunner().invoke(app, ["deploy", "--cluster", "aws-us-east-1"])
+    result = CliRunner().invoke(app, ["deploy", "--cluster", "empty"])
     assert result.exit_code == 0, result.exception
     verify.assert_not_called()
     build.assert_not_called()
@@ -124,11 +127,10 @@ def test_preflight_precedes_deploy(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_east_cli_deploy_uses_policy_after_transform(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    dataset = next(
-        d for d in DYNAMICAL_DATASETS if d.dataset_id.endswith("0-25-degree-fast")
-    )
-    east = targets.Cluster("aws-us-east-1", [dataset], "on-demand", suspended=True)
-    monkeypatch.setattr(targets, "clusters", lambda: (east,))
+    east = targets.get_cluster("aws-us-east-1")
+    assert east.enabled
+    assert east.suspended
+    dataset = east.resources[0]
     assert targets.cluster_for_resource(dataset.dataset_id).name == "aws-us-east-1"
     cron = dataset.operational_kubernetes_resources("image")[0]
     assert targets.cluster_for_cronjob(cron.name).name == "aws-us-east-1"

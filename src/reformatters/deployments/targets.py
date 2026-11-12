@@ -48,7 +48,7 @@ def clusters() -> tuple[Cluster, ...]:
             "on-demand",
             suspended=True,
             github_environment="prod",
-            enabled=False,
+            enabled=True,
         ),
     )
 
