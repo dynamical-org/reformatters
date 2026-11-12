@@ -29,8 +29,11 @@ def test_cluster_registry_merge_preserves_order_and_instances() -> None:
     )
 
 
-def test_preparation_registry_keeps_all_resources_in_west() -> None:
-    assert aws_us_east_1.CLUSTER_DYNAMICAL_DATASETS == []
+def test_east_owns_only_ecmwf_fast_datasets() -> None:
+    assert {d.dataset_id for d in aws_us_east_1.CLUSTER_DYNAMICAL_DATASETS} == {
+        "ecmwf-ifs-ens-forecast-0-25-degree-fast",
+        "ecmwf-aifs-ens-forecast-fast",
+    }
     assert aws_us_east_1.CLUSTER_OPERATIONAL_ARCHIVERS == []
     assert aws_us_west_2.CLUSTER_DYNAMICAL_DATASETS
     assert aws_us_west_2.CLUSTER_OPERATIONAL_ARCHIVERS
