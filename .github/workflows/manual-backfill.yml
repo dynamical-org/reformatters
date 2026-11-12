@@ -13,6 +13,7 @@ name: 'Manual: Backfill'
         - eccc-hrdps-forecast
         - ecmwf-aifs-ens-forecast
         - ecmwf-aifs-ens-forecast-fast
+        - ecmwf-aifs-ens-forecast-virtual
         - ecmwf-aifs-single-forecast
         - ecmwf-aifs-single-forecast-virtual
         - ecmwf-ifs-ens-15-day-deprecated-zarr-v3

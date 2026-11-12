@@ -58,6 +58,7 @@ type PilotDataset = (
 
 
 ADOPTED_VIRTUAL_IDS = (
+    "ecmwf-aifs-ens-forecast-virtual",
     "ecmwf-ifs-ens-forecast-6-day-0-25-degree-virtual",
     "ecmwf-ifs-ens-forecast-6-day-0-1-degree-virtual",
     "ecmwf-ifs-ens-forecast-15-day-0-25-degree-virtual",

@@ -1292,10 +1292,15 @@ CROSS_DATASET_CONSISTENCY_EXCEPTIONS: set[tuple[str, str, str]] = {
     # NOAA HRRR's is binary (land_binary_mask); each dataset describes its own
     # values honestly under the shared name.
     ("land_sea_mask_surface", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
+    ("land_sea_mask_surface", "standard_name", "ecmwf-aifs-ens-forecast-virtual"),
     ("lsm", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
+    ("lsm", "standard_name", "ecmwf-aifs-ens-forecast-virtual"),
     ("Land-sea mask", "standard_name", "ecmwf-aifs-single-forecast-virtual"),
+    ("Land-sea mask", "standard_name", "ecmwf-aifs-ens-forecast-virtual"),
     ("land_sea_mask_surface", "flag_values", "ecmwf-aifs-single-forecast-virtual"),
+    ("land_sea_mask_surface", "flag_values", "ecmwf-aifs-ens-forecast-virtual"),
     ("land_sea_mask_surface", "flag_meanings", "ecmwf-aifs-single-forecast-virtual"),
+    ("land_sea_mask_surface", "flag_meanings", "ecmwf-aifs-ens-forecast-virtual"),
     # HRRR's ice cover is binary and carries flags, while GFS's is an area
     # fraction taking any value between 0 and 1.
     ("ice_cover_surface", "flag_values", "noaa-gfs-analysis-virtual"),
