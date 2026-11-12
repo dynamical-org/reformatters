@@ -46,7 +46,7 @@ def clusters() -> tuple[Cluster, ...]:
                 *aws_us_east_1.CLUSTER_OPERATIONAL_ARCHIVERS,
             ],
             "on-demand",
-            suspended=True,
+            suspended=False,
             github_environment="prod",
             enabled=True,
         ),
