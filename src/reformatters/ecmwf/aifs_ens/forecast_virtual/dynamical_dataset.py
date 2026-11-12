@@ -62,7 +62,7 @@ class EcmwfAifsEnsForecastVirtualDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            # Hand value: GCS regime since 2026-10-27T12 has fewer than 180 sampled days.
+            # Hand value from the GCS source regime starting 2026-10-27T12Z; measure with --days after it.
             validation.CheckCurrentData(max_delay=timedelta(hours=8, minutes=13)),
             validation.CheckVirtualManifestCompleteness(),
             validation.CheckVirtualDecodeHealth(

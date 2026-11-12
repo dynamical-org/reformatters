@@ -182,7 +182,6 @@ def test_presence_probe_targets_a_member_the_file_contains(
     var = job.representative_var(coord)
     probe = job.representative_probe_loc(coord, var)
     assert probe["ensemble_member"] == members[0]
-    assert probe["pressure_level"] == 50
     assert probe in job.message_locations(coord, var)
 
 

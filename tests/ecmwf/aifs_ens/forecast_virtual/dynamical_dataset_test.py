@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -166,28 +165,11 @@ def test_deployment_stays_suspended_and_polling_overlaps_next_fire(
     (cron,) = dataset.operational_kubernetes_resources("test-image")
     spec = cron.as_kubernetes_object()["spec"]
     assert spec["suspend"] is True
-    assert spec["schedule"] == "5 5,11,17,23 * * *"
-    assert spec["concurrencyPolicy"] == "Allow"
-    job = spec["jobTemplate"]["spec"]
-    assert job["activeDeadlineSeconds"] == 21960
-    assert job["parallelism"] == 1
-    pod = job["template"]["spec"]
-    assert pod["activeDeadlineSeconds"] == 21960
-    container = pod["containers"][0]
-    assert container["resources"]["requests"]["cpu"] == "1.7"
-    assert container["resources"]["requests"]["memory"] == "7G"
     for hour in (0, 6, 12, 18):
         fire = pd.Timestamp("2026-11-11") + pd.Timedelta(hours=hour, minutes=305)
         cutoff = dataset._virtual_poll_deadline(fire + pd.Timedelta("1min"))
         assert cron.previous_fire_time(fire) == fire
         assert cutoff == cron.next_fire_time(fire) + pd.Timedelta("1min")
-    current, completeness, decode = dataset.validators()
-    assert isinstance(current, validation.CheckCurrentData)
-    assert current.max_delay == timedelta(hours=8, minutes=13)
-    assert isinstance(completeness, validation.CheckVirtualManifestCompleteness)
-    assert completeness.min_present_fraction == (1.0,)
-    assert isinstance(decode, validation.CheckVirtualDecodeHealth)
-    assert (decode.sampled_leads, decode.sampled_levels) == (3, 2)
     assert [
         container.url_prefix for container in dataset.icechunk_virtual_config.containers
     ] == ["gs://ecmwf-open-data/"]

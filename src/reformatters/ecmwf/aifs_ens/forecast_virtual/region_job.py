@@ -24,6 +24,16 @@ from .template_config import EcmwfAifsEnsVirtualDataVar, available_pressure_leve
 log = get_logger(__name__)
 
 
+def var_levels(
+    var: EcmwfAifsEnsVirtualDataVar, levels: Sequence[int]
+) -> tuple[int, ...]:
+    return tuple(
+        level
+        for level in levels
+        if level != 10 or var.internal_attrs.grib_index_param != "q"
+    )
+
+
 class EcmwfAifsEnsForecastVirtualSourceFileCoord(EcmwfVirtualSourceFileCoord):
     data_vars: Sequence[EcmwfAifsEnsVirtualDataVar]
     file_type: Literal["cf", "pf"]
@@ -53,11 +63,7 @@ class EcmwfAifsEnsForecastVirtualSourceFileCoord(EcmwfVirtualSourceFileCoord):
         return {**self.out_loc(), "ensemble_member": self.ensemble_members}
 
     def levels_for(self, var: EcmwfAifsEnsVirtualDataVar) -> tuple[int, ...]:
-        return tuple(
-            level
-            for level in self.pressure_levels
-            if level != 10 or var.internal_attrs.grib_index_param != "q"
-        )
+        return var_levels(var, self.pressure_levels)
 
 
 class EcmwfAifsEnsForecastVirtualRegionJob(
@@ -104,13 +110,7 @@ class EcmwfAifsEnsForecastVirtualRegionJob(
                     var
                     for var in data_var_group
                     if var.available(init_time, lead_time)
-                    and (
-                        var.group is ROOT
-                        or any(
-                            p != 10 or var.internal_attrs.grib_index_param != "q"
-                            for p in levels
-                        )
-                    )
+                    and (var.group is ROOT or var_levels(var, levels))
                 ]
                 if not file_vars:
                     continue
@@ -209,13 +209,14 @@ class EcmwfAifsEnsForecastVirtualRegionJob(
         for var in coord.data_vars:
             attrs = var.internal_attrs
             for loc in self.message_locations(coord, var):
-                level = (
-                    cast("int", loc["pressure_level"])
-                    if var.group is not ROOT
-                    else None
-                    if pd.isna(attrs.grib_index_level_value)
-                    else int(attrs.grib_index_level_value)
-                )
+                if var.group is not ROOT:
+                    level = cast("int", loc["pressure_level"])
+                else:
+                    level = (
+                        None
+                        if pd.isna(attrs.grib_index_level_value)
+                        else int(attrs.grib_index_level_value)
+                    )
                 key = (
                     cast("int", loc["ensemble_member"]),
                     attrs.grib_index_param,
