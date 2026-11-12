@@ -70,28 +70,58 @@ concurrency:
   group: k8s-manual-${{ github.actor }}-${{ github.run_id }}
   cancel-in-progress: false
 permissions:
-  id-token: write
   contents: read
 jobs:
-  create-job:
-    name: Create Job
+  prepare:
+    name: Resolve target
     runs-on: ubuntu-24.04
-    environment: prod
+    permissions:
+      contents: read
+    outputs:
+      cluster: ${{ steps.target.outputs.cluster }}
+      environment: ${{ steps.target.outputs.environment }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      with:
-        sparse-checkout: .
+    - uses: ./.github/actions/setup-project
+    - name: Resolve target
+      id: target
+      env:
+        TARGET: ${{ inputs.cronjob_name }}
+      run: uv run src/scripts/workflow_support.py prepare --cronjob-name "$TARGET" --require-enabled
+  create-job:
+    env:
+      DYNAMICAL_CLUSTER: ${{ needs.prepare.outputs.cluster }}
+    needs: prepare
+    permissions:
+      contents: read
+      id-token: write
+    name: Create Job
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.prepare.outputs.environment }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - uses: ./.github/actions/setup-project
+    - name: Load cluster settings
+      env:
+        AWS_CLUSTER_CONFIG: ${{ secrets.AWS_CLUSTER_CONFIG }}
+        CLUSTER: ${{ needs.prepare.outputs.cluster }}
+      run: uv run src/scripts/workflow_support.py configure-cluster "$CLUSTER"
+
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ env.AWS_REGION }}
     - name: Install kubectl
       uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e
       with:
         version: latest
     - name: Update kubeconfig
-      run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+      run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+    - name: Verify cluster identity
+      env:
+        CLUSTER: ${{ needs.prepare.outputs.cluster }}
+      run: uv run main verify-cluster "$CLUSTER"
     - name: Submit job (SEE LOGS)
       env:
         CRONJOB_NAME: ${{ github.event.inputs.cronjob_name }}
@@ -118,7 +148,7 @@ jobs:
         JOB_NAME="${CRONJOB_TRUNCATED}-${USERNAME_TRUNCATED}-${RANDOM_CHARS}"
 
         echo "Creating job: ${JOB_NAME} from cronjob: ${CRONJOB_NAME}"
-        kubectl create job "--from=cronjob/${CRONJOB_NAME}" "${JOB_NAME}"
+        kubectl --namespace default create job "--from=cronjob/${CRONJOB_NAME}" "${JOB_NAME}"
 
         echo ""
         echo "## Job Created Successfully"

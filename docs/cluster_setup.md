@@ -50,3 +50,40 @@ Container image inputs in `deploy/Dockerfile` are pinned to multi-platform diges
      pod-security.kubernetes.io/enforce=restricted \
      pod-security.kubernetes.io/enforce-version=v1.36
    ```
+
+### Cluster selection
+
+`deployments/targets.py` lists cluster names, GitHub environments, capacity policy
+and whether workflow deployment is enabled. Its first entry is the primary build
+environment. Clusters may share a GitHub environment and its `AWS_ROLE_TO_ASSUME`
+and `DEPOT_PROJECT` secrets. The environment's `AWS_CLUSTER_CONFIG` secret maps public cluster
+names to private deployment settings:
+
+```json
+{
+  "public-cluster-name": {
+    "aws_region": "us-east-1",
+    "eks_cluster_name": "private-cluster-name",
+    "docker_repository": "account.dkr.ecr.us-east-1.amazonaws.com/repository"
+  }
+}
+```
+
+Workflows select this entry inside the target job. The shared AWS role needs
+access to each target cluster and repository.
+Each deployment module owns its configured datasets, archivers and storage configs.
+
+Before submission, the current kubeconfig must match the administrator-owned
+`default/reformatters-cluster-identity` ConfigMap's `data.cluster`. Give deployers
+read access to that named ConfigMap, not permission to change it. Workers receive
+`DYNAMICAL_CLUSTER` in their pod environment for Sentry attribution.
+
+```sh
+uv run main verify-cluster <cluster>
+uv run main deploy --cluster <cluster> --docker-image <image>
+```
+
+Dataset-specific commands resolve their cluster from registry membership. Cluster
+suspension applies to deployed CronJobs, not explicit backfill Jobs. Moving a
+running dataset also requires suspending and draining its old writers; changing
+registry membership does not remove existing Kubernetes resources.

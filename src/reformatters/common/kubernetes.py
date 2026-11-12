@@ -38,6 +38,7 @@ class Job(pydantic.BaseModel):
     command: Annotated[Sequence[str], pydantic.Field(min_length=1)]
     image: Annotated[str, pydantic.Field(min_length=1)]
     dataset_id: Annotated[str, pydantic.Field(min_length=1)]
+    cluster: str | None = None
 
     cpu: Annotated[str, pydantic.Field(min_length=1)]
     memory: Annotated[str, pydantic.Field(min_length=1)]
@@ -56,6 +57,7 @@ class Job(pydantic.BaseModel):
 
     secret_names: Sequence[str] = pydantic.Field(default_factory=list)
     service_account_name: str | None = None
+    capacity_type: Literal["spot", "on-demand"] = "spot"
 
     def mounted_secret_names(self) -> Sequence[str]:
         """Secrets mounted as JSON files at /secrets/<name>.json in the pod."""
@@ -129,6 +131,16 @@ class Job(pydantic.BaseModel):
                                 ],
                                 "env": [
                                     {"name": "DYNAMICAL_ENV", "value": "prod"},
+                                    *(
+                                        [
+                                            {
+                                                "name": "DYNAMICAL_CLUSTER",
+                                                "value": self.cluster,
+                                            }
+                                        ]
+                                        if self.cluster is not None
+                                        else []
+                                    ),
                                     {
                                         "name": "DYNAMICAL_SENTRY_DSN",
                                         "valueFrom": {
@@ -211,7 +223,7 @@ class Job(pydantic.BaseModel):
                         ],
                         "nodeSelector": {
                             "eks.amazonaws.com/compute-type": "auto",
-                            "karpenter.sh/capacity-type": "spot",
+                            "karpenter.sh/capacity-type": self.capacity_type,
                         },
                         "restartPolicy": "Never",
                         **(

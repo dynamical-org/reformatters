@@ -13,7 +13,8 @@ Datasets are created in 3 phases:
 
 ```
 src/reformatters/
-├── __main__.py              # CLI entrypoint, dataset registry
+├── __main__.py              # CLI entrypoint, merged global dataset registry
+├── deployments/             # Per-cluster configured dataset/archiver registries and storage configs
 ├── common/                  # Shared utilities and base classes
 │   ├── dynamical_dataset.py # DynamicalDataset base class
 │   ├── template_config.py   # TemplateConfig base class

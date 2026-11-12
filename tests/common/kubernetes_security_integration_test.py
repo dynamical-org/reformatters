@@ -388,6 +388,7 @@ def cluster(apiserver: ApiServer) -> Cluster:
             name=UPDATE,
             image="busybox:1",
             dataset_id="test-dataset",
+            cluster="aws-us-west-2",
             cpu="1",
             memory="1G",
             schedule="0 * * * *",

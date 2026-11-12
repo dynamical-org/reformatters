@@ -1,36 +1,72 @@
 name: 'Manual: Get Jobs'
 'on':
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      cluster:
+        description: Cluster to inspect
+        required: true
+        type: choice
+        options:
+        - aws-us-west-2
+        - aws-us-east-1
 permissions:
   id-token: write
   contents: read
 jobs:
-  get-jobs:
-    name: Get Jobs
+  prepare:
+    name: Resolve target
     runs-on: ubuntu-24.04
-    environment: prod
+    permissions:
+      contents: read
+    outputs:
+      cluster: ${{ steps.target.outputs.cluster }}
+      environment: ${{ steps.target.outputs.environment }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      with:
-        sparse-checkout: .
+    - uses: ./.github/actions/setup-project
+    - name: Resolve target
+      id: target
+      env:
+        CLUSTER: ${{ inputs.cluster }}
+      run: uv run src/scripts/workflow_support.py prepare --cluster "$CLUSTER"
+  get-jobs:
+    needs: prepare
+    env:
+      DYNAMICAL_CLUSTER: ${{ needs.prepare.outputs.cluster }}
+    name: Get Jobs
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.prepare.outputs.environment }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - uses: ./.github/actions/setup-project
+    - name: Load cluster settings
+      env:
+        AWS_CLUSTER_CONFIG: ${{ secrets.AWS_CLUSTER_CONFIG }}
+        CLUSTER: ${{ needs.prepare.outputs.cluster }}
+      run: uv run src/scripts/workflow_support.py configure-cluster "$CLUSTER"
+
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ env.AWS_REGION }}
     - name: Install kubectl
       uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e
       with:
         version: latest
     - name: Update kubeconfig
-      run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+      run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+    - name: Verify cluster identity
+      env:
+        CLUSTER: ${{ needs.prepare.outputs.cluster }}
+      run: uv run main verify-cluster "$CLUSTER"
     - name: Get jobs (SEE LOGS)
       run: |
         #!/bin/bash
         set -euo pipefail
 
         # Get jobs and save output (capture both stdout and stderr for "No resources found" message)
-        OUTPUT=$(kubectl get jobs --sort-by=.metadata.creationTimestamp 2>&1)
+        OUTPUT=$(kubectl --namespace default get jobs --sort-by=.metadata.creationTimestamp 2>&1)
 
         # Print to logs (plaintext version of summary)
         echo "## Kubernetes Jobs"

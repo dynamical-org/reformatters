@@ -1,4 +1,5 @@
 name: Deploy Operational Updates
+run-name: Deploy Operational Updates (${{ github.event.workflow_run.head_sha }})
 
 # Gate the production deploy on Code Quality passing on main.
 on:
@@ -15,50 +16,103 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  id-token: write
   contents: read
 
-env:
-  # workflow_run's github.sha is the default-branch tip, so pin to the exact commit
-  # that passed Code Quality.
-  IMAGE_TAG: "${{ secrets.DOCKER_REPOSITORY }}:${{ github.event.workflow_run.head_sha }}"
-
 jobs:
-  deploy:
-    name: Deploy
+  prepare:
+    name: Resolve active targets
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_repository.full_name == github.repository &&
       github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-24.04
-    environment: prod
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+      primary_environment: ${{ steps.targets.outputs.primary_environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: ./.github/actions/setup-project
+      - name: Resolve active targets
+        id: targets
+        run: uv run src/scripts/workflow_support.py matrix
 
-    # Keep deploy-staging.yaml and these steps in sync
+  build:
+    name: Build shared image
+    needs: prepare
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.prepare.outputs.primary_environment }}
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      build-id: ${{ steps.build.outputs.build-id }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
+      - name: Set up Depot CLI
+        uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1
 
-      - name: "Set up Python"
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v6
+      - uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1
+        id: build
         with:
-          python-version-file: ".python-version"
+          project: ${{ secrets.DEPOT_PROJECT }}
+          platforms: linux/amd64,linux/arm64
+          save: true
+          push: false
+          context: .
+          file: deploy/Dockerfile
 
-      - name: Install the project
-        run: uv sync --all-extras --dev --locked
+      - name: Check saved build outputs
+        env:
+          BUILD_ID: ${{ steps.build.outputs.build-id }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "$BUILD_ID"
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+
+  deploy:
+    name: Deploy (${{ matrix.cluster }})
+    needs: [prepare, build]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    runs-on: ubuntu-24.04
+    environment: ${{ matrix.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      CLUSTER: ${{ matrix.cluster }}
+      DYNAMICAL_CLUSTER: ${{ matrix.cluster }}
+      DEPOT_PROJECT: ${{ secrets.DEPOT_PROJECT }}
+      IMAGE_SHA: ${{ github.event.workflow_run.head_sha }}
+      BUILD_ID: ${{ needs.build.outputs.build-id }}
+      IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: ./.github/actions/setup-project
+
+      - name: Load cluster settings
+        env:
+          AWS_CLUSTER_CONFIG: ${{ secrets.AWS_CLUSTER_CONFIG }}
+          CLUSTER: ${{ matrix.cluster }}
+        run: uv run src/scripts/workflow_support.py configure-cluster "$CLUSTER"
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Install kubectl
         uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5
@@ -67,23 +121,26 @@ jobs:
 
       - name: Update kubeconfig
         run: |
-          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+          aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Verify cluster identity
+        run: uv run main verify-cluster "$CLUSTER"
 
       - name: Set up Depot CLI
         uses: depot/setup-action@91bc8495a33ebfc504ffc89e5674379ccf23c29c # v1
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
-        id: login-ecr
 
-      - uses: depot/build-push-action@98e78adca7817480b8185f474a400b451d74e287 # v1
-        with:
-          project: ${{ secrets.DEPOT_PROJECT }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.IMAGE_TAG }}
-          context: .
-          file: deploy/Dockerfile
+      - name: Publish shared image
+        run: depot push --project "$DEPOT_PROJECT" -t "$DOCKER_REPOSITORY:$IMAGE_SHA" "$BUILD_ID"
+
+      - name: Verify published image digest
+        run: |
+          set -euo pipefail
+          REPOSITORY_NAME="${DOCKER_REPOSITORY#*/}"
+          DIGEST=$(aws ecr describe-images --repository-name "$REPOSITORY_NAME" --image-ids "imageTag=$IMAGE_SHA" --query 'imageDetails[0].imageDigest' --output text)
+          [[ "$DIGEST" == "$IMAGE_DIGEST" ]]
 
       - name: Deploy
-        run: uv run main deploy --docker-image ${{ env.IMAGE_TAG }}
+        run: uv run main deploy --cluster "$CLUSTER" --docker-image "$DOCKER_REPOSITORY:$IMAGE_SHA@$IMAGE_DIGEST"

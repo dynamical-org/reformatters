@@ -1,3 +1,4 @@
+import json
 import subprocess
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
@@ -50,6 +51,7 @@ from reformatters.common.storage import (
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
 from reformatters.common.virtual_region_job import VirtualRegionJob
+from reformatters.deployments import targets
 from tests.common.virtual_region_job_test import (
     VirtualTestDataset,
     VirtualTestRegionJob,
@@ -700,7 +702,18 @@ def test_backfill_local(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     )
 
 
-def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+@pytest.fixture
+def backfill_cluster(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    cluster = targets.Cluster("test", [], "on-demand")
+    monkeypatch.setattr(targets, "cluster_for_resource", Mock(return_value=cluster))
+    verify = Mock()
+    monkeypatch.setattr(targets, "verify_cluster", verify)
+    return verify
+
+
+def test_backfill_kubernetes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, backfill_cluster: Mock
+) -> None:
     # Generally monkeypatching _can_run_in_kuberneretes is dangerous.
     # However, we need to test the internals of backfill_kubernetes so we override this here.
     monkeypatch.setattr(
@@ -746,8 +759,19 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     )
 
     assert mock_run.call_count == 1
+    backfill_cluster.assert_called_once()
+    assert mock_run.call_args.args[0] == [
+        "/usr/bin/kubectl",
+        "apply",
+        "--namespace",
+        "default",
+        "-f",
+        "-",
+    ]
     _, kwargs = mock_run.call_args
     input_str = kwargs["input"]
+    container = json.loads(input_str)["spec"]["template"]["spec"]["containers"][0]
+    assert {"name": "DYNAMICAL_CLUSTER", "value": "test"} in container["env"]
 
     # workers_total = ceil(5/2) == 3
     assert '"completions": 3' in input_str
@@ -759,6 +783,7 @@ def test_backfill_kubernetes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert "--filter-variable-names=b" in input_str
     # Docker image
     assert '"my-docker-image"' in input_str
+    assert '"karpenter.sh/capacity-type": "on-demand"' in input_str
 
 
 class StubCheckA(validation.Validator):
@@ -1092,7 +1117,9 @@ def _template_tree_for_end(end: pd.Timestamp) -> xr.DataTree:
 @pytest.fixture
 def kubernetes_backfill_dataset(
     monkeypatch: pytest.MonkeyPatch,
+    backfill_cluster: Mock,
 ) -> ExampleDataset:
+    backfill_cluster.assert_not_called()
     # Generally monkeypatching _can_run_in_kubernetes is dangerous.
     # However, we need to test the internals of backfill_kubernetes so we override this here.
     monkeypatch.setattr(
@@ -1380,3 +1407,16 @@ def test_virtual_backfill_then_all_present_update_cleanup(
                 pd.Timestamp("2024-01-02"), "new-store", worker_index=0, workers_total=1
             )
     assert repo.lookup_branch("main") == snapshot
+
+
+def test_backfill_preflight_precedes_store_access(
+    monkeypatch: pytest.MonkeyPatch,
+    kubernetes_backfill_dataset: ExampleDataset,
+    backfill_cluster: Mock,
+) -> None:
+    backfill_cluster.side_effect = AssertionError("wrong cluster")
+    open_store = Mock(side_effect=AssertionError("store accessed before preflight"))
+    monkeypatch.setattr(ExampleDataset, "_open_existing_store", open_store)
+    with pytest.raises(AssertionError, match="wrong cluster"):
+        kubernetes_backfill_dataset.backfill_kubernetes(overwrite_metadata=True)
+    open_store.assert_not_called()
