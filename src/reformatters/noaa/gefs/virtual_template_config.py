@@ -243,17 +243,6 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
         return [self._render_data_var(var) for var in self._catalog_data_vars()]
 
     def _render_data_var(self, var: NoaaGefsVirtualDataVar) -> NoaaGefsVirtualDataVar:
-        if (
-            self.source_file_types == ("s",)
-            and var.name == "pressure_reduced_to_mean_sea_level_eta_model"
-        ):
-            var = replace(
-                var,
-                attrs=replace(
-                    var.attrs,
-                    comment="Reduced to mean sea level by the Eta model method, unlike pressure_reduced_to_mean_sea_level in this dataset.",
-                ),
-            )
         # A flag variable's values are codes, not an average, so window wording would
         # contradict its flag_values.
         if var.attrs.flag_values or var.attrs.step_type == "instant":
@@ -1184,7 +1173,7 @@ def _a_b_root_data_vars(chunks: tuple[int, ...]) -> list[NoaaGefsVirtualDataVar]
             long_name="MSLP (Eta model reduction)",
             units="Pa",
             standard_name="air_pressure_at_mean_sea_level",
-            comment="Mean sea level pressure computed with the Eta model reduction, an alternative to pressure_reduced_to_mean_sea_level that differs mainly over high terrain.",
+            comment="Reduced to mean sea level by the Eta model method, differing from pressure_reduced_to_mean_sea_level mainly over high terrain.",
         ),
         var(
             "temperature_surface",

@@ -421,16 +421,7 @@ def test_window_rendering_preserves_catalog_and_non_comment_fields(
             exclude={"comment"}
         ), raw.path
         if raw.attrs.step_type == "instant" or raw.attrs.flag_values:
-            if (
-                config.source_file_types == ("s",)
-                and raw.name == "pressure_reduced_to_mean_sea_level_eta_model"
-            ):
-                assert (
-                    actual.attrs.comment
-                    == "Reduced to mean sea level by the Eta model method, unlike pressure_reduced_to_mean_sea_level in this dataset."
-                )
-            else:
-                assert actual.attrs.comment == raw.attrs.comment, raw.path
+            assert actual.attrs.comment == raw.attrs.comment, raw.path
         else:
             window = config.window_comments[raw.attrs.step_type]
             assert (
