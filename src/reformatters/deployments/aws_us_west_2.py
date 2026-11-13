@@ -13,6 +13,9 @@ from reformatters.eccc.hrdps.forecast import EcccHrdpsForecastDataset
 from reformatters.ecmwf.aifs_ens.forecast import (
     EcmwfAifsEnsForecastDataset,
 )
+from reformatters.ecmwf.aifs_ens.forecast_virtual import (
+    EcmwfAifsEnsForecastVirtualDataset,
+)
 from reformatters.ecmwf.aifs_single.forecast import (
     EcmwfAifsSingleForecastDataset,
 )
@@ -419,6 +422,9 @@ CLUSTER_DYNAMICAL_DATASETS: list[DynamicalDataset[Any, Any]] = [
         primary_storage_config=EcmwfAifsSingleIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     EcmwfAifsEnsForecastDataset(
+        primary_storage_config=EcmwfAifsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    EcmwfAifsEnsForecastVirtualDataset(
         primary_storage_config=EcmwfAifsEnsIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     # DWD
