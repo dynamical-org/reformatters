@@ -6,6 +6,7 @@ import icechunk
 import numpy as np
 import pandas as pd
 import pytest
+from zarr.storage import MemoryStore
 
 from reformatters.common import template_utils, validation
 from reformatters.common.iterating import flatten_groups
@@ -257,3 +258,55 @@ def test_configured_15_day_catch_up_checks_older_inits(tmp_path: Path) -> None:
     assert not result.passed
     assert str(inits[0]) in result.message
     assert str(inits[-1]) not in result.message
+
+
+@pytest.mark.parametrize(
+    ("dataset_class", "fire", "target_init"),
+    [
+        (
+            EcmwfIfsEnsForecast6Day025DegreeVirtualDataset,
+            "2026-11-13T06:12",
+            "2026-11-13T00",
+        ),
+        (
+            EcmwfIfsEnsForecast6Day01DegreeVirtualDataset,
+            "2026-11-13T02:12",
+            "2026-11-12T18",
+        ),
+    ],
+)
+def test_6_day_update_window_ends_at_target_init_while_cutoff_keeps_the_fire(
+    dataset_class: type[
+        EcmwfIfsEnsForecast6Day025DegreeVirtualDataset
+        | EcmwfIfsEnsForecast6Day01DegreeVirtualDataset
+    ],
+    fire: str,
+    target_init: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset = dataset_class(
+        primary_storage_config=StorageConfig(
+            base_path=str(tmp_path), format=DatasetFormat.ICECHUNK
+        )
+    )
+    monkeypatch.setattr(
+        type(dataset.store_factory), "primary_store", lambda self: MemoryStore()
+    )
+    fire_time = pd.Timestamp(fire)
+    cutoff = fire_time + dataset.deadline - dataset.virtual_poll_deadline_grace
+    expected = pd.date_range(end=target_init, periods=4, freq="6h", name="init_time")
+    # Scheduled start, a late manual or retry start, and the last moment before the
+    # next fire all select the same fire.
+    last_moment = fire_time + pd.Timedelta("6h") - pd.Timedelta("1s")
+    for now in (fire_time, fire_time + pd.Timedelta("3h"), last_moment):
+        monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls, now=now: now))
+        assert dataset._virtual_poll_deadline(now) == cutoff
+        for job_name in ("test-update", "test-update-r1"):
+            (job,), _ = dataset._operational_update_jobs(job_name, tmp_path)
+            actual = (
+                job.template_ds.to_dataset()
+                .isel(init_time=job.region)
+                .get_index("init_time")
+            )
+            pd.testing.assert_index_equal(actual, expected)

@@ -8,6 +8,7 @@ import obstore.store
 import pandas as pd
 import pytest
 import xarray as xr
+from zarr.storage import MemoryStore
 
 from reformatters.common import template_utils
 from reformatters.common.storage import (
@@ -15,12 +16,16 @@ from reformatters.common.storage import (
     _repository_config_and_credentials,
     manifest_append_dim_split,
 )
+from reformatters.common.types import DatetimeLike
 from reformatters.common.virtual_region_job import VirtualRef
 from reformatters.ecmwf import ecmwf_virtual_source as source_module
 from reformatters.ecmwf.ecmwf_virtual_source import ecmwf_virtual_chunk_containers
 from reformatters.ecmwf.ifs_ens import virtual_region_job as module
 from reformatters.ecmwf.ifs_ens.forecast_6_day_0_1_degree_virtual.region_job import (
     EcmwfIfsEnsForecast6Day01DegreeVirtualRegionJob,
+)
+from reformatters.ecmwf.ifs_ens.forecast_6_day_0_25_degree_virtual.region_job import (
+    EcmwfIfsEnsForecast6Day025DegreeVirtualRegionJob,
 )
 from reformatters.ecmwf.ifs_ens.virtual_region_job import (
     EcmwfIfsEnsForecastVirtualSourceFileCoord,
@@ -549,3 +554,52 @@ def test_variable_output_coverage_uses_declared_members() -> None:
         **coord.out_loc(),
         "ensemble_member": (0,),
     }
+
+
+@pytest.mark.parametrize(
+    ("job_class", "fire"),
+    [
+        (EcmwfIfsEnsForecast6Day025DegreeVirtualRegionJob, "2026-11-13T06:12"),
+        (EcmwfIfsEnsForecast6Day01DegreeVirtualRegionJob, "2026-11-13T08:12"),
+    ],
+)
+@pytest.mark.parametrize("scheduled", [True, False])
+def test_6_day_update_window_ends_at_the_target_init(
+    job_class: type[
+        EcmwfIfsEnsForecast6Day025DegreeVirtualRegionJob
+        | EcmwfIfsEnsForecast6Day01DegreeVirtualRegionJob
+    ],
+    fire: str,
+    scheduled: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fire_time = pd.Timestamp(fire)
+    monkeypatch.setattr(pd.Timestamp, "now", classmethod(lambda cls: fire_time))
+
+    def get_template(end: DatetimeLike) -> xr.DataTree:
+        return xr.DataTree(
+            xr.Dataset(
+                coords={
+                    "init_time": pd.date_range(
+                        "2026-11-10", end, freq="6h", inclusive="left"
+                    )
+                }
+            )
+        )
+
+    (job,), _ = job_class.operational_update_jobs(
+        MemoryStore(),
+        tmp_path,
+        get_template,
+        "init_time",
+        [],
+        "test",
+        job_fire_time=fire_time if scheduled else None,
+    )
+    # The 2026-11-13T06 init's first file arrives after this fire's poll deadline, so
+    # the window stops at the target init and keeps the four inits it re-sweeps.
+    init_times = job.template_ds.init_time.values[job.region]
+    assert list(pd.to_datetime(init_times)) == list(
+        pd.date_range("2026-11-12T06", "2026-11-13T00", freq="6h")
+    )
