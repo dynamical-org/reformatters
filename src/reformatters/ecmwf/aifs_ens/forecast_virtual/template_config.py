@@ -233,6 +233,7 @@ def _root_data_vars() -> list[EcmwfAifsEnsVirtualDataVar]:
             long_name="2 metre dewpoint temperature",
             units="degree_Celsius",
             standard_name="dew_point_temperature",
+            comment="Dew point can exceed air temperature, so derived relative humidity can exceed 100%.",
         ),
         _var(
             "skin_temperature_surface",
@@ -323,8 +324,8 @@ def _root_data_vars() -> list[EcmwfAifsEnsVirtualDataVar]:
             standard_name="surface_snow_area_fraction",
             comment=(
                 "Fraction (0-1) of the grid box covered by snow. Applies over land only; "
-                "NaN over water, except at forecast hour 0, which has values over water: "
-                "0 over open ocean and up to 1 in polar seas."
+                "over water values may be NaN or finite, so mask with land_sea_mask_surface. "
+                "At forecast hour 0, water values are finite and range from 0 to 1, including in polar seas."
             ),
             date_available=AIFS_ENS_UPGRADE_DATE,
         ),
@@ -364,7 +365,7 @@ def _root_data_vars() -> list[EcmwfAifsEnsVirtualDataVar]:
             long_name="Runoff water equivalent (surface plus subsurface)",
             units="kg m-2",
             standard_name="runoff_amount",
-            comment="Applies over land only; over water the values can be NaN or unmasked, so mask with land_sea_mask_surface.",
+            comment="Applies over land only; over water values may be NaN or finite, so mask with land_sea_mask_surface.",
         ),
         _var(
             "downward_short_wave_radiation_run_total_surface",
@@ -416,7 +417,7 @@ def _root_data_vars() -> list[EcmwfAifsEnsVirtualDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="ECMWF soil level 1, the uppermost soil layer. Applies over land only; NaN over water.",
+            comment="ECMWF soil level 1, the uppermost soil layer. Applies over land only; over water values may be NaN or finite, so mask with land_sea_mask_surface.",
         ),
         _var(
             "volumetric_soil_moisture_layer_2",
@@ -428,7 +429,7 @@ def _root_data_vars() -> list[EcmwfAifsEnsVirtualDataVar]:
             long_name="Volumetric soil moisture",
             units="1",
             standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment="ECMWF soil level 2, the second soil layer from the surface. Applies over land only; NaN over water.",
+            comment="ECMWF soil level 2, the second soil layer from the surface. Applies over land only; over water values may be NaN or finite, so mask with land_sea_mask_surface.",
         ),
         _var(
             "land_sea_mask_surface",
