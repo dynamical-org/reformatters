@@ -8,6 +8,9 @@ from pydantic import ValidationError
 
 from reformatters.common.config_models import ROOT
 from reformatters.common.time_utils import whole_hours
+from reformatters.noaa.gefs.analysis_0_25_degree_virtual.template_config import (
+    NoaaGefsAnalysis025DegreeVirtualTemplateConfig,
+)
 from reformatters.noaa.gefs.forecast_10_day_0_25_degree_virtual.template_config import (
     NoaaGefsForecast10Day025DegreeVirtualTemplateConfig,
 )
@@ -18,12 +21,15 @@ from reformatters.noaa.gefs.forecast_35_day_0_5_degree_virtual.template_config i
     NoaaGefsForecast35Day05DegreeVirtualTemplateConfig,
 )
 from reformatters.noaa.gefs.gefs_config_models import (
+    GEFS_B22_TRANSITION_DATE,
     GEFSSourceFileType,
     NoaaGefsVirtualDataVar,
 )
 from reformatters.noaa.gefs.virtual_template_config import (
+    MSLET_AVAILABLE_FROM,
     NoaaGefsForecastABVirtualTemplateConfig,
     NoaaGefsForecastVirtualTemplateConfig,
+    NoaaGefsVirtualTemplateConfig,
 )
 from reformatters.noaa.noaa_grib_index import grib_index_window_str
 
@@ -373,3 +379,104 @@ def test_forecast_resolution_names_one_span_for_an_even_lead_axis() -> None:
     """A uniformly spaced axis gets the plain wording, not a span it does not need."""
     config = NoaaGefsForecast10Day025DegreeVirtualTemplateConfig()
     assert config.dataset_attributes.forecast_resolution == "Forecast step 3 hourly"
+
+
+VIRTUAL_CONFIGS = [
+    NoaaGefsAnalysis025DegreeVirtualTemplateConfig(),
+    NoaaGefsForecast10Day025DegreeVirtualTemplateConfig(),
+    *AB_CONFIGS,
+]
+VIRTUAL_CONFIG_PARAMS = pytest.mark.parametrize(
+    "config",
+    VIRTUAL_CONFIGS,
+    ids=[c.dataset_attributes.dataset_id for c in VIRTUAL_CONFIGS],
+)
+
+
+@VIRTUAL_CONFIG_PARAMS
+def test_shared_root_catalog_has_identical_public_attributes(
+    config: NoaaGefsVirtualTemplateConfig,
+) -> None:
+    canonical = {var.path: var for var in AB_CONFIGS[0]._catalog_data_vars()}
+    shared_paths = {var.path for var in VIRTUAL_CONFIGS[0]._catalog_data_vars()}
+    assert len(shared_paths) == 38
+    actual = {var.path: var for var in config._catalog_data_vars()}
+    assert shared_paths <= actual.keys()
+    for path in shared_paths:
+        assert actual[path].group is ROOT, path
+        assert actual[path].attrs == canonical[path].attrs, path
+
+
+@VIRTUAL_CONFIG_PARAMS
+def test_window_rendering_preserves_catalog_and_non_comment_fields(
+    config: NoaaGefsVirtualTemplateConfig,
+) -> None:
+    catalog = config._catalog_data_vars()
+    rendered = config.data_vars
+    assert [var.path for var in rendered] == [var.path for var in catalog]
+    for raw, actual in zip(catalog, rendered, strict=True):
+        assert actual.encoding == raw.encoding, raw.path
+        assert actual.internal_attrs == raw.internal_attrs, raw.path
+        assert actual.attrs.model_dump(exclude={"comment"}) == raw.attrs.model_dump(
+            exclude={"comment"}
+        ), raw.path
+        if raw.attrs.step_type == "instant" or raw.attrs.flag_values:
+            assert actual.attrs.comment == raw.attrs.comment, raw.path
+        else:
+            window = config.window_comments[raw.attrs.step_type]
+            assert (
+                raw.attrs.comment is None or "hour period" not in raw.attrs.comment
+            ), raw.path
+            assert actual.attrs.comment == (
+                f"{window} {raw.attrs.comment}" if raw.attrs.comment else window
+            ), raw.path
+    assert config._catalog_data_vars() == catalog
+    assert config.data_vars == rendered
+
+
+@pytest.mark.parametrize("config", VIRTUAL_CONFIGS[:2])
+def test_s_file_adaptation_preserves_shared_encoding_and_internal_behavior(
+    config: NoaaGefsVirtualTemplateConfig,
+) -> None:
+    ab_catalog = {var.path: var for var in AB_CONFIGS[0]._catalog_data_vars()}
+    late_availability = {
+        "visibility_surface": GEFS_B22_TRANSITION_DATE,
+        "pressure_reduced_to_mean_sea_level_eta_model": MSLET_AVAILABLE_FROM,
+        "percent_frozen_precipitation_surface": GEFS_B22_TRANSITION_DATE,
+        "geopotential_height_cloud_ceiling": GEFS_B22_TRANSITION_DATE,
+    }
+    b_file_names = {
+        "visibility_surface",
+        "wind_gust_surface",
+        "pressure_reduced_to_mean_sea_level_eta_model",
+        "dew_point_temperature_2m",
+        "percent_frozen_precipitation_surface",
+        "convective_available_potential_energy_surface",
+        "convective_inhibition_surface",
+        "geopotential_height_cloud_ceiling",
+        "storm_relative_helicity_3000_0m",
+    }
+    for var in config._catalog_data_vars():
+        ab = ab_catalog[var.path]
+        assert var.internal_attrs.source_file_types == frozenset({"s"}), var.path
+        assert ab.internal_attrs.source_file_types == frozenset(
+            {"b" if var.name in b_file_names else "a"}
+        ), var.path
+        assert var.internal_attrs.available_from == late_availability.get(var.name), (
+            var.path
+        )
+        assert ab.internal_attrs.available_from is None, var.path
+        assert var.internal_attrs.model_dump(
+            exclude={"source_file_types", "available_from"}
+        ) == ab.internal_attrs.model_dump(
+            exclude={"source_file_types", "available_from"}
+        ), var.path
+        assert var.encoding.model_dump(exclude={"chunks"}) == ab.encoding.model_dump(
+            exclude={"chunks"}
+        ), var.path
+        assert var.encoding.chunks == (1,) * (len(config.dims[ROOT]) - 2) + (
+            721,
+            1440,
+        ), var.path
+        assert var.has_hour_0_values() == (var.attrs.step_type == "instant"), var.path
+        assert ab.has_hour_0_values() == var.has_hour_0_values(), var.path

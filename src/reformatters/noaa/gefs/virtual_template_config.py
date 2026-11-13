@@ -1,6 +1,6 @@
 import functools
 import itertools
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, Literal, Self
 
 import numpy as np
@@ -20,6 +20,7 @@ from reformatters.common.config_models import (
     Group,
     SpatialResolution,
     StatisticsApproximate,
+    prepend_comment,
 )
 from reformatters.common.iterating import item
 from reformatters.common.pydantic import replace
@@ -60,10 +61,8 @@ _SPATIAL_RESOLUTIONS: dict[float, SpatialResolution] = {
     0.5: "0.5 degrees (~40km)",
 }
 
-# One group's variables, built for the chunk shape and window wording a config declares.
-type _GroupCatalog = Callable[
-    [tuple[int, ...], Mapping[str, str]], list["NoaaGefsVirtualDataVar"]
-]
+# One group's variables, built for the chunk shape a config declares.
+type _GroupCatalog = Callable[[tuple[int, ...]], list["NoaaGefsVirtualDataVar"]]
 
 _S_FILE = frozenset[GEFSSourceFileType]({"s"})
 _A_FILE = frozenset[GEFSSourceFileType]({"a"})
@@ -241,7 +240,14 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
     @computed_field
     @property
     def data_vars(self) -> Sequence[NoaaGefsVirtualDataVar]:
-        return self._catalog_data_vars()
+        return [self._render_data_var(var) for var in self._catalog_data_vars()]
+
+    def _render_data_var(self, var: NoaaGefsVirtualDataVar) -> NoaaGefsVirtualDataVar:
+        # A flag variable's values are codes, not an average, so window wording would
+        # contradict its flag_values.
+        if var.attrs.flag_values or var.attrs.step_type == "instant":
+            return var
+        return prepend_comment(var, self.window_comments[var.attrs.step_type])
 
     def _catalog_data_vars(self) -> list[NoaaGefsVirtualDataVar]:
         """The variable catalog for the source files and groups this config declares."""
@@ -250,7 +256,7 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
                 f"the s file publishes no vertical group, so {self.dims} has nothing "
                 "to fill its groups from"
             )
-            return _s_file_data_vars(self._message_chunks(ROOT), self.window_comments)
+            return _s_file_data_vars(self._message_chunks(ROOT))
         assert self.source_file_types == ("a", "b"), self.source_file_types
         catalog: dict[Group, _GroupCatalog] = {
             ROOT: _a_b_root_data_vars,
@@ -262,7 +268,7 @@ class NoaaGefsVirtualTemplateConfig(TemplateConfig[NoaaGefsVirtualDataVar]):
             var
             for group, build_vars in catalog.items()
             if group in self.dims
-            for var in build_vars(self._message_chunks(group), self.window_comments)
+            for var in build_vars(self._message_chunks(group))
         ]
 
     def _message_chunks(self, group: Group) -> tuple[int, ...]:
@@ -621,7 +627,6 @@ def _data_var(
     name: str,
     *,
     chunks: tuple[int, ...],
-    window_comments: Mapping[str, str],
     element: str,
     level: str,
     source_file_types: frozenset[GEFSSourceFileType],
@@ -644,13 +649,6 @@ def _data_var(
         if filters is not None
         else ([_KELVIN_TO_CELSIUS] if element in _CELSIUS_ELEMENTS else ())
     )
-    # A flag variable's values are codes, not an average, so window wording would
-    # contradict its flag_values.
-    window_comment = (
-        None if flag_values or step_type == "instant" else window_comments[step_type]
-    )
-    if window_comment is not None:
-        comment = f"{window_comment} {comment}" if comment else window_comment
     return NoaaGefsVirtualDataVar(
         name=name,
         group=group,
@@ -686,421 +684,74 @@ def _data_var(
     )
 
 
-def _s_file_data_vars(
-    chunks: tuple[int, ...], window_comments: Mapping[str, str]
-) -> list[NoaaGefsVirtualDataVar]:
+# Ordered as the pgrb2s inventory; dates apply only to this source product.
+_S_FILE_AVAILABILITY: dict[str, Timestamp | None] = {
+    "visibility_surface": GEFS_B22_TRANSITION_DATE,
+    "wind_gust_surface": None,
+    "pressure_reduced_to_mean_sea_level_eta_model": MSLET_AVAILABLE_FROM,
+    "pressure_surface": None,
+    "soil_temperature_0_10cm": None,
+    "volumetric_soil_moisture_0_10cm": None,
+    "snow_water_equivalent_surface": None,
+    "snow_thickness_surface": None,
+    "ice_thickness_surface": None,
+    "temperature_2m": None,
+    "dew_point_temperature_2m": None,
+    "relative_humidity_2m": None,
+    "maximum_temperature_2m": None,
+    "minimum_temperature_2m": None,
+    "wind_u_10m": None,
+    "wind_v_10m": None,
+    "percent_frozen_precipitation_surface": GEFS_B22_TRANSITION_DATE,
+    "total_precipitation_surface": None,
+    "categorical_snow_surface": None,
+    "categorical_ice_pellets_surface": None,
+    "categorical_freezing_rain_surface": None,
+    "categorical_rain_surface": None,
+    "latent_heat_flux_surface": None,
+    "sensible_heat_flux_surface": None,
+    "convective_available_potential_energy_surface": None,
+    "convective_inhibition_surface": None,
+    "precipitable_water_atmosphere": None,
+    "total_cloud_cover_atmosphere": None,
+    "geopotential_height_cloud_ceiling": GEFS_B22_TRANSITION_DATE,
+    "downward_short_wave_radiation_flux_surface": None,
+    "downward_long_wave_radiation_flux_surface": None,
+    "upward_short_wave_radiation_flux_surface": None,
+    "upward_long_wave_radiation_flux_surface": None,
+    "upward_long_wave_radiation_flux_top_of_atmosphere": None,
+    "storm_relative_helicity_3000_0m": None,
+    "convective_available_potential_energy_180_0mb": None,
+    "convective_inhibition_180_0mb": None,
+    "pressure_reduced_to_mean_sea_level": None,
+}
+
+
+def _s_file_data_vars(chunks: tuple[int, ...]) -> list[NoaaGefsVirtualDataVar]:
     """Every message the pgrb2s.0p25 file publishes, except HGT at the surface.
 
     The s file carries surface geopotential height only at lead 0, unlike every other
     message in it.
     """
-    var = functools.partial(
-        _data_var,
-        chunks=chunks,
-        source_file_types=_S_FILE,
-        window_comments=window_comments,
-    )
+    catalog = {var.name: var for var in _a_b_root_data_vars(chunks)}
     return [
-        var(
-            "visibility_surface",
-            element="VIS",
-            level="surface",
-            short_name="vis",
-            long_name="Visibility",
-            units="m",
-            standard_name="visibility_in_air",
-            comment=(
-                "Clipped at the maximum visibility this field encodes, about 24 km, "
-                "where a large fraction of cells sit. The true visibility there is at "
-                "least that far, not absent."
+        replace(
+            catalog[name],
+            internal_attrs=replace(
+                catalog[name].internal_attrs,
+                source_file_types=_S_FILE,
+                available_from=available_from,
             ),
-            available_from=GEFS_B22_TRANSITION_DATE,
-        ),
-        var(
-            "wind_gust_surface",
-            element="GUST",
-            level="surface",
-            short_name="gust",
-            long_name="Wind speed (gust)",
-            units="m s-1",
-            standard_name="wind_speed_of_gust",
-        ),
-        var(
-            "pressure_reduced_to_mean_sea_level_eta_model",
-            element="MSLET",
-            level="mean sea level",
-            short_name="mslet",
-            long_name="MSLP (Eta model reduction)",
-            units="Pa",
-            standard_name="air_pressure_at_mean_sea_level",
-            comment="Reduced to mean sea level by the Eta model method, unlike pressure_reduced_to_mean_sea_level in this dataset.",
-            available_from=MSLET_AVAILABLE_FROM,
-        ),
-        var(
-            "pressure_surface",
-            element="PRES",
-            level="surface",
-            short_name="sp",
-            long_name="Surface pressure",
-            units="Pa",
-            standard_name="surface_air_pressure",
-        ),
-        var(
-            "soil_temperature_0_10cm",
-            element="TSOIL",
-            level="0-0.1 m below ground",
-            short_name="sot",
-            long_name="Soil temperature",
-            units="degree_Celsius",
-            standard_name="soil_temperature",
-            comment="NaN over water.",
-        ),
-        var(
-            "volumetric_soil_moisture_0_10cm",
-            element="SOILW",
-            level="0-0.1 m below ground",
-            short_name="vsw",
-            long_name="Volumetric soil moisture",
-            units="1",
-            standard_name="volume_fraction_of_condensed_water_in_soil",
-            comment=f"NaN over water. {_SOIL_MOISTURE_LAND_ICE}",
-        ),
-        var(
-            "snow_water_equivalent_surface",
-            element="WEASD",
-            level="surface",
-            short_name="sd",
-            long_name="Snow depth water equivalent",
-            units="m",
-            standard_name="lwe_thickness_of_surface_snow_amount",
-            comment="NaN over open water.",
-            filters=[_WATER_KG_M2_TO_M_LWE],
-        ),
-        var(
-            "snow_thickness_surface",
-            element="SNOD",
-            level="surface",
-            short_name="sde",
-            long_name="Snow depth",
-            units="m",
-            standard_name="surface_snow_thickness",
-            comment="NaN over open water.",
-        ),
-        var(
-            "ice_thickness_surface",
-            element="ICETK",
-            level="surface",
-            short_name="icetk",
-            long_name="Ice thickness",
-            units="m",
-            standard_name="floating_ice_thickness",
-        ),
-        var(
-            "temperature_2m",
-            element="TMP",
-            level="2 m above ground",
-            short_name="2t",
-            long_name="2 metre temperature",
-            units="degree_Celsius",
-            standard_name="air_temperature",
-        ),
-        var(
-            "dew_point_temperature_2m",
-            element="DPT",
-            level="2 m above ground",
-            short_name="2d",
-            long_name="2 metre dewpoint temperature",
-            units="degree_Celsius",
-            standard_name="dew_point_temperature",
-        ),
-        var(
-            "relative_humidity_2m",
-            element="RH",
-            level="2 m above ground",
-            short_name="2r",
-            long_name="2 metre relative humidity",
-            units="percent",
-            standard_name="relative_humidity",
-        ),
-        var(
-            "maximum_temperature_2m",
-            element="TMAX",
-            level="2 m above ground",
-            step_type="max",
-            short_name="tmax",
-            long_name="Maximum temperature",
-            units="degree_Celsius",
-            standard_name="air_temperature",
-        ),
-        var(
-            "minimum_temperature_2m",
-            element="TMIN",
-            level="2 m above ground",
-            step_type="min",
-            short_name="tmin",
-            long_name="Minimum temperature",
-            units="degree_Celsius",
-            standard_name="air_temperature",
-        ),
-        var(
-            "wind_u_10m",
-            element="UGRD",
-            level="10 m above ground",
-            short_name="10u",
-            long_name="10 metre U wind component",
-            units="m s-1",
-            standard_name="eastward_wind",
-        ),
-        var(
-            "wind_v_10m",
-            element="VGRD",
-            level="10 m above ground",
-            short_name="10v",
-            long_name="10 metre V wind component",
-            units="m s-1",
-            standard_name="northward_wind",
-        ),
-        var(
-            "percent_frozen_precipitation_surface",
-            element="CPOFP",
-            level="surface",
-            short_name="cpofp",
-            long_name="Percent frozen precipitation",
-            units="percent",
-            comment="Negative values mark no precipitation. Interpolation in the source mixes the no data value with real percentages, so unusable values span a range rather than one value and are not converted to NaN. Mask values < -0.1.",
-            available_from=GEFS_B22_TRANSITION_DATE,
-        ),
-        var(
-            "total_precipitation_surface",
-            element="APCP",
-            level="surface",
-            step_type="accum",
-            short_name="tp",
-            long_name="Total precipitation",
-            units="kg m-2",
-            standard_name="precipitation_amount",
-        ),
-        var(
-            "categorical_snow_surface",
-            element="CSNOW",
-            level="surface",
-            step_type="avg",
-            short_name="csnow",
-            long_name="Categorical snow",
-            units="1",
-            flag_values=(0, 1),
-            flag_meanings="no yes",
-        ),
-        var(
-            "categorical_ice_pellets_surface",
-            element="CICEP",
-            level="surface",
-            step_type="avg",
-            short_name="cicep",
-            long_name="Categorical ice pellets",
-            units="1",
-            flag_values=(0, 1),
-            flag_meanings="no yes",
-        ),
-        var(
-            "categorical_freezing_rain_surface",
-            element="CFRZR",
-            level="surface",
-            step_type="avg",
-            short_name="cfrzr",
-            long_name="Categorical freezing rain",
-            units="1",
-            flag_values=(0, 1),
-            flag_meanings="no yes",
-        ),
-        var(
-            "categorical_rain_surface",
-            element="CRAIN",
-            level="surface",
-            step_type="avg",
-            short_name="crain",
-            long_name="Categorical rain",
-            units="1",
-            flag_values=(0, 1),
-            flag_meanings="no yes",
-        ),
-        var(
-            "latent_heat_flux_surface",
-            element="LHTFL",
-            level="surface",
-            step_type="avg",
-            short_name="lhf",
-            long_name="Latent heat flux",
-            units="W m-2",
-            standard_name="surface_upward_latent_heat_flux",
-        ),
-        var(
-            "sensible_heat_flux_surface",
-            element="SHTFL",
-            level="surface",
-            step_type="avg",
-            short_name="shf",
-            long_name="Sensible heat flux",
-            units="W m-2",
-            standard_name="surface_upward_sensible_heat_flux",
-        ),
-        var(
-            "convective_available_potential_energy_surface",
-            element="CAPE",
-            level="surface",
-            short_name="cape",
-            long_name="Convective available potential energy",
-            units="J kg-1",
-            standard_name="atmosphere_convective_available_potential_energy",
-        ),
-        var(
-            "convective_inhibition_surface",
-            element="CIN",
-            level="surface",
-            short_name="cin",
-            long_name="Convective inhibition",
-            units="J kg-1",
-            standard_name="atmosphere_convective_inhibition",
-            comment=_CONVECTIVE_INHIBITION,
-        ),
-        var(
-            "precipitable_water_atmosphere",
-            element="PWAT",
-            level="entire atmosphere (considered as a single layer)",
-            short_name="pwat",
-            long_name="Precipitable water",
-            units="kg m-2",
-            standard_name="atmosphere_mass_content_of_water_vapor",
-        ),
-        var(
-            "total_cloud_cover_atmosphere",
-            element="TCDC",
-            level="entire atmosphere",
-            step_type="avg",
-            short_name="tcc",
-            long_name="Total cloud cover",
-            units="percent",
-            standard_name="cloud_area_fraction",
-        ),
-        var(
-            "geopotential_height_cloud_ceiling",
-            element="HGT",
-            level="cloud ceiling",
-            short_name="gh",
-            long_name="Geopotential height",
-            units="m",
-            standard_name="geopotential_height",
-            comment="Values near 20,000m mark no cloud ceiling. Interpolation in the source mixes the no data value with real ceiling heights, so unusable values span a range rather than one value and are not converted to NaN. Mask values above 19,000m.",
-            available_from=GEFS_B22_TRANSITION_DATE,
-        ),
-        var(
-            "downward_short_wave_radiation_flux_surface",
-            element="DSWRF",
-            level="surface",
-            step_type="avg",
-            short_name="sdswrf",
-            long_name="Surface downward short-wave radiation flux",
-            units="W m-2",
-            standard_name="surface_downwelling_shortwave_flux_in_air",
-        ),
-        var(
-            "downward_long_wave_radiation_flux_surface",
-            element="DLWRF",
-            level="surface",
-            step_type="avg",
-            short_name="sdlwrf",
-            long_name="Surface downward long-wave radiation flux",
-            units="W m-2",
-            standard_name="surface_downwelling_longwave_flux_in_air",
-        ),
-        var(
-            "upward_short_wave_radiation_flux_surface",
-            element="USWRF",
-            level="surface",
-            step_type="avg",
-            short_name="suswrf",
-            long_name="Surface upward short-wave radiation flux",
-            units="W m-2",
-            standard_name="surface_upwelling_shortwave_flux_in_air",
-        ),
-        var(
-            "upward_long_wave_radiation_flux_surface",
-            element="ULWRF",
-            level="surface",
-            step_type="avg",
-            short_name="sulwrf",
-            long_name="Surface upward long-wave radiation flux",
-            units="W m-2",
-            standard_name="surface_upwelling_longwave_flux_in_air",
-        ),
-        var(
-            "upward_long_wave_radiation_flux_top_of_atmosphere",
-            element="ULWRF",
-            level="top of atmosphere",
-            step_type="avg",
-            short_name="ulwrf",
-            long_name="Upward long-wave radiation flux",
-            units="W m-2",
-            standard_name="toa_outgoing_longwave_flux",
-        ),
-        var(
-            "storm_relative_helicity_3000_0m",
-            element="HLCY",
-            level="3000-0 m above ground",
-            short_name="hlcy",
-            long_name="Storm relative helicity",
-            units="m2 s-2",
-            comment=(
-                "Uses a right-moving storm motion in both hemispheres, so southern "
-                "hemisphere values are positive-mean rather than mirrored. Some source "
-                "values reach magnitudes near 100,000 m2 s-2, far above the roughly "
-                "1,500 m2 s-2 physical ceiling for this quantity. Mask absolute values "
-                "above 2,000."
-            ),
-        ),
-        var(
-            "convective_available_potential_energy_180_0mb",
-            element="CAPE",
-            level="180-0 mb above ground",
-            short_name="cape",
-            long_name="Convective available potential energy",
-            units="J kg-1",
-            standard_name="atmosphere_convective_available_potential_energy",
-            comment=(
-                "Energy released by a parcel lifted from the most unstable of six 30 "
-                "hPa layers in the lowest 180 hPa, rather than from one parcel averaged "
-                "over that depth."
-            ),
-        ),
-        var(
-            "convective_inhibition_180_0mb",
-            element="CIN",
-            level="180-0 mb above ground",
-            short_name="cin",
-            long_name="Convective inhibition",
-            units="J kg-1",
-            standard_name="atmosphere_convective_inhibition",
-            comment=_CONVECTIVE_INHIBITION,
-        ),
-        var(
-            "pressure_reduced_to_mean_sea_level",
-            element="PRMSL",
-            level="mean sea level",
-            short_name="prmsl",
-            long_name="Pressure reduced to MSL",
-            units="Pa",
-            standard_name="air_pressure_at_mean_sea_level",
-        ),
+        )
+        for name, available_from in _S_FILE_AVAILABILITY.items()
     ]
 
 
-def _a_b_root_data_vars(
-    chunks: tuple[int, ...], window_comments: Mapping[str, str]
-) -> list[NoaaGefsVirtualDataVar]:
+def _a_b_root_data_vars(chunks: tuple[int, ...]) -> list[NoaaGefsVirtualDataVar]:
     """Every single-level message the pgrb2a and pgrb2b files publish, except surface
     geopotential height, which only the a file's lead 0 and the b file's later leads
     carry."""
-    var = functools.partial(_data_var, chunks=chunks, window_comments=window_comments)
+    var = functools.partial(_data_var, chunks=chunks)
     return [
         var(
             "pressure_surface",
@@ -1522,7 +1173,7 @@ def _a_b_root_data_vars(
             long_name="MSLP (Eta model reduction)",
             units="Pa",
             standard_name="air_pressure_at_mean_sea_level",
-            comment="Mean sea level pressure computed with the Eta model reduction, an alternative to pressure_reduced_to_mean_sea_level that differs mainly over high terrain.",
+            comment="Reduced to mean sea level by the Eta model method, differing from pressure_reduced_to_mean_sea_level mainly over high terrain.",
         ),
         var(
             "temperature_surface",
@@ -3813,16 +3464,13 @@ def _a_b_root_data_vars(
     ]
 
 
-def _a_b_pressure_data_vars(
-    chunks: tuple[int, ...], window_comments: Mapping[str, str]
-) -> list[NoaaGefsVirtualDataVar]:
+def _a_b_pressure_data_vars(chunks: tuple[int, ...]) -> list[NoaaGefsVirtualDataVar]:
     """Every isobaric message the a and b files publish on the 31 levels PRESSURE_LEVELS
     spans. The one ozone message at 125 mb, a level no other element uses, is not
     served."""
     var = functools.partial(
         _data_var,
         chunks=chunks,
-        window_comments=window_comments,
         group="pressure_level",
         level=PRESSURE_LEVEL_INDEX_FORMAT,
     )
@@ -3953,13 +3601,10 @@ def _a_b_pressure_data_vars(
     ]
 
 
-def _a_b_model_level_data_vars(
-    chunks: tuple[int, ...], window_comments: Mapping[str, str]
-) -> list[NoaaGefsVirtualDataVar]:
+def _a_b_model_level_data_vars(chunks: tuple[int, ...]) -> list[NoaaGefsVirtualDataVar]:
     var = functools.partial(
         _data_var,
         chunks=chunks,
-        window_comments=window_comments,
         group="model_level",
         level=MODEL_LEVEL_INDEX_FORMAT,
     )
@@ -4021,13 +3666,10 @@ def _a_b_model_level_data_vars(
     ]
 
 
-def _a_b_height_data_vars(
-    chunks: tuple[int, ...], window_comments: Mapping[str, str]
-) -> list[NoaaGefsVirtualDataVar]:
+def _a_b_height_data_vars(chunks: tuple[int, ...]) -> list[NoaaGefsVirtualDataVar]:
     var = functools.partial(
         _data_var,
         chunks=chunks,
-        window_comments=window_comments,
         group="height_above_mean_sea_level",
         level=HEIGHT_LEVEL_INDEX_FORMAT,
     )
