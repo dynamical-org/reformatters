@@ -529,6 +529,7 @@ class EcmwfAifsEnsForecastTemplateConfig(TemplateConfig[EcmwfDataVar]):
                     units="degree_Celsius",
                     step_type="instant",
                     standard_name="dew_point_temperature",
+                    comment="Dew point can exceed air temperature, so derived relative humidity can exceed 100%.",
                 ),
                 internal_attrs=EcmwfInternalAttrs(
                     grib_comment="Dew point temperature [C]",

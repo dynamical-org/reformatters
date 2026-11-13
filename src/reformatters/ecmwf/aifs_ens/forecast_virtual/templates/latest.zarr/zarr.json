@@ -126,6 +126,7 @@
           "short_name": "2d",
           "standard_name": "dew_point_temperature",
           "units": "degree_Celsius",
+          "comment": "Dew point can exceed air temperature, so derived relative humidity can exceed 100%.",
           "step_type": "instant",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
@@ -1945,7 +1946,7 @@
           "short_name": "rowe",
           "standard_name": "runoff_amount",
           "units": "kg m-2",
-          "comment": "Applies over land only; over water the values can be NaN or unmasked, so mask with land_sea_mask_surface. Accumulated since forecast initialization.",
+          "comment": "Applies over land only; over water values may be NaN or finite, so mask with land_sea_mask_surface. Accumulated since forecast initialization.",
           "step_type": "accum",
           "coordinates": "expected_forecast_length spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="

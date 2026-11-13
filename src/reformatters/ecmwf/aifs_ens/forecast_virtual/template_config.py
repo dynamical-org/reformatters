@@ -233,6 +233,7 @@ def _root_data_vars() -> list[EcmwfAifsEnsVirtualDataVar]:
             long_name="2 metre dewpoint temperature",
             units="degree_Celsius",
             standard_name="dew_point_temperature",
+            comment="Dew point can exceed air temperature, so derived relative humidity can exceed 100%.",
         ),
         _var(
             "skin_temperature_surface",
@@ -364,7 +365,7 @@ def _root_data_vars() -> list[EcmwfAifsEnsVirtualDataVar]:
             long_name="Runoff water equivalent (surface plus subsurface)",
             units="kg m-2",
             standard_name="runoff_amount",
-            comment="Applies over land only; over water the values can be NaN or unmasked, so mask with land_sea_mask_surface.",
+            comment="Applies over land only; over water values may be NaN or finite, so mask with land_sea_mask_surface.",
         ),
         _var(
             "downward_short_wave_radiation_run_total_surface",
