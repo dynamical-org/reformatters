@@ -154,7 +154,7 @@ def test_backfill_and_update_decode_each_era_and_perturbed_statics(
     assert value == pytest.approx(update_value)
 
 
-def test_deployment_stays_suspended_and_polling_overlaps_next_fire(
+def test_deployment_is_active_and_polling_overlaps_next_fire(
     tmp_path: Path,
 ) -> None:
     dataset = EcmwfAifsEnsForecastVirtualDataset(
@@ -164,7 +164,7 @@ def test_deployment_stays_suspended_and_polling_overlaps_next_fire(
     )
     (cron,) = dataset.operational_kubernetes_resources("test-image")
     spec = cron.as_kubernetes_object()["spec"]
-    assert spec["suspend"] is True
+    assert spec["suspend"] is False
     for hour in (0, 6, 12, 18):
         fire = pd.Timestamp("2026-11-11") + pd.Timedelta(hours=hour, minutes=305)
         cutoff = dataset._virtual_poll_deadline(fire + pd.Timedelta("1min"))
