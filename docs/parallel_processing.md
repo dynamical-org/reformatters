@@ -59,7 +59,7 @@ By default, metadata and chunk writes happen on a temporary branch (`_job_{job_n
 2. **All workers** — open sessions on the temp branch, write chunk data, commit with `ConflictDetector` rebase (uncooperative distributed writes)
 3. **Last worker finalization** — writes final metadata on the branch, then atomically resets `main` to the branch tip using `reset_branch("main", snapshot, from_snapshot_id=original)`. This branch reset is what makes all writes visible to readers. The `from_snapshot_id` check ensures no concurrent process moved main.
 
-With `--keep-branch`, a materialized backfill creates the named private branch from `main` instead of a generated temporary branch. See [private branch backfills](backfill.md#prepare-a-private-icechunk-branch).
+With `--keep-branch`, a materialized backfill creates the named private branch from `main` instead of a generated temporary branch. With `--from-branch <existing branch name>`, it starts at that branch's tip and checks overwrites against its contents, leaving both that branch and `main` unchanged. See [private branch backfills](backfill.md#prepare-a-private-icechunk-branch).
 
 ### Virtual Icechunk operational updates (one worker per Job)
 
