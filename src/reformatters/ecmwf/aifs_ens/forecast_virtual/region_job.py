@@ -96,6 +96,10 @@ class EcmwfAifsEnsForecastVirtualRegionJob(
     ) -> Sequence[EcmwfAifsEnsForecastVirtualSourceFileCoord]:
         coords = []
         members = tuple(int(m) for m in processing_region_ds.ensemble_member.values)
+        file_type_members = (
+            ("cf", tuple(m for m in members if m == 0)),
+            ("pf", tuple(m for m in members if m != 0)),
+        )
         output_levels = (
             {int(p) for p in processing_region_ds.pressure_level.values}
             if "pressure_level" in processing_region_ds.coords
@@ -114,10 +118,7 @@ class EcmwfAifsEnsForecastVirtualRegionJob(
                 ]
                 if not file_vars:
                     continue
-                for file_type in ("cf", "pf"):
-                    file_members = tuple(
-                        m for m in members if (m == 0) == (file_type == "cf")
-                    )
+                for file_type, file_members in file_type_members:
                     if file_members:
                         coords.append(
                             EcmwfAifsEnsForecastVirtualSourceFileCoord(
