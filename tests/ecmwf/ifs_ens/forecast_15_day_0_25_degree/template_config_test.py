@@ -1,7 +1,12 @@
+import json
+
 import numpy as np
 import pandas as pd
 import xarray as xr
 
+from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.deprecated_zarr_v3.template_config import (
+    EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3TemplateConfig,
+)
 from reformatters.ecmwf.ifs_ens.forecast_15_day_0_25_degree.template_config import (
     EcmwfIfsEnsForecast15Day025DegreeTemplateConfig,
 )
@@ -87,3 +92,43 @@ def test_dimension_coordinates_shapes_and_values() -> None:
     em = dim_coords["ensemble_member"]
     assert isinstance(em, np.ndarray)
     assert all(em == np.arange(0, 51))
+
+
+def test_origin_keeps_array_encodings_shared_with_deprecated_zarr() -> None:
+    cfg = EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+    zarr_cfg = EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3TemplateConfig()
+    assert cfg.append_dim_start == pd.Timestamp("2020-10-15")
+    assert zarr_cfg.append_dim_start == pd.Timestamp("2024-04-01")
+    assert cfg.append_dim_coordinate_chunk_size() == 5840
+    assert zarr_cfg.append_dim_coordinate_chunk_size() == 5840
+    array_metadata_paths = list(cfg.template_path().glob("*/zarr.json"))
+    assert len(array_metadata_paths) == 28
+    for path in array_metadata_paths:
+        actual = json.loads(path.read_text())
+        deprecated = json.loads(
+            (
+                zarr_cfg.template_path() / path.relative_to(cfg.template_path())
+            ).read_text()
+        )
+        actual.pop("attributes")
+        deprecated.pop("attributes")
+        assert actual == deprecated, path.parent.name
+
+
+def test_template_spans_origin_and_deprecated_zarr_boundary() -> None:
+    ds = (
+        EcmwfIfsEnsForecast15Day025DegreeTemplateConfig()
+        .get_template(pd.Timestamp("2024-04-03"))
+        .dataset
+    )
+    assert ds.sizes["init_time"] == 1266
+    assert len(ds.data_vars) == 19
+    np.testing.assert_array_equal(
+        ds.init_time.values[[0, 1263, 1264, 1265]],
+        pd.to_datetime(
+            ["2020-10-15", "2024-03-31", "2024-04-01", "2024-04-02"]
+        ).to_numpy(),
+    )
+    np.testing.assert_array_equal(
+        ds.valid_time.values, ds.init_time.values[:, None] + ds.lead_time.values
+    )
