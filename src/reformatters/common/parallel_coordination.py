@@ -121,6 +121,7 @@ def parallel_setup(
     consolidated: bool,
     exclude_coord_value_chunks: Collection[str] = (),
     keep_branch: bool = False,
+    from_branch: str = "main",
 ) -> SetupInfo:
     if is_first:
         template_utils.write_metadata(template_ds, tmp_store, consolidated=consolidated)
@@ -140,7 +141,9 @@ def parallel_setup(
         if icechunk_repos:
             repo_snapshots = setup_info.setdefault("repo_snapshots", {})
             for role, repo in icechunk_repos:
-                snapshot = repo_snapshots.setdefault(role, repo.lookup_branch("main"))
+                snapshot = repo_snapshots.setdefault(
+                    role, repo.lookup_branch(from_branch)
+                )
                 if not keep_branch and branch_name in repo.list_branches():
                     # Branch already exists from a previous worker 0 attempt — reuse it.
                     log.info(f"Branch {branch_name} already exists on {role}, reusing")

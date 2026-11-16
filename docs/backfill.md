@@ -33,9 +33,9 @@ For an occasional materialized backfill on an existing Icechunk primary without 
 DYNAMICAL_ENV=prod uv run main <dataset-id> backfill-kubernetes --keep-branch <new branch name> --overwrite-chunks [flags]
 ```
 
-Worker 0 creates the branch from `main` in place of the generated temporary branch. Workers use the normal backfill processing path, and finalization retains the branch without resetting `main` or deleting the branch. Operational updates can continue on `main`. Omitting `--keep-branch` preserves normal publication behavior.
+Worker 0 creates the branch from `main` in place of the generated temporary branch. Add `--from-branch <existing branch name>` with `--keep-branch` to start at that branch's tip instead; the source branch and `main` stay unchanged. Workers use the normal backfill processing path, and finalization retains the branch without resetting `main` or deleting the branch. Operational updates can continue on `main`. Omitting `--keep-branch` preserves normal publication behavior.
 
-The dataset must already exist on `main`; the branch must not exist. `main`, `_job_` names, empty or whitespace-padded names, Zarr/replica/virtual stores and metadata-only runs are unsupported. Overwrite guards read `main`; add `--overwrite-metadata` for expansion or new arrays.
+The dataset must already exist on the source branch (`main` by default); the kept branch must not exist and must differ from the source branch. `main` as a kept branch, `_job_` names, empty or whitespace-padded names, Zarr/replica/virtual stores and metadata-only runs are unsupported. Overwrite guards and the default end read the source branch; add `--overwrite-metadata` for expansion or new arrays.
 
 An existing branch always fails worker-0 setup, including any worker-0 retry after branch creation. On failure, stop the Kubernetes job and all its workers before inspecting or deleting the branch, then launch a fresh job.
 

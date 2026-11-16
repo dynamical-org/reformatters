@@ -70,9 +70,11 @@ def _run_worker(
     *,
     workers_total: int = 2,
     keep_branch: str | None = "backfill-test",
+    from_branch: str | None = None,
     overwrite_chunks: bool = True,
     overwrite_metadata: bool = False,
     end_hour: int = 4,
+    start_hour: int | None = None,
 ) -> None:
     dataset.backfill(
         pd.Timestamp("2025-01-01") + pd.Timedelta(hours=end_hour),
@@ -82,6 +84,12 @@ def _run_worker(
         overwrite_chunks=overwrite_chunks,
         overwrite_metadata=overwrite_metadata,
         keep_branch=keep_branch,
+        from_branch=from_branch,
+        filter_start=(
+            pd.Timestamp("2025-01-01") + pd.Timedelta(hours=start_hour)
+            if start_hour is not None
+            else None
+        ),
     )
 
 
@@ -103,7 +111,8 @@ def _start_backfill(
     dataset: ParallelDataset | ExampleVirtualDataset,
     *,
     driver: bool,
-    keep_branch: str = "backfill-test",
+    keep_branch: str | None = "backfill-test",
+    from_branch: str | None = None,
     overwrite_chunks: bool = True,
     overwrite_metadata: bool = False,
 ) -> None:
@@ -112,6 +121,7 @@ def _start_backfill(
             overwrite_chunks=overwrite_chunks,
             overwrite_metadata=overwrite_metadata,
             keep_branch=keep_branch,
+            from_branch=from_branch,
             docker_image="test-image",
         )
     else:
@@ -119,6 +129,7 @@ def _start_backfill(
             dataset,
             0,
             keep_branch=keep_branch,
+            from_branch=from_branch,
             overwrite_chunks=overwrite_chunks,
             overwrite_metadata=overwrite_metadata,
         )
@@ -341,16 +352,32 @@ def test_retained_branch_rejects_unsupported_storage_and_virtual_data(
         assert not icechunk.Repository.exists(location)
 
 
-@pytest.mark.parametrize("keep_branch", [None, "backfill-test"])
+@pytest.mark.parametrize(
+    ("keep_branch", "from_branch"),
+    [
+        (None, None),
+        ("backfill-test", None),
+        ("backfill-test", "base"),
+        ("backfill-test", "main"),
+    ],
+)
 def test_driver_propagates_branch_as_argv_without_changing_storage(
-    branch_dataset: ParallelDataset, submit_job: Mock, keep_branch: str | None
+    branch_dataset: ParallelDataset,
+    submit_job: Mock,
+    keep_branch: str | None,
+    from_branch: str | None,
 ) -> None:
     IcechunkFixture()._init_store(branch_dataset)
     ((_, repo),) = branch_dataset.store_factory.icechunk_repos(sort="primary-first")
     original = repo.lookup_branch("main")
+    if from_branch == "base":
+        repo.create_branch(from_branch, original)
 
     branch_dataset.backfill_kubernetes(
-        overwrite_chunks=True, keep_branch=keep_branch, docker_image="test-image"
+        overwrite_chunks=True,
+        keep_branch=keep_branch,
+        from_branch=from_branch,
+        docker_image="test-image",
     )
 
     submit_job.assert_called_once()
@@ -358,9 +385,15 @@ def test_driver_propagates_branch_as_argv_without_changing_storage(
     container = manifest["spec"]["template"]["spec"]["containers"][0]
     flags = [arg for arg in container["command"] if arg.startswith("--keep-branch")]
     assert flags == (["--keep-branch=backfill-test"] if keep_branch else [])
+    base_flags = [
+        arg for arg in container["command"] if arg.startswith("--from-branch")
+    ]
+    assert base_flags == ([f"--from-branch={from_branch}"] if from_branch else [])
     assert "--overwrite-chunks" in container["command"]
     assert not any("BRANCH" in item["name"] for item in container["env"])
-    assert set(repo.list_branches()) == {"main"}
+    assert set(repo.list_branches()) == (
+        {"main", "base"} if from_branch == "base" else {"main"}
+    )
     assert repo.lookup_branch("main") == original
 
 
@@ -381,3 +414,166 @@ def test_normal_backfill_still_publishes_and_cleans_temporary_branch(
     for variable in published.data_vars.values():
         np.testing.assert_array_equal(variable.values, np.ones(variable.shape))
     assert branch_dataset.store_factory.list_coordination_files("branch-job", "") == []
+
+
+def _create_base_branch(dataset: ParallelDataset, num_time: int = 4) -> str:
+    ((_, repo),) = dataset.store_factory.icechunk_repos(sort="primary-first")
+    repo.create_branch("base", repo.lookup_branch("main"))
+    session = repo.writable_session("base")
+    template = _create_template_ds(num_time=num_time)
+    template_utils.write_metadata(template, dataset._tmp_store())
+    copy_zarr_metadata(template, dataset._tmp_store(), session.store)
+    group = zarr.open_group(session.store, mode="r+")
+    for name in ("var0", "var1", "var2", "var3"):
+        array = group[name]
+        assert isinstance(array, zarr.Array)
+        array[:] = 2
+    return session.commit("Populate base branch")
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("advance_main", [False, True])
+def test_kept_branch_inherits_base_data_without_mutating_base_or_main(
+    branch_dataset: ParallelDataset, advance_main: bool
+) -> None:
+    IcechunkFixture()._init_store(branch_dataset)
+    ((_, repo),) = branch_dataset.store_factory.icechunk_repos(sort="primary-first")
+    main_tip = repo.lookup_branch("main")
+    base_tip = _create_base_branch(branch_dataset)
+    base_before = xr.open_zarr(
+        branch_dataset.store_factory.primary_store(branch="base")
+    ).load()
+
+    _run_worker(branch_dataset, 0, from_branch="base", start_hour=2)
+    ancestry = list(repo.ancestry(branch="backfill-test"))
+    assert any(snapshot.parent_id == base_tip for snapshot in ancestry)
+    assert repo.lookup_branch("main") == main_tip
+    if advance_main:
+        session = repo.writable_session("main")
+        group = zarr.open_group(session.store, mode="r+")
+        group.attrs["independent_update"] = "published"
+        main_tip = session.commit("Independent main update")
+    main_before = xr.open_zarr(branch_dataset.store_factory.primary_store()).load()
+
+    _run_worker(branch_dataset, 1, from_branch="base", start_hour=2)
+
+    result = xr.open_zarr(
+        branch_dataset.store_factory.primary_store(branch="backfill-test")
+    )
+    for variable in result.data_vars.values():
+        np.testing.assert_array_equal(variable.values[:2], 2)
+        np.testing.assert_array_equal(variable.values[2:], 1)
+    assert repo.lookup_branch("base") == base_tip
+    assert repo.lookup_branch("main") == main_tip
+    xr.testing.assert_identical(
+        xr.open_zarr(branch_dataset.store_factory.primary_store(branch="base")),
+        base_before,
+    )
+    xr.testing.assert_identical(
+        xr.open_zarr(branch_dataset.store_factory.primary_store()), main_before
+    )
+    assert set(repo.list_branches()) == {"main", "base", "backfill-test"}
+
+
+@pytest.mark.slow
+def test_backfill_resolves_and_extends_base_longer_than_main(
+    branch_dataset: ParallelDataset, submit_job: Mock
+) -> None:
+    IcechunkFixture()._init_store(branch_dataset)
+    ((_, repo),) = branch_dataset.store_factory.icechunk_repos(sort="primary-first")
+    main_tip = repo.lookup_branch("main")
+    base_tip = _create_base_branch(branch_dataset, num_time=6)
+
+    branch_dataset.backfill_kubernetes(
+        overwrite_chunks=True,
+        keep_branch="backfill-test",
+        from_branch="base",
+        docker_image="test-image",
+    )
+    manifest = json.loads(submit_job.call_args.kwargs["input"])
+    command = manifest["spec"]["template"]["spec"]["containers"][0]["command"]
+    assert "2025-01-01T06:00:00" in command
+    _run_worker(
+        branch_dataset, 0, workers_total=1, from_branch="base", end_hour=6, start_hour=6
+    )
+    repo.delete_branch("backfill-test")
+
+    branch_dataset.backfill_kubernetes(
+        pd.Timestamp("2025-01-01 08:00"),
+        overwrite_chunks=True,
+        overwrite_metadata=True,
+        keep_branch="backfill-test",
+        from_branch="base",
+        docker_image="test-image",
+    )
+    _run_worker(
+        branch_dataset,
+        0,
+        workers_total=1,
+        from_branch="base",
+        overwrite_metadata=True,
+        end_hour=8,
+        start_hour=6,
+    )
+
+    result = xr.open_zarr(
+        branch_dataset.store_factory.primary_store(branch="backfill-test")
+    )
+    for variable in result.data_vars.values():
+        np.testing.assert_array_equal(variable.values[:6], 2)
+        np.testing.assert_array_equal(
+            variable.sel(time=pd.date_range("2025-01-01 06:00", periods=2, freq="h")),
+            1,
+        )
+    assert repo.lookup_branch("main") == main_tip
+    assert repo.lookup_branch("base") == base_tip
+
+
+@pytest.mark.parametrize("driver", [False, True])
+def test_missing_base_branch_fails_without_creating_kept_branch(
+    branch_dataset: ParallelDataset, submit_job: Mock, driver: bool
+) -> None:
+    IcechunkFixture()._init_store(branch_dataset)
+    ((_, repo),) = branch_dataset.store_factory.icechunk_repos(sort="primary-first")
+    main_tip = repo.lookup_branch("main")
+
+    with pytest.raises((AssertionError, icechunk.NotFoundError)):
+        _start_backfill(branch_dataset, driver=driver, from_branch="missing")
+
+    assert repo.lookup_branch("main") == main_tip
+    assert set(repo.list_branches()) == {"main"}
+    assert branch_dataset.store_factory.list_coordination_files("branch-job", "") == []
+    submit_job.assert_not_called()
+
+
+@pytest.mark.parametrize("driver", [False, True])
+@pytest.mark.parametrize(
+    ("keep_branch", "from_branch"),
+    [
+        (None, "base"),
+        ("base", "base"),
+        ("backfill-test", "_job_other"),
+        ("backfill-test", ""),
+        ("backfill-test", " "),
+        ("backfill-test", " base"),
+        ("backfill-test", "base\t"),
+    ],
+)
+def test_invalid_base_branch_is_rejected_before_writes(
+    branch_dataset: ParallelDataset,
+    submit_job: Mock,
+    driver: bool,
+    keep_branch: str | None,
+    from_branch: str,
+) -> None:
+    with pytest.raises(AssertionError, match="from-branch"):
+        _start_backfill(
+            branch_dataset,
+            driver=driver,
+            keep_branch=keep_branch,
+            from_branch=from_branch,
+        )
+
+    submit_job.assert_not_called()
+    ((_, _, location),) = branch_dataset.store_factory._icechunk_storages()
+    assert not icechunk.Repository.exists(location)

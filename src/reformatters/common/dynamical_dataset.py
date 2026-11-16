@@ -414,6 +414,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
         keep_branch: str | None = None,
+        from_branch: str | None = None,
     ) -> None:
         """Run dataset reformatting using Kubernetes index jobs.
 
@@ -425,10 +426,15 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         cluster = targets.cluster_for_resource(self.dataset_id)
         targets.verify_cluster(cluster)
 
+        self._validate_from_branch(from_branch, keep_branch)
         if keep_branch is not None:
             self._validate_keep_branch(keep_branch, overwrite_chunks)
         overwrite = overwrite_chunks or overwrite_metadata
-        existing_ds = self._open_existing_store()
+        existing_ds = (
+            self._open_existing_store()
+            if from_branch is None
+            else self.store_factory.open_primary_datatree(branch=from_branch)
+        )
         template_ds, resolved_end = self._resolve_backfill_template(
             existing_ds,
             append_dim_end,
@@ -527,6 +533,8 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             command.append("--overwrite-metadata")
         if keep_branch is not None:
             command.append(f"--keep-branch={keep_branch}")
+        if from_branch is not None:
+            command.append(f"--from-branch={from_branch}")
 
         kubernetes_job = Job(
             command=command,
@@ -601,6 +609,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         overwrite_chunks: bool = False,
         overwrite_metadata: bool = False,
         keep_branch: str | None = None,
+        from_branch: str | None = None,
     ) -> None:
         """Orchestrate running RegionJob instances."""
         template_ds = self._get_template(append_dim_end)
@@ -631,6 +640,24 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             overwrite_chunks=overwrite_chunks,
             overwrite_metadata=overwrite_metadata,
             keep_branch=keep_branch,
+            from_branch=from_branch,
+        )
+
+    def _validate_from_branch(
+        self, from_branch: str | None, keep_branch: str | None
+    ) -> None:
+        if from_branch is None:
+            return
+        assert keep_branch is not None, "--from-branch requires --keep-branch"
+        assert from_branch != keep_branch, (
+            "--from-branch must differ from --keep-branch"
+        )
+        assert from_branch, "--from-branch requires a nonempty name"
+        assert from_branch == from_branch.strip(), (
+            "--from-branch cannot have surrounding whitespace"
+        )
+        assert not from_branch.startswith("_job_"), (
+            "--from-branch cannot use the _job_ namespace"
         )
 
     def _validate_keep_branch(self, branch: str, overwrite_chunks: bool) -> None:
@@ -668,6 +695,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         overwrite_metadata: bool = False,
         job_uid: str | None = None,
         keep_branch: str | None = None,
+        from_branch: str | None = None,
     ) -> None:
         """Shared processing loop for both updates and backfills.
 
@@ -690,6 +718,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             f"{len(worker_jobs)} of {len(all_jobs)} total jobs, {jobs_summary}"
         )
 
+        self._validate_from_branch(from_branch, keep_branch)
         if keep_branch is not None:
             self._validate_keep_branch(keep_branch, overwrite_chunks)
             assert not update_template_with_results
@@ -707,7 +736,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         if is_first and overwrite:
             template_utils.assert_safe_overwrite(
                 template_ds,
-                self.store_factory.open_primary_datatree(),
+                self.store_factory.open_primary_datatree(branch=from_branch or "main"),
                 self.template_config.append_dim,
                 allow_new_arrays=overwrite_metadata,
                 allow_expansion=overwrite_chunks and overwrite_metadata,
@@ -739,6 +768,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             consolidated=self.region_job_class.consolidated_metadata,
             exclude_coord_value_chunks=exclude_coord_value_chunks,
             keep_branch=keep_branch is not None,
+            from_branch=from_branch or "main",
         )
 
         # 2. Process jobs. Each region job variant owns its own store/session
