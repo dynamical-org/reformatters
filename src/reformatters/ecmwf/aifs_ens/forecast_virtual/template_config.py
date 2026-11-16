@@ -31,7 +31,6 @@ AIFS_ENS_UPGRADE_DATE = pd.Timestamp("2026-05-12T06:00")
 PRESSURE_LEVELS = (10, 50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000)
 _KELVIN_TO_CELSIUS = ScaleOffset(offset=-273.15, scale=1.0).to_dict()
 _GEOPOTENTIAL_TO_HEIGHT = ScaleOffset(offset=0.0, scale=9.80665).to_dict()
-_STATIC_COMMENT = "Time-invariant field published at lead time 0 only."
 
 
 def available_pressure_levels(init_time: Timestamp) -> tuple[int, ...]:
@@ -164,6 +163,8 @@ def _var(
     comments = [comment] if comment else []
     if step_type == "accum":
         comments.append("Accumulated since forecast initialization.")
+    if lead_0_only:
+        comments.append("Time-invariant field published at lead time 0 only.")
     return EcmwfAifsEnsVirtualDataVar(
         name=name,
         group=group,
@@ -438,7 +439,7 @@ def _root_data_vars() -> list[EcmwfAifsEnsVirtualDataVar]:
             long_name="Land-sea mask",
             units="1",
             standard_name="land_area_fraction",
-            comment=f"Fraction (0-1) of the grid box that is land. {_STATIC_COMMENT}",
+            comment="Fraction (0-1) of the grid box that is land.",
             lead_0_only=True,
         ),
         _var(
@@ -448,7 +449,7 @@ def _root_data_vars() -> list[EcmwfAifsEnsVirtualDataVar]:
             long_name="Geopotential height",
             units="m",
             standard_name="geopotential_height",
-            comment=f"Surface (orography) geopotential height. {_STATIC_COMMENT}",
+            comment="Surface (orography) geopotential height.",
             lead_0_only=True,
             filters=[_GEOPOTENTIAL_TO_HEIGHT],
         ),
@@ -458,7 +459,6 @@ def _root_data_vars() -> list[EcmwfAifsEnsVirtualDataVar]:
             short_name="sdor",
             long_name="Standard deviation of sub-gridscale orography",
             units="m",
-            comment=_STATIC_COMMENT,
             lead_0_only=True,
         ),
         _var(
@@ -467,7 +467,6 @@ def _root_data_vars() -> list[EcmwfAifsEnsVirtualDataVar]:
             short_name="slor",
             long_name="Slope of sub-gridscale orography",
             units="1",
-            comment=_STATIC_COMMENT,
             lead_0_only=True,
         ),
     ]
