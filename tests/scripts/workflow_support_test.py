@@ -499,15 +499,19 @@ def test_backfill_gate_precedes_submission() -> None:
 @pytest.mark.parametrize(
     ("keep_branch", "from_branch", "branch_args"),
     [
-        ("", "", ""),
-        ("catchup", "", " --keep-branch catchup"),
-        ("catchup", "retained", " --keep-branch catchup --from-branch retained"),
+        ("", "", []),
+        ("catchup", "", ["--keep-branch", "catchup"]),
+        (
+            "catchup",
+            "retained base",
+            ["--keep-branch", "catchup", "--from-branch", "retained base"],
+        ),
     ],
 )
 def test_backfill_submission_passes_branch_inputs_only_when_set(
     keep_branch: str,
     from_branch: str,
-    branch_args: str,
+    branch_args: list[str],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -522,7 +526,7 @@ def test_backfill_submission_passes_branch_inputs_only_when_set(
         submission["run"].replace("${{ github.repository }}", "owner/repo")
     )
     uv = tmp_path / "uv"
-    uv.write_text('#!/bin/bash\nprintf "%s\\n" "$*" >> "$CALLS"\n')
+    uv.write_text('#!/bin/bash\nprintf "%s\\0" "$@" > "$CALLS"\n')
     uv.chmod(0o755)
     for key, value in {
         "PATH": f"{tmp_path}:{os.environ['PATH']}",
@@ -546,12 +550,25 @@ def test_backfill_submission_passes_branch_inputs_only_when_set(
         ["/bin/bash", str(script)], capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
-    assert (tmp_path / "calls").read_text() == (
-        f"run main example-dataset backfill-kubernetes --docker-image registry/repo:{SHA}"
-        " --jobs-per-pod 1 --max-parallelism 10 --overwrite-chunks --overwrite-metadata"
-        " --append-dim-end 2026-11-19T00:00:00 --filter-start 2026-11-03T00:00:00"
-        f"{branch_args}\n"
-    )
+    assert (tmp_path / "calls").read_text().split("\0")[:-1] == [
+        "run",
+        "main",
+        "example-dataset",
+        "backfill-kubernetes",
+        "--docker-image",
+        f"registry/repo:{SHA}",
+        "--jobs-per-pod",
+        "1",
+        "--max-parallelism",
+        "10",
+        "--overwrite-chunks",
+        "--overwrite-metadata",
+        "--append-dim-end",
+        "2026-11-19T00:00:00",
+        "--filter-start",
+        "2026-11-03T00:00:00",
+        *branch_args,
+    ]
 
 
 @pytest.mark.parametrize("suspended", [True, False])
