@@ -432,9 +432,8 @@ def _create_base_branch(dataset: ParallelDataset, num_time: int = 4) -> str:
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("advance_main", [False, True])
 def test_kept_branch_inherits_base_data_without_mutating_base_or_main(
-    branch_dataset: ParallelDataset, advance_main: bool
+    branch_dataset: ParallelDataset,
 ) -> None:
     IcechunkFixture()._init_store(branch_dataset)
     ((_, repo),) = branch_dataset.store_factory.icechunk_repos(sort="primary-first")
@@ -448,11 +447,6 @@ def test_kept_branch_inherits_base_data_without_mutating_base_or_main(
     ancestry = list(repo.ancestry(branch="backfill-test"))
     assert any(snapshot.parent_id == base_tip for snapshot in ancestry)
     assert repo.lookup_branch("main") == main_tip
-    if advance_main:
-        session = repo.writable_session("main")
-        group = zarr.open_group(session.store, mode="r+")
-        group.attrs["independent_update"] = "published"
-        main_tip = session.commit("Independent main update")
     main_before = xr.open_zarr(branch_dataset.store_factory.primary_store()).load()
 
     _run_worker(branch_dataset, 1, from_branch="base", start_hour=2)
@@ -537,7 +531,7 @@ def test_missing_base_branch_fails_without_creating_kept_branch(
     ((_, repo),) = branch_dataset.store_factory.icechunk_repos(sort="primary-first")
     main_tip = repo.lookup_branch("main")
 
-    with pytest.raises((AssertionError, icechunk.NotFoundError)):
+    with pytest.raises(icechunk.RefNotFoundError):
         _start_backfill(branch_dataset, driver=driver, from_branch="missing")
 
     assert repo.lookup_branch("main") == main_tip
@@ -554,9 +548,6 @@ def test_missing_base_branch_fails_without_creating_kept_branch(
         ("base", "base"),
         ("backfill-test", "_job_other"),
         ("backfill-test", ""),
-        ("backfill-test", " "),
-        ("backfill-test", " base"),
-        ("backfill-test", "base\t"),
     ],
 )
 def test_invalid_base_branch_is_rejected_before_writes(

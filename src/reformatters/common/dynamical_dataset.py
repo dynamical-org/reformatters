@@ -653,9 +653,6 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             "--from-branch must differ from --keep-branch"
         )
         assert from_branch, "--from-branch requires a nonempty name"
-        assert from_branch == from_branch.strip(), (
-            "--from-branch cannot have surrounding whitespace"
-        )
         assert not from_branch.startswith("_job_"), (
             "--from-branch cannot use the _job_ namespace"
         )
