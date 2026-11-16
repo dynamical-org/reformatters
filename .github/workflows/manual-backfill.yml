@@ -102,6 +102,14 @@ name: 'Manual: Backfill'
         required: false
         type: string
         default: '10'
+      keep_branch:
+        description: 'New Icechunk branch to write and retain instead of publishing to main (optional). Requires an overwrite-chunks operation; see docs/backfill.md#prepare-a-private-icechunk-branch.'
+        required: false
+        type: string
+      from_branch:
+        description: 'Existing Icechunk branch for keep_branch to start from instead of main (optional; requires keep_branch).'
+        required: false
+        type: string
 concurrency:
   group: k8s-manual-${{ github.actor }}-${{ github.run_id }}
   cancel-in-progress: false
@@ -175,6 +183,8 @@ jobs:
         FILTER_VARIABLE_NAMES: ${{ github.event.inputs.filter_variable_names }}
         JOBS_PER_POD: ${{ github.event.inputs.jobs_per_pod }}
         MAX_PARALLELISM: ${{ github.event.inputs.max_parallelism }}
+        KEEP_BRANCH: ${{ github.event.inputs.keep_branch }}
+        FROM_BRANCH: ${{ github.event.inputs.from_branch }}
       run: |
         #!/bin/bash
         set -euo pipefail
@@ -209,6 +219,12 @@ jobs:
             CONTAINS_TIMESTAMP="$(echo "${CONTAINS_TIMESTAMP}" | xargs)"  # trim surrounding whitespace
             [ -n "${CONTAINS_TIMESTAMP}" ] && ARGS+=(--filter-contains "${CONTAINS_TIMESTAMP}")
           done
+        fi
+        if [ -n "${KEEP_BRANCH}" ]; then
+          ARGS+=(--keep-branch "${KEEP_BRANCH}")
+        fi
+        if [ -n "${FROM_BRANCH}" ]; then
+          ARGS+=(--from-branch "${FROM_BRANCH}")
         fi
         if [ -n "${FILTER_VARIABLE_NAMES}" ]; then
           IFS=',' read -ra VARIABLE_NAMES <<< "${FILTER_VARIABLE_NAMES}"

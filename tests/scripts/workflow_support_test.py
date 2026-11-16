@@ -496,6 +496,81 @@ def test_backfill_gate_precedes_submission() -> None:
     assert gate < submission
 
 
+@pytest.mark.parametrize(
+    ("keep_branch", "from_branch", "branch_args"),
+    [
+        ("", "", []),
+        ("catchup", "", ["--keep-branch", "catchup"]),
+        (
+            "catchup",
+            "retained base",
+            ["--keep-branch", "catchup", "--from-branch", "retained base"],
+        ),
+    ],
+)
+def test_backfill_submission_passes_branch_inputs_only_when_set(
+    keep_branch: str,
+    from_branch: str,
+    branch_args: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    steps = load_workflow("manual-backfill.yml")["jobs"]["backfill"]["steps"]
+    submission = next(
+        step for step in steps if step.get("name") == "Start backfill (SEE LOGS)"
+    )
+    assert submission["env"]["KEEP_BRANCH"] == "${{ github.event.inputs.keep_branch }}"
+    assert submission["env"]["FROM_BRANCH"] == "${{ github.event.inputs.from_branch }}"
+    script = tmp_path / "submit.sh"
+    script.write_text(
+        submission["run"].replace("${{ github.repository }}", "owner/repo")
+    )
+    uv = tmp_path / "uv"
+    uv.write_text('#!/bin/bash\nprintf "%s\\0" "$@" > "$CALLS"\n')
+    uv.chmod(0o755)
+    for key, value in {
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "CALLS": str(tmp_path / "calls"),
+        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+        "DOCKER_IMAGE": f"registry/repo:{SHA}",
+        "DATASET_ID": "example-dataset",
+        "OPERATION": "overwrite-chunks-and-metadata",
+        "APPEND_DIM_END": "2026-11-19T00:00:00",
+        "FILTER_START": "2026-11-03T00:00:00",
+        "FILTER_END": "",
+        "FILTER_CONTAINS": "",
+        "FILTER_VARIABLE_NAMES": "",
+        "JOBS_PER_POD": "1",
+        "MAX_PARALLELISM": "10",
+        "KEEP_BRANCH": keep_branch,
+        "FROM_BRANCH": from_branch,
+    }.items():
+        monkeypatch.setenv(key, value)
+    result = subprocess.run(  # noqa: S603
+        ["/bin/bash", str(script)], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "calls").read_text().split("\0")[:-1] == [
+        "run",
+        "main",
+        "example-dataset",
+        "backfill-kubernetes",
+        "--docker-image",
+        f"registry/repo:{SHA}",
+        "--jobs-per-pod",
+        "1",
+        "--max-parallelism",
+        "10",
+        "--overwrite-chunks",
+        "--overwrite-metadata",
+        "--append-dim-end",
+        "2026-11-19T00:00:00",
+        "--filter-start",
+        "2026-11-03T00:00:00",
+        *branch_args,
+    ]
+
+
 @pytest.mark.parametrize("suspended", [True, False])
 def test_manual_cron_checks_cluster_policy(
     suspended: bool,
