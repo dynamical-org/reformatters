@@ -111,12 +111,7 @@ class EcmwfIfsEnsForecast15Day025DegreeDeprecatedZarrV3Dataset(
         keep_branch: str | None = None,
         from_branch: str | None = None,
     ) -> None:
-        existing_ds = (
-            self._open_existing_store()
-            if from_branch is None
-            else self.store_factory.open_primary_datatree(branch=from_branch)
-        )
-        if existing_ds is not None:
+        if (existing_ds := self._open_existing_store()) is not None:
             self._assert_stored_labels_match_template(existing_ds, template_ds)
         super()._process_region_jobs(
             all_jobs,
