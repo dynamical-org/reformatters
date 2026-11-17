@@ -3,7 +3,7 @@
     "dataset_id": "dwd-icon-eu-forecast-5-day-icosahedral",
     "dataset_version": "0.1.0",
     "name": "DWD ICON-EU forecast, 5 day, icosahedral",
-    "description": "High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD), on its native icosahedral grid (ICON grid 62, R03B08).",
+    "description": "High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD).",
     "attribution": "DWD ICON-EU data processed by dynamical.org.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Europe",
@@ -63,61 +63,6 @@
             "min": 0,
             "max": 768607
           }
-        },
-        "dimension_names": [
-          "cell"
-        ],
-        "zarr_format": 3,
-        "node_type": "array",
-        "storage_transformers": []
-      },
-      "cell_area": {
-        "shape": [
-          768608
-        ],
-        "data_type": "float32",
-        "chunk_grid": {
-          "name": "regular",
-          "configuration": {
-            "chunk_shape": [
-              768608
-            ]
-          }
-        },
-        "chunk_key_encoding": {
-          "name": "default",
-          "configuration": {
-            "separator": "/"
-          }
-        },
-        "fill_value": "NaN",
-        "codecs": [
-          {
-            "name": "bytes",
-            "configuration": {
-              "endian": "little"
-            }
-          },
-          {
-            "name": "blosc",
-            "configuration": {
-              "typesize": 4,
-              "cname": "zstd",
-              "clevel": 3,
-              "shuffle": "bitshuffle",
-              "blocksize": 0
-            }
-          }
-        ],
-        "attributes": {
-          "long_name": "Cell area",
-          "standard_name": "cell_area",
-          "units": "m2",
-          "statistics_approximate": {
-            "min": 28571058.0,
-            "max": 44897092.0
-          },
-          "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
           "cell"
@@ -201,8 +146,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -289,8 +233,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -377,8 +320,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -464,8 +406,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -551,8 +492,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -639,8 +579,7 @@
           "step_type": "avg",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -727,8 +666,7 @@
           "step_type": "avg",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -1353,8 +1291,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -1441,8 +1378,7 @@
           "step_type": "avg",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -1528,8 +1464,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -1615,8 +1550,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -1702,8 +1636,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -1789,8 +1722,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -1877,8 +1809,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -2013,8 +1944,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -2100,8 +2030,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -2246,8 +2175,7 @@
           "step_type": "max",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -2333,8 +2261,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -2420,8 +2347,7 @@
           "step_type": "instant",
           "mesh": "/mesh/mesh",
           "location": "face",
-          "cell_measures": "area: cell_area",
-          "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+          "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [

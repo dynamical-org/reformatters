@@ -45,7 +45,7 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
             dataset_id="dwd-icon-eu-forecast-5-day-icosahedral",
             dataset_version="0.1.0",
             name="DWD ICON-EU forecast, 5 day, icosahedral",
-            description="High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD), on its native icosahedral grid (ICON grid 62, R03B08).",
+            description="High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD).",
             attribution="DWD ICON-EU data processed by dynamical.org.",
             license="CC-BY-4.0",
             spatial_domain="Europe",
@@ -78,7 +78,6 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
             "spatial_ref": SPATIAL_REF_COORDS,
             "latitude": (("cell",), latitude),
             "longitude": (("cell",), longitude),
-            "cell_area": (("cell",), icosahedral_grid.grid_arrays()["cell_area"]),
         }
 
     @computed_field
@@ -132,27 +131,6 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
                     ),
                 )
             )
-        area = icosahedral_grid.grid_arrays()["cell_area"]
-        result.append(
-            Coordinate(
-                name="cell_area",
-                encoding=Encoding(
-                    dtype="float32",
-                    fill_value=np.nan,
-                    chunks=icosahedral_grid.CELL_COUNT,
-                    shards=None,
-                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE],
-                ),
-                attrs=CoordinateAttrs(
-                    long_name="Cell area",
-                    standard_name="cell_area",
-                    units="m2",
-                    statistics_approximate=StatisticsApproximate(
-                        min=float(area.min()), max=float(area.max())
-                    ),
-                ),
-            )
-        )
         return result
 
     @computed_field
@@ -171,7 +149,6 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
                 var.attrs,
                 mesh="/mesh/mesh",
                 location="face",
-                cell_measures="area: cell_area",
             )
             if var.name == "wind_gust_10m":
                 attrs = replace(

@@ -145,8 +145,6 @@ def regenerate_grid(grid_path: Path, output_path: Path = GRID_PATH) -> None:
             arrays[f"{prefix}longitude"] = longitude
         with rasterio.open(f'NETCDF:"{grid_path}":vertex_of_cell') as source:
             arrays["face_node_connectivity"] = (source.read(1).T - 1).astype(np.int32)
-        with rasterio.open(f'NETCDF:"{grid_path}":cell_area') as source:
-            arrays["cell_area"] = source.read(1).ravel().astype(np.float32)
     assert arrays["latitude"].size == CELL_COUNT
     assert arrays["node_latitude"].size == NODE_COUNT
     assert arrays["face_node_connectivity"].shape == (CELL_COUNT, 3)

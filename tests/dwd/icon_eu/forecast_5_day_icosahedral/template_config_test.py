@@ -54,7 +54,7 @@ def test_mesh_does_not_multiply_point_forecast_rows() -> None:
     assert grid["mesh"].attrs["face_dimension"] == "cell"
 
 
-def test_written_mesh_preserves_triangle_and_area_access(tmp_path: Path) -> None:
+def test_written_mesh_preserves_triangle_access(tmp_path: Path) -> None:
     config = DwdIconEuForecast5DayIcosahedralTemplateConfig()
     template = config.get_template("2026-10-07T06")
     store = tmp_path / "native.zarr"
@@ -63,10 +63,6 @@ def test_written_mesh_preserves_triangle_and_area_access(tmp_path: Path) -> None
         xr.open_zarr(store, decode_timedelta=True) as ds,
         xr.open_zarr(store, group="mesh") as grid,
     ):
-        measure = ds.temperature_2m.attrs["cell_measures"].split()[1]
-        assert measure == "cell_area"
-        assert "cell_area" in ds.coords
-        assert "cell_area" not in ds.xindexes
         triangles = grid.face_node_connectivity.values
         assert triangles.min() == 0
         assert triangles.max() < grid.sizes["node"]
@@ -80,6 +76,4 @@ def test_written_mesh_preserves_triangle_and_area_access(tmp_path: Path) -> None
             atol=2e-5,
             rtol=0,
         )
-        assert ds[measure].attrs["units"] == "m2"
-        assert_allclose(ds[measure][0], 43068914.0242895, rtol=1e-7)
         assert ds.cell.dtype == np.int32
