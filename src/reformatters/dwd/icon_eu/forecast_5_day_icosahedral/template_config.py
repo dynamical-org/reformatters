@@ -74,7 +74,7 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
     def derive_coordinates(
         self, ds: xr.Dataset
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
-        latitude, longitude = icosahedral_grid.cell_centres()
+        latitude, longitude = icosahedral_grid.cell_centers()
         return {
             **derive_forecast_coordinates(ds),
             "spatial_ref": SPATIAL_REF_COORDS,
@@ -86,7 +86,7 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
     @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
-        latitude, longitude = icosahedral_grid.cell_centres()
+        latitude, longitude = icosahedral_grid.cell_centers()
         result = [
             *forecast_coordinate_configs(
                 self.dimension_coordinates()["init_time"],

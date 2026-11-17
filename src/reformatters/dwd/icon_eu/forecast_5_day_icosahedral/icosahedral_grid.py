@@ -11,17 +11,16 @@ import xarray as xr
 
 from reformatters.common.binary_rounding import round_float32_inplace
 from reformatters.common.config_models import Coordinate, CoordinateAttrs, Encoding
-from reformatters.common.logging import get_logger
-from reformatters.common.types import Array1D, Array2D
+from reformatters.common.types import Array1D
 from reformatters.common.zarr import BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE
-
-log = get_logger(__name__)
 
 CELL_COUNT: Final = 768_608
 NODE_COUNT: Final = 385_555
 GRID_UUID: Final = "832c1507-fbc7-3eb3-8413-9890094d2c60"
 GRID_NAME: Final = "ICON grid 62 (R03B08)"
 SPHERE_RADIUS_METRES: Final = 6_371_229
+# 21 mantissa bits maintain 2.16 m maximum horizontal error.
+COORDINATE_KEEP_MANTISSA_BITS: Final = 21
 GRID_PATH: Final = Path(__file__).with_name("grid.npz.blosc")
 
 
@@ -41,7 +40,7 @@ def grid_arrays() -> dict[str, np.ndarray[Any, Any]]:
     return arrays
 
 
-def cell_centres() -> tuple[Array1D[np.float32], Array1D[np.float32]]:
+def cell_centers() -> tuple[Array1D[np.float32], Array1D[np.float32]]:
     arrays = grid_arrays()
     return arrays["latitude"], arrays["longitude"]
 
@@ -120,31 +119,6 @@ def spatial_reference_coordinate() -> Coordinate:
     )
 
 
-def _round_coordinates(original: Array2D[np.float64]) -> Array2D[np.float32]:
-    latitude = np.deg2rad(original[0])
-    for keep_bits in range(24):
-        rounded = original.astype(np.float32)
-        round_float32_inplace(rounded, keep_bits)
-        delta_latitude, delta_longitude = np.deg2rad(
-            rounded.astype(np.float64) - original
-        )
-        haversine = (
-            np.sin(delta_latitude / 2) ** 2
-            + np.cos(latitude)
-            * np.cos(latitude + delta_latitude)
-            * np.sin(delta_longitude / 2) ** 2
-        )
-        max_error = float(
-            (2 * SPHERE_RADIUS_METRES * np.arcsin(np.sqrt(haversine))).max()
-        )
-        if max_error <= 2.5:
-            log.info(
-                f"Coordinates: {keep_bits} mantissa bits, {max_error:.6f} m maximum error"
-            )
-            return rounded
-    raise AssertionError("Float32 coordinates exceed 2.5 m horizontal error")
-
-
 def regenerate_grid(grid_path: Path, output_path: Path = GRID_PATH) -> None:
     """Write native geometry from the official ICON grid 62 file, icon_grid_0062_R03B08_N02.nc from http://icon-downloads.mpimet.mpg.de/grids/public/edzw/."""
     arrays: dict[str, np.ndarray[Any, Any]] = {}
@@ -164,7 +138,9 @@ def regenerate_grid(grid_path: Path, output_path: Path = GRID_PATH) -> None:
             for name in names:
                 with rasterio.open(f'NETCDF:"{grid_path}":{name}') as source:
                     coordinates.append(np.rad2deg(source.read(1).ravel()))
-            latitude, longitude = _round_coordinates(np.stack(coordinates))
+            rounded = np.stack(coordinates).astype(np.float32)
+            round_float32_inplace(rounded, COORDINATE_KEEP_MANTISSA_BITS)
+            latitude, longitude = rounded
             prefix = "node_" if names[0] == "vlat" else ""
             arrays[f"{prefix}latitude"] = latitude
             arrays[f"{prefix}longitude"] = longitude
