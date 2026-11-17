@@ -144,8 +144,13 @@ def test_http_store_is_cached() -> None:
 
 def test_requests_made_under_the_test_suite_identify_as_tests() -> None:
     expected = "dynamical.org reformatters tests"
-    store = http_store("https://example.com/user-agent")
-    assert store.client_options["user_agent"] == expected
+    stores = [
+        http_store("https://example.com/user-agent"),
+        s3_store("s3://noaa-gefs-pds", region="us-east-1"),
+        gcs_store("gs://gcp-public-data-arco-era5"),
+    ]
+    for store in stores:
+        assert store.client_options["user_agent"] == expected
     request = download_module._httpx_client().build_request(
         "GET", "https://example.com/file"
     )

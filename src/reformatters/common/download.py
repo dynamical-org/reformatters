@@ -264,6 +264,7 @@ def httpx_get(
 _CLIENT_OPTIONS: ClientConfig = {
     "connect_timeout": "4 seconds",
     "timeout": "120 seconds",
+    "user_agent": USER_AGENT,
 }
 _RETRY_CONFIG: RetryConfig = {
     "max_retries": 16,
@@ -285,7 +286,7 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
     """
     return obstore.store.HTTPStore.from_url(
         base_url,
-        client_options={**_CLIENT_OPTIONS, "user_agent": USER_AGENT},
+        client_options=_CLIENT_OPTIONS,
         retry_config=_RETRY_CONFIG,
     )
 
