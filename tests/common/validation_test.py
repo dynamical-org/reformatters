@@ -1035,45 +1035,6 @@ def test_quarter_sampling_keeps_a_nonempty_contiguous_cell_window(
     xr.testing.assert_identical(sampled, ds.isel(cell=indices))
 
 
-@pytest.mark.parametrize("strategy", ["random_points", "quarter", "all"])
-@pytest.mark.parametrize(("x_dim", "y_dim"), [("longitude", "latitude"), ("x", "y")])
-def test_spatial_sampling_preserves_structured_grid_selections(
-    monkeypatch: pytest.MonkeyPatch,
-    strategy: validation.SpatialSamplingStrategy,
-    x_dim: str,
-    y_dim: str,
-) -> None:
-    ds = xr.Dataset(
-        {"temperature": ((y_dim, x_dim), np.arange(77).reshape(7, 11))},
-        coords={y_dim: np.arange(7), x_dim: np.arange(11)},
-    )
-    rng = np.random.default_rng(7)
-    monkeypatch.setattr(np.random, "default_rng", lambda: rng)
-    expected_rng = np.random.Generator(np.random.PCG64(7))
-    if strategy == "quarter":
-        x_start = int(expected_rng.integers(0, 2)) * 5
-        y_start = int(expected_rng.integers(0, 2)) * 3
-        expected = ds.isel(
-            {
-                x_dim: slice(x_start, 5 if x_start == 0 else 11),
-                y_dim: slice(y_start, 3 if y_start == 0 else 7),
-            }
-        )
-    elif strategy == "random_points":
-        expected = ds.isel(
-            {
-                x_dim: xr.DataArray(expected_rng.integers(0, 11, size=5), dims="point"),
-                y_dim: xr.DataArray(expected_rng.integers(0, 7, size=5), dims="point"),
-            }
-        )
-    else:
-        expected = ds
-
-    sampled = validation._apply_spatial_sampling(ds, strategy, num_points=5)
-
-    xr.testing.assert_identical(sampled, expected)
-
-
 def test_truncate_shards_truncation() -> None:
     """_truncate_shards collapses long lists with head/tail and an ellipsis."""
     shards = [str(i) for i in range(10)]

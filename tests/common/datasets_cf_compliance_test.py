@@ -190,7 +190,7 @@ def _check_cf_spatial_coordinates(ds: xr.Dataset, dataset_id: str) -> None:
             f"latitude missing units='degree_north', got: {lat_attrs.get('units')}"
         )
         # Only check for axis if latitude is a dimension coordinate (not projected)
-        if not is_projected and "latitude" in ds.dims:
+        if "latitude" in ds.dims:
             assert lat_attrs.get("axis") == "Y", (
                 f"latitude missing axis='Y', got: {lat_attrs.get('axis')}"
             )
@@ -211,7 +211,7 @@ def _check_cf_spatial_coordinates(ds: xr.Dataset, dataset_id: str) -> None:
             f"longitude missing units='degree_east', got: {lon_attrs.get('units')}"
         )
         # Only check for axis if longitude is a dimension coordinate (not projected)
-        if not is_projected and "longitude" in ds.dims:
+        if "longitude" in ds.dims:
             assert lon_attrs.get("axis") == "X", (
                 f"longitude missing axis='X', got: {lon_attrs.get('axis')}"
             )
