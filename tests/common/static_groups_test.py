@@ -231,18 +231,16 @@ def test_static_group_with_append_array_is_rejected(
         config.update_template()
 
 
-def test_virtual_job_rejects_static_group_before_writing(
-    config: StaticGroupConfig, tmp_path: Path
+def test_virtual_dataset_rejects_static_group_before_writing(
+    config: StaticGroupConfig,
 ) -> None:
-    config.update_template()
     with pytest.raises(ValueError, match="only by materialized"):
-        VirtualRegionJob(
-            template_ds=config.get_template("2020-01-02"),
-            tmp_store=tmp_path,
-            append_dim="init_time",
-            region=slice(0, 2),
-            data_vars=config.data_vars,
-            reformat_job_name="test-virtual",
+        DynamicalDataset[_DV, StaticSourceFileCoord](
+            template_config=config,
+            region_job_class=VirtualRegionJob[_DV, StaticSourceFileCoord],
+            primary_storage_config=StorageConfig(
+                base_path="unused", format=DatasetFormat.ICECHUNK
+            ),
         )
 
 
@@ -382,12 +380,9 @@ def test_optional_mesh_and_grid_attributes_round_trip_and_omit_none(
         step_type="instant",
         mesh="/mesh/mesh",
         location="face",
-        cell_measures="area: /mesh/cell_area",
+        cell_measures="area: cell_area",
     )
-    assert (
-        var_attrs.model_dump(exclude_none=True)["cell_measures"]
-        == "area: /mesh/cell_area"
-    )
+    assert var_attrs.model_dump(exclude_none=True)["cell_measures"] == "area: cell_area"
     assert "mesh" not in replace(var_attrs, mesh=None).model_dump(exclude_none=True)
     config.update_template()
     tree = config.get_template("2020-01-02")

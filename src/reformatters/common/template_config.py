@@ -142,16 +142,17 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
             xr.DataTree: Template tree with dimension coordinates
         """
         on_disk = xr.open_datatree(self.template_path(), decode_timedelta=True)
-        assert {node.name for node in on_disk.subtree if is_static_group(node)} == set(
-            self.static_groups()
-        ), (
+        static_group_names = set(self.static_groups())
+        assert {
+            node.name for node in on_disk.subtree if is_static_group(node)
+        } == static_group_names, (
             "static groups in the template must match static_groups(); run update-template"
         )
         new_append_coords = self.append_dim_coordinates(end_time)
 
         nodes: dict[str, xr.Dataset] = {}
         for node in on_disk.subtree:
-            if is_static_group(node):
+            if node.name in static_group_names:
                 nodes[node.path] = node.to_dataset(inherit=False).load()
                 continue
             ds = template_utils.empty_copy_with_reindex(
@@ -313,7 +314,8 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
                 name
             ]
             assert is_static_group(node), (
-                f"static group {name!r} must not include an append dimension"
+                f"static group {name!r} must use a non-vertical name and "
+                "must not include an append dimension"
             )
         return static_groups
 

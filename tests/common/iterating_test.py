@@ -1,12 +1,13 @@
 import math
 from collections.abc import Generator
 from itertools import pairwise
-from typing import Literal
+from typing import Literal, get_args
 
 import numpy as np
 import pytest
 import xarray as xr
 
+from reformatters.common import iterating
 from reformatters.common.iterating import (
     chunk_slices,
     consume,
@@ -22,6 +23,7 @@ from reformatters.common.iterating import (
     spread_evenly,
     walk_data_arrays,
 )
+from reformatters.common.types import VerticalGroup
 
 
 def _two_node_tree() -> xr.DataTree:
@@ -94,6 +96,26 @@ def test_flatten_groups_handles_arbitrary_nesting() -> None:
     )
     flat = flatten_groups(tree)
     assert set(flat.data_vars) == {"a", "g/b", "g/h/c"}
+
+
+@pytest.mark.parametrize("group", get_args(VerticalGroup.__value__))
+@pytest.mark.parametrize("has_data_var", [False, True])
+def test_vertical_metadata_without_append_axis_is_not_excluded_as_static(
+    group: str, has_data_var: bool
+) -> None:
+    vertical = xr.Dataset(coords={group: [1, 2]})
+    if has_data_var:
+        vertical["temperature"] = (group, [270.0, 280.0])
+    tree = xr.DataTree.from_dict(
+        {"/": xr.Dataset(coords={"init_time": [0]}), f"/{group}": vertical}
+    )
+    assert not iterating.is_static_group(tree.children[group])
+    flat = flatten_groups(tree, include_static=False)
+    np.testing.assert_array_equal(flat[group], [1, 2])
+    if has_data_var:
+        assert f"{group}/temperature" in dict(
+            walk_data_arrays(tree, include_static=False)
+        )
 
 
 def test_group_by_parity_preserves_order() -> None:

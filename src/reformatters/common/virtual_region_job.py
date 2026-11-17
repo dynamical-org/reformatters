@@ -15,7 +15,6 @@ import xarray as xr
 import zarr
 from icechunk import VirtualChunkSpec
 from icechunk.store import IcechunkStore
-from pydantic import model_validator
 from xarray.coding.times import decode_cf_datetime
 from zarr.abc.store import Store
 from zarr.core.metadata import ArrayV3Metadata
@@ -23,11 +22,7 @@ from zarr.core.metadata import ArrayV3Metadata
 from reformatters.common import storage, template_utils
 from reformatters.common.config_models import DataVar
 from reformatters.common.download import SourceAccessError
-from reformatters.common.iterating import (
-    is_static_group,
-    node_group_name,
-    node_path_prefix,
-)
+from reformatters.common.iterating import node_group_name, node_path_prefix
 from reformatters.common.logging import get_logger
 from reformatters.common.region_job import (
     DATA_VAR,
@@ -101,13 +96,6 @@ class VirtualRegionJob(
 
     # Pending-dependent discovery gates must allow retained files after siblings commit.
     retain_failed_files: ClassVar[bool] = False
-
-    @model_validator(mode="after")
-    def _assert_no_static_groups(self) -> Self:
-        assert not any(is_static_group(node) for node in self.template_ds.subtree), (
-            "Static groups are supported only by materialized region jobs"
-        )
-        return self
 
     # The recent span of the append dim each operational update fire re-sweeps.
     operational_update_window: ClassVar[Timedelta]

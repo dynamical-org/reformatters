@@ -7,15 +7,18 @@ from typing import Any, Literal, get_args
 
 import xarray as xr
 
-from reformatters.common.types import AppendDim
+from reformatters.common.types import AppendDim, VerticalGroup
 
 _APPEND_DIMS = frozenset(get_args(AppendDim.__value__))
+_VERTICAL_GROUPS = frozenset(get_args(VerticalGroup.__value__))
 
 
 def is_static_group(node: xr.DataTree) -> bool:
-    """A non-root group whose local arrays have no append dimension."""
-    return node.path != "/" and _APPEND_DIMS.isdisjoint(
-        node.to_dataset(inherit=False).dims
+    """A non-root, non-vertical group whose local arrays have no append dimension."""
+    return (
+        node.path != "/"
+        and node.name not in _VERTICAL_GROUPS
+        and _APPEND_DIMS.isdisjoint(node.to_dataset(inherit=False).dims)
     )
 
 
