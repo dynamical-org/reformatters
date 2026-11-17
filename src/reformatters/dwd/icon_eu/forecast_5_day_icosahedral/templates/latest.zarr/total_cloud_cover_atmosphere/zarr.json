@@ -70,6 +70,9 @@
     "standard_name": "cloud_area_fraction",
     "units": "percent",
     "step_type": "instant",
+    "mesh": "/mesh/mesh",
+    "location": "face",
+    "cell_measures": "area: /mesh/cell_area",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },

@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from pydantic import computed_field
-from zarr.codecs import BloscCodec
 
 from reformatters.common.config_models import (
     ROOT,
@@ -18,6 +17,7 @@ from reformatters.common.config_models import (
 from reformatters.common.pydantic import replace
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
+from reformatters.common.zarr import BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE
 from reformatters.dwd.icon_eu.forecast_5_day.template_config import (
     DwdIconEuDataVar,
     DwdIconEuForecast5DayTemplateConfig,
@@ -47,6 +47,8 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
             name="DWD ICON-EU forecast, 5 day, icosahedral",
             description="High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD), on its native icosahedral grid.",
             spatial_resolution="6.5 km",
+            source_grid_name=icosahedral_grid.GRID_NAME,
+            source_grid_id=icosahedral_grid.GRID_UUID,
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
@@ -56,6 +58,9 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
             "lead_time": regular["lead_time"],
             "cell": icosahedral_grid.cell_indices(),
         }
+
+    def static_groups(self) -> dict[str, xr.Dataset]:
+        return {"mesh": icosahedral_grid.mesh_dataset()}
 
     def derive_coordinates(
         self, ds: xr.Dataset
@@ -79,15 +84,11 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
             Coordinate(
                 name="cell",
                 encoding=Encoding(
-                    dtype="int64",
+                    dtype="int32",
                     fill_value=-1,
                     chunks=icosahedral_grid.CELL_COUNT,
                     shards=None,
-                    compressors=[
-                        BloscCodec(
-                            typesize=8, cname="zstd", clevel=3, shuffle="bitshuffle"
-                        ).to_dict()
-                    ],
+                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE],
                 ),
                 attrs=CoordinateAttrs(
                     long_name="Native grid cell index",
@@ -108,11 +109,7 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
                         fill_value=np.nan,
                         chunks=icosahedral_grid.CELL_COUNT,
                         shards=None,
-                        compressors=[
-                            BloscCodec(
-                                typesize=4, cname="zstd", clevel=3, shuffle="bitshuffle"
-                            ).to_dict()
-                        ],
+                        compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE],
                     ),
                     attrs=replace(
                         original.attrs,
@@ -130,7 +127,12 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
     def data_vars(self) -> Sequence[DwdIconEuDataVar]:
         result = []
         for var in self._regular_grid_config().data_vars:
-            attrs = var.attrs
+            attrs = replace(
+                var.attrs,
+                mesh="/mesh/mesh",
+                location="face",
+                cell_measures="area: /mesh/cell_area",
+            )
             if var.name == "wind_gust_10m":
                 attrs = replace(
                     attrs,

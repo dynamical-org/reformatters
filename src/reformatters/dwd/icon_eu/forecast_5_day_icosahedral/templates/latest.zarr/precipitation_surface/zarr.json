@@ -71,6 +71,9 @@
     "units": "kg m-2 s-1",
     "comment": "Average precipitation rate since the previous forecast step. Units equivalent to mm/s.",
     "step_type": "avg",
+    "mesh": "/mesh/mesh",
+    "location": "face",
+    "cell_measures": "area: /mesh/cell_area",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },

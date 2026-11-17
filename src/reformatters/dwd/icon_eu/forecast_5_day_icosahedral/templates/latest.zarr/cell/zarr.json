@@ -2,7 +2,7 @@
   "shape": [
     768608
   ],
-  "data_type": "int64",
+  "data_type": "int32",
   "chunk_grid": {
     "name": "regular",
     "configuration": {
@@ -28,7 +28,7 @@
     {
       "name": "blosc",
       "configuration": {
-        "typesize": 8,
+        "typesize": 4,
         "cname": "zstd",
         "clevel": 3,
         "shuffle": "bitshuffle",

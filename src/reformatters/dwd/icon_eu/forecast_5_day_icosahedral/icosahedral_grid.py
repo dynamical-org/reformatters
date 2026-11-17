@@ -8,11 +8,12 @@ import numcodecs
 import numpy as np
 import rasterio
 import xarray as xr
-from zarr.codecs import BloscCodec
 
 from reformatters.common.binary_rounding import round_float32_inplace
+from reformatters.common.config_models import Encoding
 from reformatters.common.logging import get_logger
 from reformatters.common.types import Array1D, Array2D
+from reformatters.common.zarr import BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE
 
 log = get_logger(__name__)
 
@@ -83,17 +84,14 @@ def mesh_dataset() -> xr.Dataset:
             ),
         }
     )
-    compressor = BloscCodec(
-        typesize=4, cname="zstd", clevel=3, shuffle="bitshuffle"
-    ).to_dict()
     for var in ds.data_vars.values():
-        var.encoding.update(
-            dtype=var.dtype,
+        var.encoding = Encoding(
+            dtype="float32" if var.dtype == np.float32 else "int32",
             chunks=var.shape,
-            compressors=[compressor],
-            _FillValue=None,
+            shards=None,
+            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE],
             fill_value=np.nan if var.dtype == np.float32 else -1,
-        )
+        ).model_dump(exclude_none=True)
     return ds
 
 

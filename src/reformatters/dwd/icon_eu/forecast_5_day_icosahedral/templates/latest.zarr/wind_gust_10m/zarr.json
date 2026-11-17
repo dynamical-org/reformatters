@@ -71,6 +71,9 @@
     "units": "m s-1",
     "comment": "Maximum over the hour ending at the forecast step. At 3-hourly steps (81-120 hours), this covers only the last hour of each step.",
     "step_type": "max",
+    "mesh": "/mesh/mesh",
+    "location": "face",
+    "cell_measures": "area: /mesh/cell_area",
     "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
