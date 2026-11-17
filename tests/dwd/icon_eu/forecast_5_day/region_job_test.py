@@ -16,14 +16,16 @@ from reformatters.common import template_utils
 from reformatters.common.config_models import DataVarAttrs, Encoding
 from reformatters.common.pydantic import replace
 from reformatters.common.storage import DatasetFormat, StorageConfig, StoreFactory
-from reformatters.dwd.icon_eu.forecast_5_day import region_job as region_job_module
+from reformatters.dwd.icon_eu import icon_eu_region_job as region_job_module
 from reformatters.dwd.icon_eu.forecast_5_day.region_job import (
     DwdIconEuForecast5DayRegionJob,
     DwdIconEuForecast5DaySourceFileCoord,
 )
 from reformatters.dwd.icon_eu.forecast_5_day.template_config import (
-    DwdIconEuDataVar,
     DwdIconEuForecast5DayTemplateConfig,
+)
+from reformatters.dwd.icon_eu.icon_eu_template_config import (
+    DwdIconEuDataVar,
     DwdIconEuInternalAttrs,
 )
 
@@ -150,7 +152,7 @@ def test_region_job_download_file(
 ) -> None:
     download_to_disk_mock = Mock()
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast_5_day.region_job.http_download_to_disk",
+        "reformatters.dwd.icon_eu.icon_eu_region_job.http_download_to_disk",
         download_to_disk_mock,
     )
 
@@ -176,7 +178,7 @@ def test_region_job_download_file_fallback(
         return Path("/fake/fallback.grib2.bz2")
 
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast_5_day.region_job.http_download_to_disk",
+        "reformatters.dwd.icon_eu.icon_eu_region_job.http_download_to_disk",
         mock_download,
     )
 
@@ -205,7 +207,7 @@ def test_region_job_apply_data_transformations_deaccumulation(
 
     mock_deaccum = Mock()
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast_5_day.region_job.deaccumulate_to_rates_inplace",
+        "reformatters.dwd.icon_eu.icon_eu_region_job.deaccumulate_to_rates_inplace",
         mock_deaccum,
     )
 
@@ -241,7 +243,7 @@ def test_region_job_apply_data_transformations_deaccumulation_optional_kwargs(
 
     mock_deaccum = Mock()
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast_5_day.region_job.deaccumulate_to_rates_inplace",
+        "reformatters.dwd.icon_eu.icon_eu_region_job.deaccumulate_to_rates_inplace",
         mock_deaccum,
     )
 
@@ -321,7 +323,7 @@ def test_region_job_download_file_both_fail(
         raise FileNotFoundError("not found")
 
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast_5_day.region_job.http_download_to_disk",
+        "reformatters.dwd.icon_eu.icon_eu_region_job.http_download_to_disk",
         mock_download,
     )
 
@@ -344,7 +346,7 @@ def test_region_job_download_file_fallback_on_generic_error(
         return Path("/fake/fallback.grib2.bz2")
 
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast_5_day.region_job.http_download_to_disk",
+        "reformatters.dwd.icon_eu.icon_eu_region_job.http_download_to_disk",
         mock_download,
     )
 
@@ -368,7 +370,7 @@ def test_region_job_download_file_fallback_on_permission_denied(
         return Path("/fake/fallback.grib2.bz2")
 
     monkeypatch.setattr(
-        "reformatters.dwd.icon_eu.forecast_5_day.region_job.http_download_to_disk",
+        "reformatters.dwd.icon_eu.icon_eu_region_job.http_download_to_disk",
         mock_download,
     )
 
