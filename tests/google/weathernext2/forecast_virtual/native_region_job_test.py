@@ -242,7 +242,7 @@ def _mock_native_listing(
     client.get.side_effect = get
 
     def client_factory(**kwargs: object) -> Mock:
-        assert kwargs["headers"] == {"User-Agent": "dynamical.org reformatters"}
+        assert kwargs["headers"] == {"User-Agent": "dynamical.org reformatters tests"}
         return client
 
     monkeypatch.setattr(listing_module.httpx, "Client", client_factory)

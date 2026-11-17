@@ -19,6 +19,7 @@ import requests
 from obstore.exceptions import GenericError, PermissionDeniedError, UnauthenticatedError
 
 from reformatters.common import kubernetes
+from reformatters.common.config import Config
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import exponential_backoff_time
 
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 DOWNLOAD_DIR = Path("data/download/")
-USER_AGENT = "dynamical.org reformatters"
+USER_AGENT = "dynamical.org reformatters" + (" tests" if Config.is_test else "")
 
 """
 This module provides utilities for downloading files to disk over http,
