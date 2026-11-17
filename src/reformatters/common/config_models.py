@@ -44,6 +44,7 @@ type SpatialResolution = Literal[
     "2.5 km",
     "3 km",
     "4 km",
+    "6.5 km",
     "36 km",
 ]
 # SPDX license identifiers.
