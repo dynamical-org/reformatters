@@ -64,8 +64,6 @@ class DatasetAttributes(FrozenBaseModel):
     time_resolution: AttributeStr
     forecast_domain: AttributeStr | None = None
     forecast_resolution: AttributeStr | None = None
-    source_grid_name: AttributeStr | None = None
-    source_grid_id: str | None = None
 
 
 class StatisticsApproximate(FrozenBaseModel):

@@ -17,7 +17,6 @@ from reformatters.common.config_models import (
     ROOT,
     Coordinate,
     CoordinateAttrs,
-    DatasetAttributes,
     Encoding,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -45,17 +44,6 @@ from tests.common.multi_group_template_test import (
 
 class StaticGroupConfig(MultiGroupConfig):
     dims: Dims = {ROOT: ("init_time", "cell")}
-    include_grid_identity: bool = False
-
-    @computed_field
-    @property
-    def dataset_attributes(self) -> DatasetAttributes:
-        attrs = super().dataset_attributes
-        return (
-            replace(attrs, source_grid_name="Native grid", source_grid_id="grid-uuid")
-            if self.include_grid_identity
-            else attrs
-        )
 
     def dimension_coordinates(self) -> dict[str, Any]:
         return {
@@ -365,17 +353,8 @@ def test_materialized_backfill_update_and_refresh_preserve_static_group(
     xr.testing.assert_identical(after, refreshed)
 
 
-def test_optional_mesh_and_grid_attributes_round_trip_and_omit_none(
-    config: StaticGroupConfig,
-) -> None:
+def test_optional_mesh_attributes_round_trip(config: StaticGroupConfig) -> None:
     config.update_template()
     tree = config.get_template("2020-01-02")
-    assert "source_grid_name" not in tree.attrs
-    assert "source_grid_id" not in tree.attrs
     assert tree["temperature"].attrs["mesh"] == "/mesh/mesh"
     assert tree["temperature"].attrs["location"] == "face"
-    grid_config = replace(config, include_grid_identity=True)
-    grid_config.update_template()
-    grid_tree = grid_config.get_template("2020-01-02")
-    assert grid_tree.attrs["source_grid_name"] == "Native grid"
-    assert grid_tree.attrs["source_grid_id"] == "grid-uuid"
