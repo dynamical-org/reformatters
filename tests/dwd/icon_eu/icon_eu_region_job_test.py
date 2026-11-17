@@ -1,5 +1,5 @@
-from collections.abc import Sequence
 from pathlib import Path
+from typing import ClassVar
 from urllib.parse import urlparse
 
 import numpy as np
@@ -34,20 +34,9 @@ class CellSourceFileCoord(DwdIconEuSourceFileCoord):
 
 
 class CellRegionJob(DwdIconEuRegionJob[CellSourceFileCoord]):
-    def generate_source_file_coords(
-        self,
-        processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[DwdIconEuDataVar],
-    ) -> Sequence[CellSourceFileCoord]:
-        return [
-            CellSourceFileCoord(
-                init_time=pd.Timestamp(init_time),
-                lead_time=pd.Timedelta(lead_time),
-                data_var=item(data_var_group),
-            )
-            for init_time in processing_region_ds.init_time.values
-            for lead_time in processing_region_ds.lead_time.values
-        ]
+    source_file_coord_class: ClassVar[type[DwdIconEuSourceFileCoord]] = (
+        CellSourceFileCoord
+    )
 
     def read_data(
         self, coord: CellSourceFileCoord, data_var: DwdIconEuDataVar

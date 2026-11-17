@@ -1,12 +1,8 @@
 import bz2
-from collections.abc import Sequence
 
 import numpy as np
-import pandas as pd
-import xarray as xr
 from rasterio.io import MemoryFile
 
-from reformatters.common.iterating import item
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import ArrayFloat32
 from reformatters.dwd.icon_eu.icon_eu_region_job import (
@@ -59,37 +55,7 @@ class DwdIconEuForecast5DaySourceFileCoord(DwdIconEuSourceFileCoord):
 class DwdIconEuForecast5DayRegionJob(
     DwdIconEuRegionJob[DwdIconEuForecast5DaySourceFileCoord]
 ):
-    def generate_source_file_coords(
-        self,
-        processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[DwdIconEuDataVar],
-    ) -> Sequence[DwdIconEuForecast5DaySourceFileCoord]:
-        """Return a sequence of coords, one for each source file required to process the data
-        covered by processing_region_ds.
-
-        Parameters
-        ----------
-        processing_region_ds : xr.Dataset
-        data_var_group : Sequence[DwdIconEuDataVar]
-            A sequence containing a single `DwdIconEuDataVar` (because each ICON-EU grib file
-            contains a single variable).
-        """
-        init_times = pd.to_datetime(processing_region_ds["init_time"].values)
-        lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
-        data_var = item(data_var_group)
-
-        assert len(init_times) > 0
-        assert len(lead_times) > 0
-
-        return [
-            DwdIconEuForecast5DaySourceFileCoord(
-                init_time=init_time,
-                lead_time=lead_time,
-                data_var=data_var,
-            )
-            for init_time in init_times
-            for lead_time in lead_times
-        ]
+    source_file_coord_class = DwdIconEuForecast5DaySourceFileCoord
 
     def read_data(
         self,

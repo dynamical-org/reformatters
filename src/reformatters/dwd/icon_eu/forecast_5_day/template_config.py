@@ -91,11 +91,10 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
         dim_coords = self.dimension_coordinates()
         append_dim_coordinate_chunk_size = self.append_dim_coordinate_chunk_size()
 
-        time_coords = forecast_coordinate_configs(
-            dim_coords["init_time"], append_dim_coordinate_chunk_size
-        )
         return [
-            *time_coords[:2],
+            *forecast_coordinate_configs(
+                dim_coords["init_time"], append_dim_coordinate_chunk_size
+            ),
             Coordinate(
                 name="latitude",
                 encoding=Encoding(
@@ -136,7 +135,6 @@ class DwdIconEuForecast5DayTemplateConfig(TemplateConfig[DwdIconEuDataVar]):
                     ),
                 ),
             ),
-            *time_coords[2:],
             Coordinate(
                 name="spatial_ref",
                 encoding=Encoding(

@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar, cast
 
 import pandas as pd
 import xarray as xr
@@ -9,6 +9,7 @@ from zarr.abc.store import Store
 
 from reformatters.common.deaccumulation import deaccumulate_to_rates_inplace
 from reformatters.common.download import FALLBACK_EXCEPTIONS, http_download_to_disk
+from reformatters.common.iterating import item
 from reformatters.common.logging import get_logger
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.region_job import (
@@ -49,6 +50,34 @@ class DwdIconEuSourceFileCoord(InitLeadSourceFileCoord):
 class DwdIconEuRegionJob[SourceFileCoordT: DwdIconEuSourceFileCoord](
     MaterializedRegionJob[DwdIconEuDataVar, SourceFileCoordT]
 ):
+    source_file_coord_class: ClassVar[type[DwdIconEuSourceFileCoord]]
+
+    def generate_source_file_coords(
+        self,
+        processing_region_ds: xr.Dataset,
+        data_var_group: Sequence[DwdIconEuDataVar],
+    ) -> Sequence[SourceFileCoordT]:
+        """Return source coordinates for each initialization and lead time of one variable."""
+        init_times = pd.to_datetime(processing_region_ds["init_time"].values)
+        lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
+        data_var = item(data_var_group)
+        source_file_coord_class = cast(
+            type[SourceFileCoordT], self.source_file_coord_class
+        )
+
+        assert len(init_times) > 0
+        assert len(lead_times) > 0
+
+        return [
+            source_file_coord_class(
+                init_time=init_time,
+                lead_time=lead_time,
+                data_var=data_var,
+            )
+            for init_time in init_times
+            for lead_time in lead_times
+        ]
+
     @classmethod
     def source_file_var_groups(
         cls,
@@ -58,19 +87,16 @@ class DwdIconEuRegionJob[SourceFileCoordT: DwdIconEuSourceFileCoord](
         return [[var] for var in data_vars]
 
     def download_file(self, coord: SourceFileCoordT) -> Path:
-        """Download the file for the given coordinate and return the local path.
-
-        Downloads the `.grib.bz2` file and returns its local `Path`.
-        """
+        """Download the source file, falling back to DWD when the archive copy is unavailable, and return its local path."""
         url = coord.get_url()
         try:
-            bz2_file_path = http_download_to_disk(url, self.dataset_id)
+            path = http_download_to_disk(url, self.dataset_id)
         except FALLBACK_EXCEPTIONS as e:
             log.debug(f"Failed to download '{url}': {e}")
             fallback_url = coord.get_fallback_url()
             log.debug(f"Attempting to download from {fallback_url=}")
-            bz2_file_path = http_download_to_disk(fallback_url, self.dataset_id)
-        return bz2_file_path
+            path = http_download_to_disk(fallback_url, self.dataset_id)
+        return path
 
     def apply_data_transformations(
         self, data_array: xr.DataArray, data_var: DwdIconEuDataVar
