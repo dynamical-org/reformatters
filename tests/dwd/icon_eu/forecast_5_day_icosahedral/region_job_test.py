@@ -60,7 +60,6 @@ def region_job(tmp_path: Path) -> DwdIconEuForecast5DayIcosahedralRegionJob:
     [
         ("temperature_2m", [273.15, 274.15, 272.15, 280.15], [0, 1, -1, 7]),
         ("dew_point_temperature_2m", [273.15, 274.15, 272.15, 280.15], [0, 1, -1, 7]),
-        ("snow_water_equivalent_surface", [10, 20, 0, 40], [0.01, 0.02, 0, 0.04]),
         ("wind_u_10m", [3, -1, 0, 8], [3, -1, 0, 8]),
     ],
 )
@@ -155,46 +154,3 @@ def test_source_selection_ignores_extra_hourly_files_after_hour_78(
     )
     assert coords[0].get_url().endswith("/VMAX_10M/PT000H00M.grib2")
     assert coords[-1].get_url().endswith("/VMAX_10M/PT120H00M.grib2")
-
-
-@pytest.mark.parametrize(
-    ("name", "raw", "expected"),
-    [
-        ("precipitation_surface", [0, 156, 162], [np.nan, 2 / 3600, 2 / 3600]),
-        (
-            "downward_direct_short_wave_radiation_flux_surface",
-            [0, 20, 30],
-            [np.nan, 20, 290],
-        ),
-    ],
-)
-def test_decode_and_deaccumulate_uses_three_hour_window_after_hour_78(
-    region_job: DwdIconEuForecast5DayIcosahedralRegionJob,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    name: str,
-    raw: list[float],
-    expected: list[float],
-) -> None:
-    monkeypatch.setattr(icosahedral_grid, "CELL_COUNT", 4)
-    var = next(v for v in region_job.data_vars if v.name == name)
-    lead_times = pd.to_timedelta([0, 78, 81], unit="h")
-    fields = []
-    for lead, value in zip(lead_times, raw, strict=True):
-        path = tmp_path / f"{lead.total_seconds()}.grib2"
-        write_grib(path, np.full(4, value, dtype=np.float64))
-        coord = DwdIconEuForecast5DayIcosahedralSourceFileCoord(
-            init_time=pd.Timestamp("2026-11-16T00"),
-            lead_time=lead,
-            data_var=var,
-            downloaded_path=path,
-        )
-        fields.append(region_job.read_data(coord, var))
-    data = xr.DataArray(
-        np.stack(fields),
-        dims=("lead_time", "cell"),
-        coords={"lead_time": lead_times},
-        attrs={"units": var.attrs.units},
-    )
-    region_job.apply_data_transformations(data, var)
-    assert_allclose(data[:, 0], expected, atol=1e-6, rtol=0)

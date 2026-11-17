@@ -146,7 +146,7 @@ def _round_coordinates(original: Array2D[np.float64]) -> Array2D[np.float32]:
 
 
 def regenerate_grid(grid_path: Path, output_path: Path = GRID_PATH) -> None:
-    """Write native geometry from the official ICON grid 62 NetCDF file."""
+    """Write native geometry from the official ICON grid 62 file, icon_grid_0062_R03B08_N02.nc from http://icon-downloads.mpimet.mpg.de/grids/public/edzw/."""
     arrays: dict[str, np.ndarray[Any, Any]] = {}
     with (
         warnings.catch_warnings(),

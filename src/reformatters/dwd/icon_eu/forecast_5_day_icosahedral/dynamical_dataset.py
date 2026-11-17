@@ -12,8 +12,7 @@ from .region_job import (
 )
 from .template_config import DwdIconEuForecast5DayIcosahedralTemplateConfig
 
-# Hand-set from 4 complete native-grid runs over one day (last file at most +3h14m after init);
-# DWD retains about a day of runs, so the sample is small. Re-derive from the timing profiler after ~30 live runs.
+# Hand-set from 4 complete native-grid runs over one day; the latest last file was init+3:13:53.
 UPDATE_SCHEDULE = "17 3,9,15,21 * * *"
 UPDATE_MAX_DELAY = timedelta(hours=3, minutes=17)
 UPDATE_DEADLINE = timedelta(hours=6)
