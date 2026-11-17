@@ -82,5 +82,4 @@ def test_written_mesh_preserves_triangle_and_area_access(tmp_path: Path) -> None
         )
         assert ds[measure].attrs["units"] == "m2"
         assert_allclose(ds[measure][0], 43068914.0242895, rtol=1e-7)
-        assert ds.attrs["source_grid_id"] == "832c1507-fbc7-3eb3-8413-9890094d2c60"
         assert ds.cell.dtype == np.int32

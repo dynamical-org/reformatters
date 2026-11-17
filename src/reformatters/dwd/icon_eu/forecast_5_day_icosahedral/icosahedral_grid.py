@@ -17,7 +17,6 @@ from reformatters.common.zarr import BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE
 CELL_COUNT: Final = 768_608
 NODE_COUNT: Final = 385_555
 GRID_UUID: Final = "832c1507-fbc7-3eb3-8413-9890094d2c60"
-GRID_NAME: Final = "ICON grid 62 (R03B08)"
 SPHERE_RADIUS_METERS: Final = 6_371_229
 # 21 mantissa bits maintain 2.16 m maximum horizontal error.
 COORDINATE_KEEP_MANTISSA_BITS: Final = 21

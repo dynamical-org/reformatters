@@ -3,7 +3,7 @@
     "dataset_id": "dwd-icon-eu-forecast-5-day-icosahedral",
     "dataset_version": "0.1.0",
     "name": "DWD ICON-EU forecast, 5 day, icosahedral",
-    "description": "High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD), on its native icosahedral grid.",
+    "description": "High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD), on its native icosahedral grid (ICON grid 62, R03B08).",
     "attribution": "DWD ICON-EU data processed by dynamical.org.",
     "license": "CC-BY-4.0",
     "spatial_domain": "Europe",
@@ -11,9 +11,7 @@
     "time_domain": "Forecasts initialized 2026-10-07 00:00:00 UTC to Present",
     "time_resolution": "Forecasts initialized every 6 hours",
     "forecast_domain": "Forecast lead time 0-120 hours (0-5 days) ahead",
-    "forecast_resolution": "Forecast step 0-78 hours: hourly, 81-120 hours: 3 hourly",
-    "source_grid_name": "ICON grid 62 (R03B08)",
-    "source_grid_id": "832c1507-fbc7-3eb3-8413-9890094d2c60"
+    "forecast_resolution": "Forecast step 0-78 hours: hourly, 81-120 hours: 3 hourly"
   },
   "zarr_format": 3,
   "consolidated_metadata": {

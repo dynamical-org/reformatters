@@ -45,7 +45,7 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
             dataset_id="dwd-icon-eu-forecast-5-day-icosahedral",
             dataset_version="0.1.0",
             name="DWD ICON-EU forecast, 5 day, icosahedral",
-            description="High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD), on its native icosahedral grid.",
+            description="High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD), on its native icosahedral grid (ICON grid 62, R03B08).",
             attribution="DWD ICON-EU data processed by dynamical.org.",
             license="CC-BY-4.0",
             spatial_domain="Europe",
@@ -54,8 +54,6 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
             time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
             forecast_domain="Forecast lead time 0-120 hours (0-5 days) ahead",
             forecast_resolution="Forecast step 0-78 hours: hourly, 81-120 hours: 3 hourly",
-            source_grid_name=icosahedral_grid.GRID_NAME,
-            source_grid_id=icosahedral_grid.GRID_UUID,
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
