@@ -67,7 +67,7 @@ class DwdIconEuForecast5DayIcosahedralRegionJob(DwdIconEuForecast5DayRegionJob):
         assert coord.downloaded_path is not None
         result = read_unstructured_grib(
             coord.downloaded_path,
-            expected_grid_uuid=icosahedral_grid.GRID_UUID,
+            expected_grid_uuid=icosahedral_grid.GRID_UUID.replace("-", ""),
             expected_number_of_points=icosahedral_grid.CELL_COUNT,
         )
         if data_var.attrs.units == "degree_Celsius":
