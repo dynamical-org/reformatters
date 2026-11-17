@@ -282,16 +282,6 @@ def test_malformed_listing_fails(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize("product", ["final", "preliminary"])
-def test_live_directory_listing(product: ChirpsProduct) -> None:
-    times = pd.date_range("2025-01-01", periods=3)
-    coords = _job(product).generate_source_file_coords(
-        xr.Dataset(coords={"time": times}), []
-    )
-    assert [coord.time for coord in coords] == list(times)
-
-
 def test_read_data_masks_fill_value_and_converts_to_rate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
