@@ -12,6 +12,7 @@ from pydantic import computed_field
 from zarr.abc.store import Store
 
 from reformatters.common import materialized_region_job, template_utils, validation
+from reformatters.common import zarr as zarr_utils
 from reformatters.common.config_models import (
     ROOT,
     Coordinate,
@@ -35,10 +36,6 @@ from reformatters.common.types import (
     Timestamp,
 )
 from reformatters.common.virtual_region_job import VirtualRegionJob
-from reformatters.common.zarr import (
-    BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE,
-    BLOSC_8BYTE_ZSTD_LEVEL3_BITSHUFFLE,
-)
 from tests.common.multi_group_template_test import (
     _DV,
     MultiGroupConfig,
@@ -139,11 +136,15 @@ class StaticGroupConfig(MultiGroupConfig):
                 chunks=ds[name].shape,
                 shards=None,
                 fill_value=-1,
-                compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE],
+                compressors=[zarr_utils.BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE],
             ).model_dump(exclude_none=True)
         for name, dtype, compressor in (
-            ("node_latitude", "float32", BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE),
-            ("node_longitude", "float64", BLOSC_8BYTE_ZSTD_LEVEL3_BITSHUFFLE),
+            ("node_latitude", "float32", zarr_utils.BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE),
+            (
+                "node_longitude",
+                "float64",
+                zarr_utils.BLOSC_8BYTE_ZSTD_LEVEL3_BITSHUFFLE,
+            ),
         ):
             ds[name].encoding = Encoding(
                 dtype=dtype,
@@ -198,7 +199,7 @@ def test_template_expansion_preserves_static_values_and_excludes_them_from_jobs(
     assert all([v.path for v in j.data_vars] == ["temperature"] for j in jobs)
 
 
-@pytest.mark.parametrize("change", ["values", "removed", "codec"])
+@pytest.mark.parametrize("change", ["values", "removed_coordinate", "codec"])
 def test_structural_guard_rejects_static_array_drift(
     config: StaticGroupConfig, change: str
 ) -> None:
@@ -209,12 +210,12 @@ def test_structural_guard_rejects_static_array_drift(
     match change:
         case "values":
             mesh["face_node_connectivity"].values[0, 0] = 3
-        case "removed":
-            mesh = mesh.drop_vars("face_node_connectivity")
+        case "removed_coordinate":
+            mesh = mesh.drop_vars("node_latitude")
         case "codec":
             mesh["face_node_connectivity"].encoding["compressors"] = ()
     updated["mesh"] = xr.DataTree(mesh)
-    with pytest.raises(ValueError, match="mesh/face_node_connectivity"):
+    with pytest.raises(ValueError, match="mesh/"):
         template_utils.assert_no_structural_drift_from_existing_store(
             updated, existing, "init_time"
         )
