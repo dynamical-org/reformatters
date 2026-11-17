@@ -149,7 +149,7 @@ Follow [operational update timing](docs/operational_update_timing.md) when choos
 
 **Spatial dimensions:** If the source data uses a geographic projection we use dimensions latitude and longitude, else y and x are used for projected datasets. A projected dataset's y/x carry CF's `projection_y_coordinate`/`projection_x_coordinate` in metres, except on a rotated pole grid, whose axes are `grid_latitude`/`grid_longitude` in degrees.
 
-A native grid uses `cell` in source order with a zero-based int32 index and `latitude(cell)`/`longitude(cell)` cell centers. Publish cell areas as a root coordinate `cell_area(cell)`. When the source defines polygons, put UGRID topology in the static child group `mesh`; data variables point to it with `mesh="/mesh/mesh"` and `location="face"`. Set `source_grid_name` and `source_grid_id`; a different grid or cell order requires a new dataset.
+A native grid uses `cell` in source order with a zero-based int32 index and `latitude(cell)`/`longitude(cell)` cell centers. Publish any cell areas as a root coordinate `cell_area(cell)`. When the source defines polygons, put UGRID topology in the static child group `mesh`; data variables point to it with `mesh="/mesh/mesh"` and `location="face"`. Set `source_grid_name` and `source_grid_id`; a different grid or cell order requires a new dataset.
 
 ## CLI commands
 

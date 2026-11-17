@@ -146,6 +146,18 @@ def test_coordinates_have_single_chunk(
             f"Coordinate '{coord_name}' should have only one chunk file '0', but found: {chunk_file_names}"
         )
 
+    for group in template_config.static_groups():
+        with xr.open_zarr(template_path, group=group) as static_ds:
+            names = [*static_ds.data_vars, *static_ds.coords]
+        for name in names:
+            c_path = template_path / group / str(name) / "c"
+            if c_path.is_file():
+                continue
+            chunk_file_names = sorted(f.name for f in c_path.rglob("*") if f.is_file())
+            assert len(chunk_file_names) == 1, (
+                f"Static array '{group}/{name}' should have one chunk, but found: {chunk_file_names}"
+            )
+
 
 def test_coordinates_not_sharded(
     dataset: DynamicalDataset[Any, Any],
