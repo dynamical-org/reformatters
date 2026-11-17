@@ -226,7 +226,7 @@ def _static_arrays(tree: xr.DataTree) -> dict[str, xr.DataArray]:
     }
 
 
-def _static_encoding(var: xr.DataArray) -> str:
+def _static_encoding_signature(var: xr.DataArray) -> str:
     def serialize(value: object) -> object:
         if isinstance(value, np.generic):
             return value.item()
@@ -337,7 +337,9 @@ def structural_mismatches(
                 )
             if not existing_var.identical(template_var):
                 mismatches.append(f"{path}: static values or attributes differ")
-            if _static_encoding(existing_var) != _static_encoding(template_var):
+            if _static_encoding_signature(existing_var) != _static_encoding_signature(
+                template_var
+            ):
                 mismatches.append(f"{path}: static encoding differs")
 
     template_coords = _non_append_dimension_coords(template_ds, append_dim)
