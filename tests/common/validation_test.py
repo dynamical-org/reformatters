@@ -962,6 +962,79 @@ def test_spatial_dims_raises_when_unknown(rng: np.random.Generator) -> None:
         )
 
 
+@pytest.fixture
+def unstructured_forecast_dataset() -> xr.Dataset:
+    return xr.Dataset(
+        {
+            "pressure_level/temperature": (
+                ("init_time", "lead_time", "cell", "pressure_level"),
+                np.ones((3, 2, 17, 2)),
+            )
+        },
+        coords={
+            "init_time": pd.date_range("2024-01-01", periods=3, freq="6h"),
+            "lead_time": pd.to_timedelta([0, 6], unit="h"),
+            "pressure_level": [500, 850],
+            "cell": np.arange(17),
+            "latitude": ("cell", np.linspace(40, 50, 17)),
+            "longitude": ("cell", np.linspace(0, 10, 17)),
+        },
+    )
+
+
+@pytest.mark.parametrize("strategy", ["random_points", "quarter", "all"])
+def test_check_recent_nans_catches_missing_unstructured_forecast(
+    unstructured_forecast_dataset: xr.Dataset,
+    strategy: validation.SpatialSamplingStrategy,
+) -> None:
+    ds = unstructured_forecast_dataset
+    validator = validation.CheckRecentNans(spatial_sampling=strategy)
+    assert validator.check(_context(ds, "init_time")).passed
+
+    ds["pressure_level/temperature"][-1] = np.nan
+
+    assert not validator.check(_context(ds, "init_time")).passed
+
+
+def test_random_points_samples_cells_without_losing_other_dimensions(
+    unstructured_forecast_dataset: xr.Dataset,
+) -> None:
+    ds = unstructured_forecast_dataset
+    sampled = validation._apply_spatial_sampling(ds, "random_points", num_points=50)
+
+    assert sampled.sizes == {
+        "init_time": 3,
+        "lead_time": 2,
+        "point": 50,
+        "pressure_level": 2,
+    }
+    assert sampled.cell.dims == ("point",)
+    assert ((sampled.cell >= 0) & (sampled.cell < ds.sizes["cell"])).all()
+    xr.testing.assert_identical(sampled, ds.isel(cell=sampled.cell))
+
+
+@pytest.mark.parametrize("cell_count", [1, 3, 17, 20])
+def test_quarter_sampling_keeps_a_nonempty_contiguous_cell_window(
+    cell_count: int,
+) -> None:
+    ds = xr.Dataset(
+        {"temperature": ("cell", np.arange(cell_count, dtype=float))},
+        coords={
+            "cell": np.arange(cell_count),
+            "latitude": ("cell", np.linspace(40, 50, cell_count)),
+            "longitude": ("cell", np.linspace(0, 10, cell_count)),
+        },
+    )
+
+    sampled = validation._apply_spatial_sampling(ds, "quarter")
+
+    assert sampled.sizes["cell"] == max(1, cell_count // 4)
+    indices = sampled.cell.values
+    assert 0 <= indices[0] <= indices[-1] < cell_count
+    np.testing.assert_array_equal(np.diff(indices), np.ones(len(indices) - 1))
+    xr.testing.assert_identical(sampled, ds.isel(cell=indices))
+
+
 def test_truncate_shards_truncation() -> None:
     """_truncate_shards collapses long lists with head/tail and an ellipsis."""
     shards = [str(i) for i in range(10)]

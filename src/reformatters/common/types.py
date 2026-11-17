@@ -39,6 +39,7 @@ type Dim = Literal[
     "longitude",
     "x",
     "y",
+    "cell",
     "statistic",
     # Vertical group dimensions (a group's name equals its dimension name, see VerticalGroup).
     "pressure_level",

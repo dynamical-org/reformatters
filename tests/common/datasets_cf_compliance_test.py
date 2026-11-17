@@ -141,13 +141,17 @@ def test_cf_latitude_longitude_recognized(
     """
     Ensure latitude and longitude coordinates are recognized as CF coordinates.
     CF requires these to have standard_name and units attributes.
-    For non-projected datasets, they should also have axis attributes.
+    Latitude/longitude dimension coordinates should also have axis attributes.
     """
     template_config = dataset.template_config
     template_path = template_config.template_path()
 
     ds = template_dataset(template_path)
 
+    _check_cf_spatial_coordinates(ds, dataset.dataset_id)
+
+
+def _check_cf_spatial_coordinates(ds: xr.Dataset, dataset_id: str) -> None:
     # Check if this is a projected coordinate system (has x, y as dimension coords)
     if "x" in ds.dims and "y" in ds.dims:
         assert "x" in ds.coords
@@ -157,10 +161,17 @@ def test_cf_latitude_longitude_recognized(
         assert "latitude" in ds.coords
         assert "longitude" in ds.coords
         is_projected = False
+    elif "latitude" in ds.coords and "longitude" in ds.coords:
+        spatial_dims = validation._spatial_dims(ds)
+        assert len(spatial_dims) == 1
+        assert ds.latitude.dims == spatial_dims
+        assert ds.longitude.dims == spatial_dims
+        is_projected = False
     else:
         raise ValueError(
-            f"Unknown spatial coordinate dimensions for dataset {dataset.dataset_id}. "
-            f"Expected latitude/longitude or x/y as dimension coordinates."
+            f"Unknown spatial coordinate dimensions for dataset {dataset_id}. "
+            f"Expected latitude/longitude or x/y as dimension coordinates, "
+            f"or latitude/longitude on one spatial dimension."
         )
 
     # Check latitude is recognized
@@ -179,7 +190,7 @@ def test_cf_latitude_longitude_recognized(
             f"latitude missing units='degree_north', got: {lat_attrs.get('units')}"
         )
         # Only check for axis if latitude is a dimension coordinate (not projected)
-        if not is_projected:
+        if "latitude" in ds.dims:
             assert lat_attrs.get("axis") == "Y", (
                 f"latitude missing axis='Y', got: {lat_attrs.get('axis')}"
             )
@@ -200,7 +211,7 @@ def test_cf_latitude_longitude_recognized(
             f"longitude missing units='degree_east', got: {lon_attrs.get('units')}"
         )
         # Only check for axis if longitude is a dimension coordinate (not projected)
-        if not is_projected:
+        if "longitude" in ds.dims:
             assert lon_attrs.get("axis") == "X", (
                 f"longitude missing axis='X', got: {lon_attrs.get('axis')}"
             )
@@ -208,7 +219,7 @@ def test_cf_latitude_longitude_recognized(
     # For projected datasets, check x and y have correct CF attributes.
     # CF names the axes of a rotated pole grid grid_longitude/grid_latitude,
     # in degrees, rather than the projection_[xy]_coordinate of a metre based grid.
-    if is_projected and dataset.dataset_id not in GEOGRAPHIC_XY_DATASET_IDS:
+    if is_projected and dataset_id not in GEOGRAPHIC_XY_DATASET_IDS:
         rotated_pole = (
             ds["spatial_ref"].attrs.get("grid_mapping_name")
             == "rotated_latitude_longitude"
@@ -235,6 +246,55 @@ def test_cf_latitude_longitude_recognized(
             assert y_attrs.get("axis") == "Y", (
                 f"y missing axis='Y', got: {y_attrs.get('axis')}"
             )
+
+
+@pytest.fixture
+def auxiliary_lat_lon_dataset() -> xr.Dataset:
+    return xr.Dataset(
+        {"temperature": ("cell", [280.0, 281.0])},
+        coords={
+            "latitude": (
+                "cell",
+                [45.0, 46.0],
+                {"standard_name": "latitude", "units": "degree_north"},
+            ),
+            "longitude": (
+                "cell",
+                [5.0, 6.0],
+                {"standard_name": "longitude", "units": "degree_east"},
+            ),
+        },
+    )
+
+
+def test_cf_spatial_coordinates_accept_auxiliary_lat_lon_without_axis(
+    auxiliary_lat_lon_dataset: xr.Dataset,
+) -> None:
+    _check_cf_spatial_coordinates(auxiliary_lat_lon_dataset, "unstructured-forecast")
+
+
+@pytest.mark.parametrize("coord", ["latitude", "longitude"])
+@pytest.mark.parametrize("attr", ["standard_name", "units"])
+def test_cf_spatial_coordinates_reject_missing_auxiliary_metadata(
+    auxiliary_lat_lon_dataset: xr.Dataset, coord: str, attr: str
+) -> None:
+    del auxiliary_lat_lon_dataset[coord].attrs[attr]
+
+    with pytest.raises(AssertionError):
+        _check_cf_spatial_coordinates(
+            auxiliary_lat_lon_dataset, "unstructured-forecast"
+        )
+
+
+def test_cf_spatial_coordinates_reject_auxiliary_longitude_on_another_dimension(
+    auxiliary_lat_lon_dataset: xr.Dataset,
+) -> None:
+    ds = auxiliary_lat_lon_dataset.assign_coords(
+        longitude=("other", [5.0, 6.0], auxiliary_lat_lon_dataset.longitude.attrs)
+    )
+
+    with pytest.raises(AssertionError):
+        _check_cf_spatial_coordinates(ds, "unstructured-forecast")
 
 
 @pytest.mark.parametrize(
@@ -333,6 +393,7 @@ DIM_EXPECTED_AXIS: dict[str, str | None] = {
     "longitude": "X",
     "x": "X",
     "y": "Y",
+    "cell": None,
     "statistic": None,
     "pressure_level": "Z",
     "model_level": "Z",

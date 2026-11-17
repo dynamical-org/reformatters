@@ -579,11 +579,13 @@ def stores_hour_0_values(
     return data_array.attrs.get("step_type", "instant") == "instant"
 
 
-def _spatial_dims(ds: xr.Dataset) -> tuple[str, str]:
+def _spatial_dims(ds: xr.Dataset) -> tuple[str] | tuple[str, str]:
     if "latitude" in ds.dims and "longitude" in ds.dims:
         return "longitude", "latitude"
     if "x" in ds.dims and "y" in ds.dims:
         return "x", "y"
+    if "cell" in ds.dims:
+        return ("cell",)
     raise ValueError("Can't infer spatial dimensions from dataset")
 
 
@@ -597,7 +599,20 @@ def _apply_spatial_sampling(
     if sampling_strategy == "all":
         return ds
 
-    x_dim, y_dim = _spatial_dims(ds)
+    spatial_dims = _spatial_dims(ds)
+    if len(spatial_dims) == 1:
+        (dim,) = spatial_dims
+        size = ds.sizes[dim]
+        if sampling_strategy == "quarter":
+            window_size = max(1, size // 4)
+            start = int(rng.integers(0, size - window_size + 1))
+            return ds.isel({dim: slice(start, start + window_size)})
+        if sampling_strategy == "random_points":
+            indices = rng.integers(0, size, size=num_points)
+            return ds.isel({dim: xr.DataArray(indices, dims="point")})
+        assert_never(sampling_strategy)
+
+    x_dim, y_dim = spatial_dims
     x_size = ds.sizes[x_dim]
     y_size = ds.sizes[y_dim]
 
