@@ -26,6 +26,7 @@ def write_grib(
     values: Array1D[np.float64],
     grid_uuid: str = "832c1507fbc73eb384139890094d2c60",
     grid_template: int = 101,
+    missing_value: float | None = None,
 ) -> None:
     handle = eccodes.codes_grib_new_from_samples("GRIB2")
     try:
@@ -35,6 +36,9 @@ def write_grib(
         eccodes.codes_set(handle, "numberOfDataPoints", len(values))
         eccodes.codes_set(handle, "packingType", "grid_ccsds")
         eccodes.codes_set(handle, "bitsPerValue", 24)
+        if missing_value is not None:
+            eccodes.codes_set(handle, "missingValue", missing_value)
+            eccodes.codes_set(handle, "bitmapPresent", 1)
         eccodes.codes_set_values(handle, values)
         with path.open("wb") as file:
             eccodes.codes_write(handle, file)
@@ -154,3 +158,47 @@ def test_source_selection_ignores_extra_hourly_files_after_hour_78(
     )
     assert coords[0].get_url().endswith("/VMAX_10M/PT000H00M.grib2")
     assert coords[-1].get_url().endswith("/VMAX_10M/PT120H00M.grib2")
+
+
+def test_read_masks_bitmap_cells_without_masking_valid_9999(
+    region_job: DwdIconEuForecast5DayIcosahedralRegionJob,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(icosahedral_grid, "CELL_COUNT", 5)
+    path = tmp_path / "bitmap.grib2"
+    write_grib(
+        path,
+        np.array([1, -99999, 9999, -3, -99999], dtype=np.float64),
+        missing_value=-99999,
+    )
+    var = next(v for v in region_job.data_vars if v.name == "wind_u_10m")
+    coord = DwdIconEuForecast5DayIcosahedralSourceFileCoord(
+        init_time=pd.Timestamp("2026-11-16T00"),
+        lead_time=pd.Timedelta("12h"),
+        data_var=var,
+        downloaded_path=path,
+    )
+
+    assert_array_equal(region_job.read_data(coord, var), [1, np.nan, 9999, -3, np.nan])
+
+
+def test_read_rejects_multiple_messages_before_silently_dropping_fields(
+    region_job: DwdIconEuForecast5DayIcosahedralRegionJob,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(icosahedral_grid, "CELL_COUNT", 4)
+    path = tmp_path / "multiple.grib2"
+    write_grib(path, np.arange(4, dtype=np.float64))
+    path.write_bytes(path.read_bytes() * 2)
+    var = region_job.data_vars[0]
+    coord = DwdIconEuForecast5DayIcosahedralSourceFileCoord(
+        init_time=pd.Timestamp("2026-11-16T00"),
+        lead_time=pd.Timedelta("12h"),
+        data_var=var,
+        downloaded_path=path,
+    )
+
+    with pytest.raises(AssertionError):
+        region_job.read_data(coord, var)
