@@ -12,11 +12,6 @@ from .region_job import (
 )
 from .template_config import DwdIconEuForecast5DayIcosahedralTemplateConfig
 
-# Hand-set from 4 complete native-grid runs over one day; the latest last file was init+3:13:53.
-UPDATE_SCHEDULE = "17 3,9,15,21 * * *"
-UPDATE_MAX_DELAY = timedelta(hours=3, minutes=17)
-UPDATE_DEADLINE = timedelta(hours=6)
-
 
 class DwdIconEuForecast5DayIcosahedralDataset(
     DynamicalDataset[DwdIconEuDataVar, DwdIconEuForecast5DayIcosahedralSourceFileCoord]
@@ -33,10 +28,11 @@ class DwdIconEuForecast5DayIcosahedralDataset(
         return [
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
-                schedule=UPDATE_SCHEDULE,
+                # Hand-set from 4 complete native-grid runs over one day; the latest last file was init+3:13:53.
+                schedule="17 3,9,15,21 * * *",
                 concurrency_policy="Allow",
-                pod_active_deadline=UPDATE_DEADLINE,
-                active_deadline=UPDATE_DEADLINE,
+                pod_active_deadline=timedelta(hours=6),
+                active_deadline=timedelta(hours=6),
                 image=image_tag,
                 dataset_id=self.dataset_id,
                 cpu="3",
@@ -52,6 +48,7 @@ class DwdIconEuForecast5DayIcosahedralDataset(
 
     def validators(self) -> Sequence[validation.Validator]:
         return (
-            validation.CheckCurrentData(max_delay=UPDATE_MAX_DELAY),
+            # Equals the cron offset above.
+            validation.CheckCurrentData(max_delay=timedelta(hours=3, minutes=17)),
             validation.CheckRecentNans(),
         )
