@@ -1221,7 +1221,7 @@
         ],
         "attributes": {
           "standard_name": "latitude",
-          "units": "degrees_north",
+          "units": "degree_north",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [
@@ -1271,7 +1271,7 @@
         ],
         "attributes": {
           "standard_name": "longitude",
-          "units": "degrees_east",
+          "units": "degree_east",
           "_FillValue": "AAAAAAAA+H8="
         },
         "dimension_names": [

@@ -66,12 +66,12 @@ def mesh_dataset() -> xr.Dataset:
             "node_latitude": (
                 "node",
                 arrays["node_latitude"],
-                {"standard_name": "latitude", "units": "degrees_north"},
+                {"standard_name": "latitude", "units": "degree_north"},
             ),
             "node_longitude": (
                 "node",
                 arrays["node_longitude"],
-                {"standard_name": "longitude", "units": "degrees_east"},
+                {"standard_name": "longitude", "units": "degree_east"},
             ),
             "face_node_connectivity": (
                 ("cell", "max_nodes_per_face"),

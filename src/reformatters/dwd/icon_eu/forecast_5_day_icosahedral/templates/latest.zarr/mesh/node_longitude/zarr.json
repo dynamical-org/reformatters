@@ -38,7 +38,7 @@
   ],
   "attributes": {
     "standard_name": "longitude",
-    "units": "degrees_east",
+    "units": "degree_east",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [
