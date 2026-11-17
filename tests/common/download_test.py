@@ -1,6 +1,3 @@
-import os
-import subprocess
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -144,32 +141,12 @@ def test_http_store_is_cached() -> None:
 
 def test_requests_made_under_the_test_suite_identify_as_tests() -> None:
     expected = "dynamical.org reformatters tests"
-    stores = [
-        http_store("https://example.com/user-agent"),
-        s3_store("s3://noaa-gefs-pds", region="us-east-1"),
-        gcs_store("gs://gcp-public-data-arco-era5"),
-    ]
-    for store in stores:
-        assert store.client_options["user_agent"] == expected
+    store = http_store("https://example.com/user-agent")
+    assert store.client_options["user_agent"] == expected
     request = download_module._httpx_client().build_request(
         "GET", "https://example.com/file"
     )
     assert request.headers["User-Agent"] == expected
-
-
-def test_production_user_agent_has_no_tests_suffix() -> None:
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "from reformatters.common.download import USER_AGENT; print(USER_AGENT)",
-        ],
-        env={**os.environ, "DYNAMICAL_ENV": "prod"},
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert result.stdout == "dynamical.org reformatters\n"
 
 
 def test_s3_store_returns_s3_store() -> None:

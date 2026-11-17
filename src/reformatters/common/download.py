@@ -19,7 +19,6 @@ import requests
 from obstore.exceptions import GenericError, PermissionDeniedError, UnauthenticatedError
 
 from reformatters.common import kubernetes
-from reformatters.common.config import Config
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import exponential_backoff_time
 
@@ -30,7 +29,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 DOWNLOAD_DIR = Path("data/download/")
-USER_AGENT = "dynamical.org reformatters" + (" tests" if Config.is_test else "")
+USER_AGENT = "dynamical.org reformatters"
 
 """
 This module provides utilities for downloading files to disk over http,
@@ -264,7 +263,6 @@ def httpx_get(
 _CLIENT_OPTIONS: ClientConfig = {
     "connect_timeout": "4 seconds",
     "timeout": "120 seconds",
-    "user_agent": USER_AGENT,
 }
 _RETRY_CONFIG: RetryConfig = {
     "max_retries": 16,
@@ -286,7 +284,7 @@ def http_store(base_url: str) -> obstore.store.HTTPStore:
     """
     return obstore.store.HTTPStore.from_url(
         base_url,
-        client_options=_CLIENT_OPTIONS,
+        client_options={**_CLIENT_OPTIONS, "user_agent": USER_AGENT},
         retry_config=_RETRY_CONFIG,
     )
 

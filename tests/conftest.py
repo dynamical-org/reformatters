@@ -27,6 +27,12 @@ sys.path.append(str(Path(__file__).parent.parent))
 os.environ["DYNAMICAL_ENV"] = "test"
 
 
+from reformatters.common import download  # noqa: E402
+
+# Set before any module imports USER_AGENT by value or builds a client with it,
+# so source hosts can tell test traffic from production.
+download.USER_AGENT = f"{download.USER_AGENT} tests"  # ty: ignore[invalid-assignment]
+
 from reformatters.common import operational, storage  # noqa: E402
 
 
