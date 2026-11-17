@@ -1,12 +1,17 @@
+import re
+from collections.abc import Iterator
+from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import Mock
 
+import httpx
 import numpy as np
 import pandas as pd
 import pytest
 import rasterio
 import xarray as xr
 
+from reformatters.common import download
 from reformatters.ucsb_chc.chirps.analysis_final.region_job import (
     UcsbChcChirpsAnalysisFinalRegionJob,
 )
@@ -31,6 +36,76 @@ from tests.ucsb_chc.chirps.region_job_test import _job
 # loadfile scheduling runs them in one process under the one CHIRPS rate limiter.
 
 
+class _StopAfterRefusal(httpx.BaseTransport):
+    """Fails every request without sending it once the host has refused one."""
+
+    def __init__(self, transport: httpx.BaseTransport) -> None:
+        self._transport = transport
+        self._first_refusal: str | None = None
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        if self._first_refusal is not None:
+            raise RuntimeError(
+                f"Not contacting the host again after it refused {self._first_refusal}"
+            )
+        try:
+            response = self._transport.handle_request(request)
+        except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+            self._first_refusal = f"{request.url}: {e!r}"
+            raise
+        if response.status_code in (HTTPStatus.FORBIDDEN, HTTPStatus.TOO_MANY_REQUESTS):
+            self._first_refusal = f"{request.url}: HTTP {response.status_code}"
+        return response
+
+
+@pytest.fixture(scope="module", autouse=True)
+def stop_after_first_refusal() -> Iterator[None]:
+    shared = download._httpx_client()
+    with (
+        httpx.Client(
+            follow_redirects=shared.follow_redirects,
+            timeout=shared.timeout,
+            headers=shared.headers,
+            transport=_StopAfterRefusal(httpx.HTTPTransport()),
+        ) as guarded,
+        pytest.MonkeyPatch.context() as monkeypatch,
+    ):
+        monkeypatch.setattr(download, "_httpx_client", lambda: guarded)
+        yield
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        httpx.Response(HTTPStatus.FORBIDDEN),
+        httpx.Response(HTTPStatus.TOO_MANY_REQUESTS),
+        httpx.ConnectTimeout("timed out"),
+    ],
+    ids=["403", "429", "connect-timeout"],
+)
+def test_no_request_is_sent_after_the_first_refusal(
+    monkeypatch: pytest.MonkeyPatch, refusal: httpx.Response | httpx.ConnectTimeout
+) -> None:
+    sent: list[httpx.URL] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request.url)
+        if isinstance(refusal, httpx.ConnectTimeout):
+            raise refusal
+        return refusal
+
+    client = httpx.Client(transport=_StopAfterRefusal(httpx.MockTransport(handler)))
+    monkeypatch.setattr(download, "_httpx_client", lambda: client)
+
+    with pytest.raises((httpx.HTTPStatusError, RuntimeError)):
+        download.httpx_get("https://example.com/first")
+    with pytest.raises(
+        RuntimeError, match=re.escape("refused https://example.com/first")
+    ):
+        download.httpx_get("https://example.com/second")
+    assert sent == [httpx.URL("https://example.com/first")]
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("product", ["final", "preliminary"])
 def test_live_directory_listing(product: ChirpsProduct) -> None:
@@ -41,9 +116,10 @@ def test_live_directory_listing(product: ChirpsProduct) -> None:
     assert [coord.time for coord in coords] == list(times)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def example_source_file_paths(
     tmp_path_factory: pytest.TempPathFactory,
+    stop_after_first_refusal: None,
 ) -> dict[ChirpsProduct, Path]:
     config = UcsbChcChirpsAnalysisFinalTemplateConfig()
     region_job = UcsbChcChirpsAnalysisFinalRegionJob.model_construct(
