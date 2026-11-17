@@ -28,16 +28,15 @@ from reformatters.ucsb_chc.chirps.template_config import (
     MM_PER_DAY_TO_KG_M2_S,
     SOURCE_FILL_VALUE,
 )
-from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_shards
+from tests.chunk_utils import shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (
     NOOP_STORAGE_CONFIG,
     assert_configured_validators,
     assert_update_succeeds_validation_fails,
 )
 
-# A land point in the western Amazon and an open ocean point in the Pacific.
+# A land point in the western Amazon.
 _LAND_POINT = {"latitude": -1.975, "longitude": -60.025}
-_OCEAN_POINT = {"latitude": 0.025, "longitude": -140.025}
 _MOCK_GRID_SHAPE = (4, 4)
 
 
@@ -80,31 +79,36 @@ def _open_store(dataset: UcsbChcChirpsAnalysisMaterializedDataset) -> xr.Dataset
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    ("make_dataset", "first_day", "source_mm_per_day"),
+    ("make_dataset", "first_day", "source_directory"),
     [
         pytest.param(
-            _final_dataset,
-            pd.Timestamp("1981-01-01"),
-            [0.31350774, 0.6122222, 3.8714871],
-            id="final",
+            _final_dataset, pd.Timestamp("1981-01-01"), "/final/rnl/", id="final"
         ),
         pytest.param(
             _preliminary_dataset,
             pd.Timestamp("2025-01-01"),
-            [5.660802, 22.610807, 0.004789341],
+            "/prelim/sat/",
             id="preliminary",
         ),
     ],
 )
 def test_backfill_local_and_operational_update(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     make_dataset: Callable[[], UcsbChcChirpsAnalysisMaterializedDataset],
     first_day: pd.Timestamp,
-    source_mm_per_day: list[float],
+    source_directory: str,
 ) -> None:
     dataset = make_dataset()
-    _shrink_template(monkeypatch, dataset, dims=("time",))
-    patch_write_shards_containing(monkeypatch, [_LAND_POINT, _OCEAN_POINT])
+    _shrink_template(monkeypatch, dataset)
+    requested_urls: list[str] = []
+    _patch_source(
+        monkeypatch,
+        tmp_path,
+        dataset,
+        lambda day: day <= first_day + pd.Timedelta(days=2),
+        requested_urls,
+    )
 
     dataset.backfill_local(append_dim_end=first_day + pd.Timedelta(days=2))
     backfilled_ds = _open_store(dataset)
@@ -117,25 +121,15 @@ def test_backfill_local_and_operational_update(
         "now",
         classmethod(lambda *args, **kwargs: first_day + pd.Timedelta(days=3)),
     )
-    # The update commits successfully; intentionally unwritten shards fail validation.
-    assert_update_succeeds_validation_fails(
-        dataset, "test-update", "CheckExpectedShards"
-    )
+    dataset.update("test-update")
 
     updated_ds = _open_store(dataset)
     assert_array_equal(
         updated_ds["time"], pd.date_range(first_day, periods=3, freq="1D")
     )
-
-    land = updated_ds.sel(_LAND_POINT, method="nearest")
-    # Source mm/day converted to kg m-2 s-1; rtol covers keep_mantissa_bits=8.
-    assert_allclose(
-        land["precipitation_surface"].values,
-        np.array(source_mm_per_day, dtype=np.float32) * MM_PER_DAY_TO_KG_M2_S,
-        rtol=1e-2,
-    )
-    ocean = updated_ds.sel(_OCEAN_POINT, method="nearest")
-    assert np.isnan(ocean["precipitation_surface"].values).all()
+    _assert_constant_land_values(updated_ds)
+    assert requested_urls
+    assert all(source_directory in url for url in requested_urls)
 
     assert_configured_validators(dataset)
 
@@ -174,7 +168,9 @@ def _patch_source(
     def fake_listing(url: str, *, rate_limiter: RateLimiter) -> httpx.Response:
         if not url.rstrip("/").rsplit("/", 1)[-1].isdigit():
             return httpx.Response(
-                200, text='<a href="../">Parent</a><a href="2025/">2025</a>'
+                200,
+                text='<a href="../">Parent</a>'
+                + "".join(f'<a href="{year}/">{year}</a>' for year in (1981, 2025)),
             )
         year = int(url.rstrip("/").rsplit("/", 1)[-1])
         product = dataset.region_job_class.model_fields["product"].default
