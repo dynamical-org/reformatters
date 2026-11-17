@@ -89,7 +89,6 @@ class DataVarAttrs(FrozenBaseModel):
     ensemble_statistic: EnsembleStatistic | None = None
     mesh: str | None = None
     location: Literal["face"] | None = None
-    cell_measures: str | None = None
     # CF flag attributes for categorical variables, see CF Conventions section 3.5.
     # flag_values lists the coded values; flag_meanings is a blank separated label per value.
     flag_values: tuple[int, ...] | None = None
