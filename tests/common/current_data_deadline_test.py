@@ -52,7 +52,7 @@ _FRESHNESS_DEADLINES = [
     ("ecmwf-aifs-ens-forecast-fast", "2026-11-04 00:00", "6h02m"),
     ("ecmwf-aifs-ens-forecast", "2026-09-26 18:00", "5h59m"),
     ("dwd-icon-eu-forecast-5-day", "2026-09-27 00:00", "3h52m"),
-    ("dwd-icon-eu-forecast-5-day-icosahedral", "2026-10-21 00:00", "3h52m"),
+    ("dwd-icon-eu-forecast-5-day-icosahedral", "2026-10-21 00:00", "3h17m"),
     ("eccc-hrdps-forecast", "2026-09-27 00:00", "4h30m"),
     ("google-weathernext2-forecast-operational-virtual", "2026-09-26 12:00", "9h"),
     (

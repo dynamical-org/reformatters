@@ -13,9 +13,7 @@ from reformatters.common.virtual_region_job import VirtualRegionJob
 from reformatters.contrib.noaa.ndvi_cdr.analysis.region_job import (
     NoaaNdviCdrAnalysisRegionJob,
 )
-from reformatters.dwd.icon_eu.forecast_5_day.region_job import (
-    DwdIconEuForecast5DaySourceFileCoord,
-)
+from reformatters.dwd.icon_eu.icon_eu_region_job import DwdIconEuSourceFileCoord
 from reformatters.eccc.hrdps.forecast.region_job import EcccHrdpsForecastSourceFileCoord
 from reformatters.ecmwf.aifs_single.forecast.region_job import (
     EcmwfAifsSingleForecastSourceFileCoord,
@@ -85,7 +83,7 @@ def anchor_spacing(dataset: DynamicalDataset[Any, Any]) -> pd.Timedelta:
 
 
 def usable_file(coord: SourceFileCoord) -> frozenset[str]:
-    if isinstance(coord, DwdIconEuForecast5DaySourceFileCoord):
+    if isinstance(coord, DwdIconEuSourceFileCoord):
         return frozenset([coord.get_fallback_url()])
     if isinstance(coord, EcccHrdpsForecastSourceFileCoord):
         return frozenset([coord.get_datamart_url()])

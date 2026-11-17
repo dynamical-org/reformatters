@@ -10,7 +10,7 @@ import rasterio
 import xarray as xr
 
 from reformatters.common.binary_rounding import round_float32_inplace
-from reformatters.common.config_models import Encoding
+from reformatters.common.config_models import Coordinate, CoordinateAttrs, Encoding
 from reformatters.common.logging import get_logger
 from reformatters.common.types import Array1D, Array2D
 from reformatters.common.zarr import BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE
@@ -46,6 +46,7 @@ def cell_centres() -> tuple[Array1D[np.float32], Array1D[np.float32]]:
     return arrays["latitude"], arrays["longitude"]
 
 
+@cache
 def mesh_dataset() -> xr.Dataset:
     arrays = grid_arrays()
     ds = xr.Dataset(
@@ -88,6 +89,35 @@ def mesh_dataset() -> xr.Dataset:
             fill_value=np.nan if var.dtype == np.float32 else -1,
         ).model_dump(exclude_none=True)
     return ds
+
+
+def spatial_reference_coordinate() -> Coordinate:
+    wkt = (
+        'GEOGCS["Coordinate System imported from GRIB file",DATUM["unnamed",'
+        f'SPHEROID["Sphere",{SPHERE_RADIUS_METRES},0]],PRIMEM["Greenwich",0],'
+        'UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],'
+        'AXIS["Latitude",NORTH],AXIS["Longitude",EAST]]'
+    )
+    return Coordinate(
+        name="spatial_ref",
+        encoding=Encoding(dtype="int64", fill_value=0, chunks=(), shards=None),
+        attrs=CoordinateAttrs(
+            units=None,
+            statistics_approximate=None,
+            crs_wkt=wkt,
+            semi_major_axis=float(SPHERE_RADIUS_METRES),
+            semi_minor_axis=float(SPHERE_RADIUS_METRES),
+            inverse_flattening=0.0,
+            reference_ellipsoid_name="Sphere",
+            longitude_of_prime_meridian=0.0,
+            prime_meridian_name="Greenwich",
+            geographic_crs_name="Coordinate System imported from GRIB file",
+            horizontal_datum_name="unnamed",
+            grid_mapping_name="latitude_longitude",
+            spatial_ref=wkt,
+            comment="A perfect sphere geographic CRS with a radius of 6,371,229m, extracted from grib.",
+        ),
+    )
 
 
 def _round_coordinates(original: Array2D[np.float64]) -> Array2D[np.float32]:

@@ -7,9 +7,6 @@ from numpy.testing import assert_allclose, assert_array_equal
 
 from reformatters.common.config_models import ROOT
 from reformatters.common.template_utils import write_metadata
-from reformatters.dwd.icon_eu.forecast_5_day.template_config import (
-    DwdIconEuForecast5DayTemplateConfig,
-)
 from reformatters.dwd.icon_eu.forecast_5_day_icosahedral.template_config import (
     DwdIconEuForecast5DayIcosahedralTemplateConfig,
 )
@@ -38,12 +35,10 @@ def test_native_template_preserves_cell_order_and_main_run_forecast_contract() -
     )
     assert_array_equal(template.valid_time, template.init_time + template.lead_time)
     assert config.dims[ROOT] == ("init_time", "lead_time", "cell")
-    regular = DwdIconEuForecast5DayTemplateConfig().get_template(
-        pd.Timestamp("2026-02-10T06")
-    )
-    assert template.spatial_ref.attrs == regular.spatial_ref.attrs
+    assert template.spatial_ref.attrs["semi_major_axis"] == 6_371_229
+    assert template.spatial_ref.attrs["semi_minor_axis"] == 6_371_229
+    assert template.spatial_ref.attrs["grid_mapping_name"] == "latitude_longitude"
     assert template.wind_gust_10m.attrs["comment"]
-    assert "comment" not in regular.wind_gust_10m.attrs
 
 
 def test_mesh_does_not_multiply_point_forecast_rows() -> None:

@@ -8,18 +8,16 @@ from reformatters.common.grib_eccodes import read_unstructured_grib
 from reformatters.common.iterating import item
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import ArrayFloat32
-from reformatters.dwd.icon_eu.forecast_5_day.region_job import (
-    DwdIconEuForecast5DayRegionJob,
-    DwdIconEuForecast5DaySourceFileCoord,
+from reformatters.dwd.icon_eu.icon_eu_region_job import (
+    DwdIconEuRegionJob,
+    DwdIconEuSourceFileCoord,
 )
-from reformatters.dwd.icon_eu.forecast_5_day.template_config import DwdIconEuDataVar
+from reformatters.dwd.icon_eu.icon_eu_template_config import DwdIconEuDataVar
 
 from . import icosahedral_grid
 
 
-class DwdIconEuForecast5DayIcosahedralSourceFileCoord(
-    DwdIconEuForecast5DaySourceFileCoord
-):
+class DwdIconEuForecast5DayIcosahedralSourceFileCoord(DwdIconEuSourceFileCoord):
     def get_url(self) -> str:
         return (
             "https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/"
@@ -36,7 +34,9 @@ class DwdIconEuForecast5DayIcosahedralSourceFileCoord(
         )
 
 
-class DwdIconEuForecast5DayIcosahedralRegionJob(DwdIconEuForecast5DayRegionJob):
+class DwdIconEuForecast5DayIcosahedralRegionJob(
+    DwdIconEuRegionJob[DwdIconEuForecast5DayIcosahedralSourceFileCoord]
+):
     def generate_source_file_coords(
         self,
         processing_region_ds: xr.Dataset,
@@ -61,7 +61,7 @@ class DwdIconEuForecast5DayIcosahedralRegionJob(DwdIconEuForecast5DayRegionJob):
 
     def read_data(
         self,
-        coord: DwdIconEuForecast5DaySourceFileCoord,
+        coord: DwdIconEuForecast5DayIcosahedralSourceFileCoord,
         data_var: DwdIconEuDataVar,
     ) -> ArrayFloat32:
         assert coord.downloaded_path is not None

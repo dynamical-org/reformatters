@@ -15,12 +15,18 @@ from reformatters.common.config_models import (
     StatisticsApproximate,
 )
 from reformatters.common.pydantic import replace
-from reformatters.common.template_config import TemplateConfig
+from reformatters.common.template_config import SPATIAL_REF_COORDS, TemplateConfig
 from reformatters.common.types import AppendDim, Dims, Timedelta, Timestamp
-from reformatters.common.zarr import BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE
-from reformatters.dwd.icon_eu.forecast_5_day.template_config import (
+from reformatters.common.zarr import (
+    BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE,
+    BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
+)
+from reformatters.dwd.icon_eu.icon_eu_template_config import (
     DwdIconEuDataVar,
-    DwdIconEuForecast5DayTemplateConfig,
+    derive_forecast_coordinates,
+    forecast_coordinate_configs,
+    forecast_dimension_coordinates,
+    icon_eu_data_vars,
 )
 
 from . import icosahedral_grid
@@ -32,30 +38,33 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
     append_dim_start: Timestamp = pd.Timestamp("2026-10-07T00")
     append_dim_frequency: Timedelta = pd.Timedelta("6h")
 
-    def _regular_grid_config(self) -> DwdIconEuForecast5DayTemplateConfig:
-        return DwdIconEuForecast5DayTemplateConfig(
-            append_dim_start=self.append_dim_start
-        )
-
     @computed_field
     @property
     def dataset_attributes(self) -> DatasetAttributes:
-        return replace(
-            self._regular_grid_config().dataset_attributes,
+        return DatasetAttributes(
             dataset_id="dwd-icon-eu-forecast-5-day-icosahedral",
             dataset_version="0.1.0",
             name="DWD ICON-EU forecast, 5 day, icosahedral",
             description="High-resolution weather forecasts for Europe from the ICON-EU model operated by Deutscher Wetterdienst (DWD), on its native icosahedral grid.",
+            attribution="DWD ICON-EU data processed by dynamical.org.",
+            license="CC-BY-4.0",
+            spatial_domain="Europe",
             spatial_resolution="6.5 km",
+            time_domain=f"Forecasts initialized {self.append_dim_start} UTC to Present",
+            time_resolution=f"Forecasts initialized every {self.append_dim_frequency.total_seconds() / 3600:.0f} hours",
+            forecast_domain="Forecast lead time 0-120 hours (0-5 days) ahead",
+            forecast_resolution="Forecast step 0-78 hours: hourly, 81-120 hours: 3 hourly",
             source_grid_name=icosahedral_grid.GRID_NAME,
             source_grid_id=icosahedral_grid.GRID_UUID,
         )
 
     def dimension_coordinates(self) -> dict[str, Any]:
-        regular = self._regular_grid_config().dimension_coordinates()
         return {
-            "init_time": regular["init_time"],
-            "lead_time": regular["lead_time"],
+            **forecast_dimension_coordinates(
+                self.append_dim_coordinates(
+                    self.append_dim_start + self.append_dim_frequency
+                )
+            ),
             "cell": icosahedral_grid.cell_indices(),
         }
 
@@ -67,7 +76,8 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
     ) -> dict[str, xr.DataArray | tuple[tuple[str, ...], np.ndarray[Any, Any]]]:
         latitude, longitude = icosahedral_grid.cell_centres()
         return {
-            **self._regular_grid_config().derive_coordinates(ds),
+            **derive_forecast_coordinates(ds),
+            "spatial_ref": SPATIAL_REF_COORDS,
             "latitude": (("cell",), latitude),
             "longitude": (("cell",), longitude),
             "cell_area": (("cell",), icosahedral_grid.grid_arrays()["cell_area"]),
@@ -76,10 +86,13 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
     @computed_field
     @property
     def coords(self) -> Sequence[Coordinate]:
-        regular = self._regular_grid_config().coords
         latitude, longitude = icosahedral_grid.cell_centres()
         result = [
-            coord for coord in regular if coord.name not in ("latitude", "longitude")
+            *forecast_coordinate_configs(
+                self.dimension_coordinates()["init_time"],
+                self.append_dim_coordinate_chunk_size(),
+            ),
+            icosahedral_grid.spatial_reference_coordinate(),
         ]
         result.append(
             Coordinate(
@@ -101,10 +114,9 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
             )
         )
         for name, values in (("latitude", latitude), ("longitude", longitude)):
-            original = next(coord for coord in regular if coord.name == name)
             result.append(
-                replace(
-                    original,
+                Coordinate(
+                    name=name,
                     encoding=Encoding(
                         dtype="float32",
                         fill_value=np.nan,
@@ -112,9 +124,10 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
                         shards=None,
                         compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE],
                     ),
-                    attrs=replace(
-                        original.attrs,
-                        axis=None,
+                    attrs=CoordinateAttrs(
+                        long_name=name.capitalize(),
+                        standard_name=name,
+                        units="degree_north" if name == "latitude" else "degree_east",
                         statistics_approximate=StatisticsApproximate(
                             min=float(values.min()), max=float(values.max())
                         ),
@@ -148,7 +161,14 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
     @property
     def data_vars(self) -> Sequence[DwdIconEuDataVar]:
         result = []
-        for var in self._regular_grid_config().data_vars:
+        encoding = Encoding(
+            dtype="float32",
+            fill_value=np.nan,
+            chunks=(1, 93, 24019),
+            shards=(1, 93, icosahedral_grid.CELL_COUNT),
+            compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE],
+        )
+        for var in icon_eu_data_vars(encoding):
             attrs = replace(
                 var.attrs,
                 mesh="/mesh/mesh",
@@ -160,15 +180,5 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
                     attrs,
                     comment="Maximum over the hour ending at the forecast step. At 3-hourly steps (81-120 hours), this covers only the last hour of each step.",
                 )
-            result.append(
-                replace(
-                    var,
-                    attrs=attrs,
-                    encoding=replace(
-                        var.encoding,
-                        chunks=(1, 93, 24019),
-                        shards=(1, 93, icosahedral_grid.CELL_COUNT),
-                    ),
-                )
-            )
+            result.append(replace(var, attrs=attrs))
         return result

@@ -435,3 +435,26 @@ def test_hrrr_materialized_analysis_includes_current_cycle_f01_boundary(
         "hrrr.t12z.wrfsfcf01.grib2",
         "hrrr.t12z.wrfsfcf01.grib2.idx",
     }
+
+
+def test_native_icon_eu_timing_measures_dwd_instead_of_archive_copies(
+    tmp_path: Path,
+) -> None:
+    dataset = next(
+        ds
+        for ds in DYNAMICAL_DATASETS
+        if ds.dataset_id == "dwd-icon-eu-forecast-5-day-icosahedral"
+    )
+    anchor = pd.Timestamp("2026-11-16T00")
+    source = TimestampSource(tmp_path, 1)
+    (unit,) = expected_units(dataset, anchor, anchor + pd.Timedelta("6h"), source)
+    source.close()
+    urls = {url for file in unit.files for url in file}
+    assert all(
+        url.startswith("https://opendata.dwd.de/weather/nwp/v1/m/icon-eu/p/")
+        for url in urls
+    )
+    assert (
+        "https://opendata.dwd.de/weather/nwp/v1/m/icon-eu/p/T_2M/"
+        "r/2026-11-16T00:00/s/PT081H00M.grib2"
+    ) in urls

@@ -10,7 +10,7 @@ from numpy.testing import assert_allclose, assert_array_equal
 
 from reformatters.common.pydantic import replace
 from reformatters.common.types import Array1D
-from reformatters.dwd.icon_eu.forecast_5_day import region_job as regular_module
+from reformatters.dwd.icon_eu import icon_eu_region_job as shared_module
 from reformatters.dwd.icon_eu.forecast_5_day_icosahedral import icosahedral_grid
 from reformatters.dwd.icon_eu.forecast_5_day_icosahedral.region_job import (
     DwdIconEuForecast5DayIcosahedralRegionJob,
@@ -76,7 +76,7 @@ def test_download_decode_and_transform_preserves_native_cell_values(
     path = tmp_path / "field.grib2"
     write_grib(path, np.array(source_values, dtype=np.float64))
     download = Mock(return_value=path)
-    monkeypatch.setattr(regular_module, "http_download_to_disk", download)
+    monkeypatch.setattr(shared_module, "http_download_to_disk", download)
     var = next(v for v in region_job.data_vars if v.name == name)
     coord = DwdIconEuForecast5DayIcosahedralSourceFileCoord(
         init_time=pd.Timestamp("2026-11-16T00"),
@@ -104,7 +104,7 @@ def test_archive_miss_falls_back_to_plain_grib_on_dwd(
     )
     path = tmp_path / "fallback.grib2"
     download = Mock(side_effect=[FileNotFoundError(), path])
-    monkeypatch.setattr(regular_module, "http_download_to_disk", download)
+    monkeypatch.setattr(shared_module, "http_download_to_disk", download)
     assert region_job.download_file(coord) == path
     assert [call.args[0] for call in download.call_args_list] == [
         "https://s3-us-west-2.amazonaws.com/us-west-2.opendata.source.coop/dynamical/dwd-icon-grib/icon-eu/icosahedral/2026-11-16T06/T_2M/PT081H00M.grib2",
