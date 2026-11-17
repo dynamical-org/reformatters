@@ -1,11 +1,6 @@
-from collections.abc import Sequence
-
 import numpy as np
-import pandas as pd
-import xarray as xr
 
 from reformatters.common.grib_eccodes import read_unstructured_grib
-from reformatters.common.iterating import item
 from reformatters.common.time_utils import whole_hours
 from reformatters.common.types import ArrayFloat32
 from reformatters.dwd.icon_eu.icon_eu_region_job import (
@@ -37,27 +32,7 @@ class DwdIconEuForecast5DayIcosahedralSourceFileCoord(DwdIconEuSourceFileCoord):
 class DwdIconEuForecast5DayIcosahedralRegionJob(
     DwdIconEuRegionJob[DwdIconEuForecast5DayIcosahedralSourceFileCoord]
 ):
-    def generate_source_file_coords(
-        self,
-        processing_region_ds: xr.Dataset,
-        data_var_group: Sequence[DwdIconEuDataVar],
-    ) -> Sequence[DwdIconEuForecast5DayIcosahedralSourceFileCoord]:
-        init_times = pd.to_datetime(processing_region_ds["init_time"].values)
-        lead_times = pd.to_timedelta(processing_region_ds["lead_time"].values)
-        data_var = item(data_var_group)
-
-        assert len(init_times) > 0
-        assert len(lead_times) > 0
-
-        return [
-            DwdIconEuForecast5DayIcosahedralSourceFileCoord(
-                init_time=init_time,
-                lead_time=lead_time,
-                data_var=data_var,
-            )
-            for init_time in init_times
-            for lead_time in lead_times
-        ]
+    source_file_coord_class = DwdIconEuForecast5DayIcosahedralSourceFileCoord
 
     def read_data(
         self,
