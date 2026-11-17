@@ -235,7 +235,7 @@ def test_static_group_with_append_array_is_rejected(
 def test_virtual_dataset_rejects_static_group_before_writing(
     config: StaticGroupConfig,
 ) -> None:
-    with pytest.raises(ValueError, match="only by materialized"):
+    with pytest.raises(ValueError, match="not yet implemented for virtual datasets"):
         DynamicalDataset[_DV, StaticSourceFileCoord](
             template_config=config,
             region_job_class=VirtualRegionJob[_DV, StaticSourceFileCoord],

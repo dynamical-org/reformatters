@@ -1192,7 +1192,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
     def _validate_virtual_storage(self) -> Self:
         if issubclass(self.region_job_class, VirtualRegionJob):
             assert not self.template_config.static_groups(), (
-                "Static groups are supported only by materialized datasets"
+                "Static groups are not yet implemented for virtual datasets"
             )
         if self.rolling_positions is not None and not issubclass(
             self.region_job_class, VirtualRegionJob

@@ -81,7 +81,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         return self.dims[var.group]
 
     def static_groups(self) -> dict[str, xr.Dataset]:
-        """Static child groups for materialized datasets, with values, attrs and encodings.
+        """Static child groups, with values, attrs and encodings.
 
         Set each array's encoding with Encoding.model_dump(exclude_none=True).
         These groups have no append dimension and are excluded from processing.
