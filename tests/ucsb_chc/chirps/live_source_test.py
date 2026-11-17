@@ -1,7 +1,8 @@
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from http import HTTPStatus
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
 
 import httpx
@@ -36,20 +37,21 @@ from tests.ucsb_chc.chirps.region_job_test import _job
 # loadfile scheduling runs them in one process under the one CHIRPS rate limiter.
 
 
-class _StopAfterRefusal(httpx.BaseTransport):
-    """Fails every request without sending it once the host has refused one."""
+class _StopAfterRefusal:
+    """Wraps an httpx `Client.send`, failing every request without sending it
+    once the host has refused one."""
 
-    def __init__(self, transport: httpx.BaseTransport) -> None:
-        self._transport = transport
+    def __init__(self, send: Callable[..., httpx.Response]) -> None:
+        self._send = send
         self._first_refusal: str | None = None
 
-    def handle_request(self, request: httpx.Request) -> httpx.Response:
+    def __call__(self, request: httpx.Request, **kwargs: Any) -> httpx.Response:  # noqa: ANN401
         if self._first_refusal is not None:
             raise RuntimeError(
                 f"Not contacting the host again after it refused {self._first_refusal}"
             )
         try:
-            response = self._transport.handle_request(request)
+            response = self._send(request, **kwargs)
         except (httpx.ConnectError, httpx.ConnectTimeout) as e:
             self._first_refusal = f"{request.url}: {e!r}"
             raise
@@ -60,17 +62,9 @@ class _StopAfterRefusal(httpx.BaseTransport):
 
 @pytest.fixture(scope="module", autouse=True)
 def stop_after_first_refusal() -> Iterator[None]:
-    shared = download._httpx_client()
-    with (
-        httpx.Client(
-            follow_redirects=shared.follow_redirects,
-            timeout=shared.timeout,
-            headers=shared.headers,
-            transport=_StopAfterRefusal(httpx.HTTPTransport()),
-        ) as guarded,
-        pytest.MonkeyPatch.context() as monkeypatch,
-    ):
-        monkeypatch.setattr(download, "_httpx_client", lambda: guarded)
+    client = download._httpx_client()
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(client, "send", _StopAfterRefusal(client.send))
         yield
 
 
@@ -80,21 +74,23 @@ def stop_after_first_refusal() -> Iterator[None]:
         httpx.Response(HTTPStatus.FORBIDDEN),
         httpx.Response(HTTPStatus.TOO_MANY_REQUESTS),
         httpx.ConnectTimeout("timed out"),
+        httpx.ConnectError("connection refused"),
     ],
-    ids=["403", "429", "connect-timeout"],
+    ids=["403", "429", "connect-timeout", "connect-error"],
 )
 def test_no_request_is_sent_after_the_first_refusal(
-    monkeypatch: pytest.MonkeyPatch, refusal: httpx.Response | httpx.ConnectTimeout
+    monkeypatch: pytest.MonkeyPatch, refusal: httpx.Response | httpx.TransportError
 ) -> None:
     sent: list[httpx.URL] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         sent.append(request.url)
-        if isinstance(refusal, httpx.ConnectTimeout):
+        if isinstance(refusal, httpx.TransportError):
             raise refusal
         return refusal
 
-    client = httpx.Client(transport=_StopAfterRefusal(httpx.MockTransport(handler)))
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(client, "send", _StopAfterRefusal(client.send))
     monkeypatch.setattr(download, "_httpx_client", lambda: client)
 
     with pytest.raises((httpx.HTTPStatusError, RuntimeError)):
