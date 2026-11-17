@@ -16,6 +16,7 @@ from reformatters.common.config_models import (
     DataVar,
     Group,
 )
+from reformatters.common.iterating import is_static_group
 from reformatters.common.pydantic import FrozenBaseModel
 from reformatters.common.types import (
     AppendDim,
@@ -79,6 +80,14 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         """Dimensions of an array, in encoding order, drawn from its group's dims."""
         return self.dims[var.group]
 
+    def static_groups(self) -> dict[str, xr.Dataset]:
+        """Static child groups for materialized datasets, with values, attrs and encodings.
+
+        Set each array's encoding with Encoding.model_dump(exclude_none=True).
+        These groups have no append dimension and are excluded from processing.
+        """
+        return {}
+
     def derive_coordinates(
         self,
         ds: xr.Dataset,  # noqa: ARG002
@@ -124,7 +133,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
 
     def get_template(self, end_time: DatetimeLike) -> xr.DataTree:
         """
-        Returns the template as a DataTree, with append dim in all Zarr groups expanded to the given end time.
+        Returns the template as a DataTree, with the append dim expanded in data groups.
 
         Args:
             end_time (pd.Timestamp): End time (exclusive) for the append dimension
@@ -133,10 +142,18 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
             xr.DataTree: Template tree with dimension coordinates
         """
         on_disk = xr.open_datatree(self.template_path(), decode_timedelta=True)
+        assert {node.name for node in on_disk.subtree if is_static_group(node)} == set(
+            self.static_groups()
+        ), (
+            "static groups in the template must match static_groups(); run update-template"
+        )
         new_append_coords = self.append_dim_coordinates(end_time)
 
         nodes: dict[str, xr.Dataset] = {}
         for node in on_disk.subtree:
+            if is_static_group(node):
+                nodes[node.path] = node.to_dataset(inherit=False).load()
+                continue
             ds = template_utils.empty_copy_with_reindex(
                 node.to_dataset(),
                 self.append_dim,
@@ -166,7 +183,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         assert set(coords) == set(self.all_dims), (
             f"`dimension_coordinates` must return coordinates for all dims {self.all_dims}"
         )
-        self._assert_valid_structure()
+        static_groups = self._assert_valid_structure()
 
         nodes = {
             self._group_node_path(group): self._build_node_dataset(group, coords)
@@ -177,7 +194,12 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
             f"coords {written_coords} written across groups must match self.coords "
             f"{ {c.name for c in self.coords} }"
         )
+        for name, ds in static_groups.items():
+            nodes[f"/{name}"] = ds.load()
         template = xr.DataTree.from_dict(nodes)
+        assert {node.name for node in template.subtree if is_static_group(node)} == set(
+            static_groups
+        ), "detected static groups must match static_groups()"
         template_utils.write_metadata(template, self.template_path())
 
     @staticmethod
@@ -217,7 +239,7 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
             )
         return ds
 
-    def _assert_valid_structure(self) -> None:
+    def _assert_valid_structure(self) -> dict[str, xr.Dataset]:
         """Enforce the group invariants."""
         root_dims = self.dims[ROOT]
         for group, group_dims in self.dims.items():
@@ -279,6 +301,21 @@ class TemplateConfig(FrozenBaseModel, Generic[DATA_VAR]):
         assert len(append_dim_chunks) <= 1, (
             f"all data vars must share one append-dim chunk size, got {append_dim_chunks}"
         )
+        static_groups = self.static_groups()
+        root_names = root_var_names | {coord.name for coord in self.coords}
+        for name, ds in static_groups.items():
+            assert name, "static group names must not be empty"
+            assert "/" not in name, "static groups must be direct child groups"
+            assert name not in group_names | root_names, (
+                f"static group {name!r} collides with a data group or root array"
+            )
+            node = xr.DataTree.from_dict({"/": xr.Dataset(), f"/{name}": ds}).children[
+                name
+            ]
+            assert is_static_group(node), (
+                f"static group {name!r} must not include an append dimension"
+            )
+        return static_groups
 
     def _append_dim_chunk_size(self, var: DATA_VAR) -> int:
         dims = self.data_var_dims(var)

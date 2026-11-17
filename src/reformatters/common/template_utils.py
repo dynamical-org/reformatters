@@ -18,7 +18,11 @@ from zarr.abc.store import Store
 
 from reformatters.common.config import Config
 from reformatters.common.config_models import BaseInternalAttrs, Coordinate, DataVar
-from reformatters.common.iterating import walk_data_arrays
+from reformatters.common.iterating import (
+    is_static_group,
+    node_path_prefix,
+    walk_data_arrays,
+)
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 from reformatters.common.storage import StoreFactory, commit_if_icechunk
@@ -49,6 +53,15 @@ def _to_zarr_metadata(
     mode: Literal["w", "w-"],
     consolidated: bool = True,
 ) -> None:
+    static_nodes = [node for node in template.subtree if is_static_group(node)]
+    if static_nodes:
+        template = xr.DataTree.from_dict(
+            {
+                node.path: node.to_dataset(inherit=False)
+                for node in template.subtree
+                if not is_static_group(node)
+            }
+        )
     # safe_chunks=False avoids a per-chunk dask graph that OOMs large arrays (compute=False
     # writes no data chunks anyway). write_inherited_coords=True duplicates shared coords
     # into each group so groups open standalone.
@@ -59,8 +72,19 @@ def _to_zarr_metadata(
         write_inherited_coords=True,
         safe_chunks=False,
         write_empty_chunks=True,
-        consolidated=consolidated,
+        consolidated=consolidated and not static_nodes,
     )
+    for node in static_nodes:
+        node.to_dataset(inherit=False).load().to_zarr(
+            store,
+            group=node.path.removeprefix("/"),
+            mode=mode,
+            safe_chunks=False,
+            write_empty_chunks=True,
+            consolidated=False,
+        )
+    if static_nodes and consolidated:
+        zarr.consolidate_metadata(store)
 
 
 def write_metadata(
@@ -184,10 +208,48 @@ def _non_append_dimension_coords(
     (projected lat/lon, valid_time), and scalars (spatial_ref), which need not match."""
     coords: dict[str, xr.DataArray] = {}
     for node in tree.subtree:
+        if is_static_group(node):
+            continue
         for name, coord in node.to_dataset().coords.items():
             if coord.dims == (name,) and name != append_dim:
                 coords[str(name)] = coord
     return coords
+
+
+def _static_arrays(tree: xr.DataTree) -> dict[str, xr.DataArray]:
+    return {
+        f"{node_path_prefix(node)}{name}": ds[name]
+        for node in tree.subtree
+        if is_static_group(node)
+        for ds in (node.to_dataset(inherit=False),)
+        for name in ds.variables
+    }
+
+
+def _static_encoding(var: xr.DataArray) -> str:
+    def serialize(value: object) -> object:
+        if isinstance(value, np.generic):
+            return value.item()
+        assert hasattr(value, "to_dict")
+        assert callable(value.to_dict)
+        return value.to_dict()
+
+    return json.dumps(
+        {
+            name: var.encoding.get(name)
+            for name in (
+                "fill_value",
+                "_FillValue",
+                "filters",
+                "compressors",
+                "serializer",
+                "units",
+                "calendar",
+            )
+        },
+        default=serialize,
+        sort_keys=True,
+    )
 
 
 def assert_no_structural_drift_from_existing_store(
@@ -241,9 +303,12 @@ def structural_mismatches(
     every variable and non-append dimension coordinate present in `existing_ds`
     (the template may freely add new ones). Empty list means no drift."""
     compare_append_axis = not Config.is_test
-    template_by_path = dict(walk_data_arrays(template_ds))
+    template_static = _static_arrays(template_ds)
+    existing_static = _static_arrays(existing_ds)
+    template_by_path = {**dict(walk_data_arrays(template_ds)), **template_static}
+    existing_by_path = {**dict(walk_data_arrays(existing_ds)), **existing_static}
     mismatches: list[str] = []
-    for path, existing_var in walk_data_arrays(existing_ds):
+    for path, existing_var in existing_by_path.items():
         if path not in template_by_path:
             mismatches.append(
                 f"{path}: in existing store but missing from update template"
@@ -263,6 +328,17 @@ def structural_mismatches(
                     f"{path}.{field}: existing store has {existing_value!r}, "
                     f"update template has {template_value!r}"
                 )
+
+        if path in existing_static:
+            template_var = template_by_path[path]
+            if path not in template_static:
+                mismatches.append(
+                    f"{path}: static array is no longer in a static group"
+                )
+            if not existing_var.identical(template_var):
+                mismatches.append(f"{path}: static values or attributes differ")
+            if _static_encoding(existing_var) != _static_encoding(template_var):
+                mismatches.append(f"{path}: static encoding differs")
 
     template_coords = _non_append_dimension_coords(template_ds, append_dim)
     for name, existing_coord in _non_append_dimension_coords(
@@ -298,10 +374,15 @@ def assert_safe_overwrite(
     problems = structural_mismatches(template_ds, existing_ds, append_dim)
 
     if not allow_new_arrays:
-        existing_paths = {path for path, _ in walk_data_arrays(existing_ds)}
+        existing_paths = {path for path, _ in walk_data_arrays(existing_ds)} | set(
+            _static_arrays(existing_ds)
+        )
         new_paths = [
             path
-            for path, _ in walk_data_arrays(template_ds)
+            for path in {
+                *dict(walk_data_arrays(template_ds)),
+                *_static_arrays(template_ds),
+            }
             if path not in existing_paths
         ]
         if new_paths:
@@ -436,8 +517,12 @@ def refresh_store_metadata(
             assert isinstance(start, int)
             trimmed = xr.DataTree.from_dict(
                 {
-                    node.path: node.to_dataset(inherit=False).isel(
-                        {append_dim: slice(start, start + committed_size)},
+                    node.path: (
+                        node.to_dataset(inherit=False)
+                        if is_static_group(node)
+                        else node.to_dataset(inherit=False).isel(
+                            {append_dim: slice(start, start + committed_size)},
+                        )
                     )
                     for node in template_ds.subtree
                 }

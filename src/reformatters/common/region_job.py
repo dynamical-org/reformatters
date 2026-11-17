@@ -312,7 +312,7 @@ class RegionJob(pydantic.BaseModel, Generic[DATA_VAR, SOURCE_FILE_COORD]):
         """
 
         # Data variables -- filter and group
-        template_arrays = list(walk_data_arrays(template_ds))
+        template_arrays = list(walk_data_arrays(template_ds, include_static=False))
         assert {v.path for v in all_data_vars} == {path for path, _ in template_arrays}
 
         data_vars: Sequence[DATA_VAR]
