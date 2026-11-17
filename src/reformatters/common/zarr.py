@@ -124,8 +124,8 @@ def _coord_chunk_globs(
     pattern catches chunked coords (`<coord>/c/0`, `<coord>/c/0/0`); the bare `c` catches
     a scalar coord whose single chunk is the file `<coord>/c` (the caller's is_file filter
     drops the `c/` directory matched by the bare pattern for non-scalar coords).
-    `exclude_coords` names (matched in every group) get no value-chunk globs — used to
-    protect store-written coordinate values from a template metadata refresh."""
+    `exclude_coords` protects store-written coordinates in data groups from a template
+    metadata refresh; static-array value chunks are always included."""
     globs = []
     for node in template_ds.subtree:
         prefix = node_path_prefix(node)
