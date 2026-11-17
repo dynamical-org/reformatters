@@ -4,17 +4,19 @@ from datetime import timedelta
 from reformatters.common import validation
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
+from reformatters.dwd.icon_eu.forecast_5_day.region_job import (
+    DwdIconEuForecast5DaySourceFileCoord,
+)
 from reformatters.dwd.icon_eu.forecast_5_day.template_config import DwdIconEuDataVar
 
 from .region_job import (
     DwdIconEuForecast5DayIcosahedralRegionJob,
-    DwdIconEuForecast5DayIcosahedralSourceFileCoord,
 )
 from .template_config import DwdIconEuForecast5DayIcosahedralTemplateConfig
 
 
 class DwdIconEuForecast5DayIcosahedralDataset(
-    DynamicalDataset[DwdIconEuDataVar, DwdIconEuForecast5DayIcosahedralSourceFileCoord]
+    DynamicalDataset[DwdIconEuDataVar, DwdIconEuForecast5DaySourceFileCoord]
 ):
     template_config: DwdIconEuForecast5DayIcosahedralTemplateConfig = (
         DwdIconEuForecast5DayIcosahedralTemplateConfig()

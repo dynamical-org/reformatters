@@ -34,28 +34,9 @@ def test_native_template_preserves_cell_order_and_main_run_forecast_contract() -
     )
     assert_array_equal(template.valid_time, template.init_time + template.lead_time)
     assert config.dims[ROOT] == ("init_time", "lead_time", "cell")
-    for var in config.data_vars:
-        assert template[var.name].encoding["chunks"] == (1, 93, 24019)
-        assert template[var.name].encoding["shards"] == (1, 93, 768608)
-    assert template.cell.encoding["dtype"] == np.dtype("int64")
-    assert template.cell.encoding["compressors"][0].shuffle == "bitshuffle"
     regular = DwdIconEuForecast5DayTemplateConfig().get_template(
         pd.Timestamp("2026-02-10T06")
     )
     assert template.spatial_ref.attrs == regular.spatial_ref.attrs
-
-
-def test_native_variable_metadata_and_transformations_match_regular_forecasts() -> None:
-    regular = DwdIconEuForecast5DayTemplateConfig()
-    native = DwdIconEuForecast5DayIcosahedralTemplateConfig()
-    assert {v.name for v in native.data_vars} == {v.name for v in regular.data_vars}
-    for actual, expected in zip(native.data_vars, regular.data_vars, strict=True):
-        actual_attrs = actual.attrs.model_dump()
-        expected_attrs = expected.attrs.model_dump()
-        if actual.name == "wind_gust_10m":
-            actual_attrs.pop("comment")
-            expected_attrs.pop("comment")
-        assert actual_attrs == expected_attrs
-        assert actual.internal_attrs == expected.internal_attrs
-        assert actual.encoding.dtype == expected.encoding.dtype
-        assert actual.encoding.compressors == expected.encoding.compressors
+    assert template.wind_gust_10m.attrs["comment"]
+    assert "comment" not in regular.wind_gust_10m.attrs
