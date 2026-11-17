@@ -10,6 +10,7 @@ name: 'Manual: Create Job from CronJob'
         type: choice
         options:
         - dwd-icon-eu-forecast-5-day-archive-grib-files
+        - dwd-icon-eu-forecast-5-day-icosahedral-update
         - dwd-icon-eu-forecast-5-day-update
         - eccc-hrdps-forecast-archive-grib-files
         - eccc-hrdps-forecast-update

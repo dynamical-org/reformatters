@@ -1,0 +1,85 @@
+{
+  "shape": [
+    1,
+    93,
+    768608
+  ],
+  "data_type": "float32",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        93,
+        768608
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": "NaN",
+  "codecs": [
+    {
+      "name": "sharding_indexed",
+      "configuration": {
+        "chunk_shape": [
+          1,
+          93,
+          24019
+        ],
+        "codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "blosc",
+            "configuration": {
+              "typesize": 4,
+              "cname": "zstd",
+              "clevel": 3,
+              "shuffle": "shuffle",
+              "blocksize": 0
+            }
+          }
+        ],
+        "index_codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "crc32c"
+          }
+        ],
+        "index_location": "end"
+      }
+    }
+  ],
+  "attributes": {
+    "long_name": "Maximum 10 metre wind gust since previous post-processing",
+    "short_name": "10fg",
+    "standard_name": "wind_speed_of_gust",
+    "units": "m s-1",
+    "comment": "Maximum over the hour ending at the forecast step. At 3-hourly steps (81-120 hours), this covers only the last hour of each step.",
+    "step_type": "max",
+    "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+    "_FillValue": "AAAAAAAA+H8="
+  },
+  "dimension_names": [
+    "init_time",
+    "lead_time",
+    "cell"
+  ],
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}
