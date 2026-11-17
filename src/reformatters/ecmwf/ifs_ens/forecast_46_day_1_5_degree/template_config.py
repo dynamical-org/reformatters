@@ -23,13 +23,13 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.common_template_config import (
+    EcmwfIfsEns46DayCommonTemplateConfig,
+)
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.config_models import (
     EcmwfIfsEns46DayDataVar,
     EcmwfIfsEns46DayInternalAttrs,
     SubStepReduction,
-)
-from reformatters.ecmwf.ifs_ens.forecast_46_day_template_config import (
-    EcmwfIfsEns46DayCommonTemplateConfig,
 )
 
 PRESSURE_LEVELS = [1000, 925, 850, 700, 500, 300, 200, 100, 50, 10]

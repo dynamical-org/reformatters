@@ -24,7 +24,7 @@ from reformatters.common.zarr import (
     BLOSC_4BYTE_ZSTD_LEVEL3_SHUFFLE,
     BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE,
 )
-from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.config_models import (
     EcmwfIfsEns46DayDataVar,
 )
 
