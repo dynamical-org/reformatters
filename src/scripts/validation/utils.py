@@ -573,9 +573,16 @@ def to_reference_longitude(longitude: float) -> float:
     return ((longitude + 180) % 360) - 180
 
 
-def get_spatial_dimensions(ds: xr.Dataset) -> tuple[str, str]:
+def get_spatial_dimensions(ds: xr.Dataset | xr.DataArray) -> tuple[str, ...]:
     if "latitude" in ds.dims and "longitude" in ds.dims:
         return "latitude", "longitude"
+    if (
+        "latitude" in ds.coords
+        and "longitude" in ds.coords
+        and ds.latitude.ndim == 1
+        and ds.latitude.dims == ds.longitude.dims
+    ):
+        return tuple(map(str, ds.latitude.dims))
     return "y", "x"
 
 
@@ -594,11 +601,33 @@ def _two_spread_indices(rng: np.random.Generator, lo: int, hi: int) -> tuple[int
     return idx1, idx2
 
 
-def get_random_spatial_indices(
-    ds: xr.Dataset, lat_dim: str, lon_dim: str
-) -> tuple[dict[str, int], dict[str, int]]:
-    """Get two random spatial indices for plotting, both within the middle 50% of each dim."""
+def get_random_spatial_indices(ds: xr.Dataset) -> tuple[dict[str, int], dict[str, int]]:
+    """Two spread random points inside the middle 50% of each spatial axis.
+
+    Unstructured grids use coordinate ranges, falling back to all cells if the
+    middle band is empty and repeating the point if only one candidate remains.
+    """
     rng = np.random.default_rng()
+    spatial_dims = get_spatial_dimensions(ds)
+    if len(spatial_dims) == 1:
+        dim = spatial_dims[0]
+        latitudes, longitudes = ds.latitude.values, ds.longitude.values
+        lat_margin = np.ptp(latitudes) / 4
+        lon_margin = np.ptp(longitudes) / 4
+        candidates = np.flatnonzero(
+            (latitudes >= latitudes.min() + lat_margin)
+            & (latitudes <= latitudes.max() - lat_margin)
+            & (longitudes >= longitudes.min() + lon_margin)
+            & (longitudes <= longitudes.max() - lon_margin)
+        )
+        if candidates.size == 0:
+            candidates = np.arange(ds.sizes[dim])
+        candidates = candidates[np.argsort(longitudes[candidates])]
+        mid = max(1, candidates.size // 2)
+        first = int(rng.choice(candidates[:mid]))
+        second = int(rng.choice(candidates[min(mid, candidates.size - 1) :]))
+        return {dim: first}, {dim: second}
+    lat_dim, lon_dim = spatial_dims
     lat_size = ds.sizes[lat_dim]
     lon_size = ds.sizes[lon_dim]
 
@@ -619,18 +648,18 @@ def get_random_spatial_indices(
 
 
 def nearest_point_index(ds: xr.Dataset, lat: float, lon: float) -> dict[str, int]:
-    """Grid-cell index dict nearest a target lat/lon, for 1D geographic or 2D projected grids."""
-    lat_dim, lon_dim = get_spatial_dimensions(ds)
-    if lat_dim == "latitude" and lon_dim == "longitude":
+    """Grid-cell index dict nearest a target lat/lon."""
+    spatial_dims = get_spatial_dimensions(ds)
+    if spatial_dims == ("latitude", "longitude"):
         lat_idx = int(np.abs(ds.latitude.values - lat).argmin())
         lon_idx = int(np.abs(ds.longitude.values - lon).argmin())
-        return {lat_dim: lat_idx, lon_dim: lon_idx}
-    lat2d = ds.latitude.values
-    lon2d = ds.longitude.values
-    # Equirectangular approximation; exact enough to pick a grid cell at CONUS scale.
-    dist = (lat2d - lat) ** 2 + ((lon2d - lon) * np.cos(np.deg2rad(lat))) ** 2
-    y_idx, x_idx = (int(i) for i in np.unravel_index(int(np.argmin(dist)), dist.shape))
-    return {"y": y_idx, "x": x_idx}
+        return {"latitude": lat_idx, "longitude": lon_idx}
+    latitudes = ds.latitude.values
+    longitudes = ds.longitude.values
+    # Equirectangular approximation; exact enough to pick a grid cell at regional scale.
+    dist = (latitudes - lat) ** 2 + ((longitudes - lon) * np.cos(np.deg2rad(lat))) ** 2
+    indices = np.unravel_index(int(np.argmin(dist)), dist.shape)
+    return dict(zip(spatial_dims, map(int, indices), strict=True))
 
 
 def get_two_random_points(
@@ -642,23 +671,16 @@ def get_two_random_points(
     Each pinned (lat, lon) overrides the corresponding random point with its nearest grid
     cell; the returned coordinates are that cell's actual lat/lon.
     """
-    lat_dim, lon_dim = get_spatial_dimensions(ds)
-    point1_sel, point2_sel = get_random_spatial_indices(ds, lat_dim, lon_dim)
+    point1_sel, point2_sel = get_random_spatial_indices(ds)
     if pinned:
         if len(pinned) >= 1:
             point1_sel = nearest_point_index(ds, *pinned[0])
         if len(pinned) >= 2:
             point2_sel = nearest_point_index(ds, *pinned[1])
-    if lat_dim == "latitude" and lon_dim == "longitude":
-        lat1 = float(ds.latitude[point1_sel["latitude"]])
-        lon1 = float(ds.longitude[point1_sel["longitude"]])
-        lat2 = float(ds.latitude[point2_sel["latitude"]])
-        lon2 = float(ds.longitude[point2_sel["longitude"]])
-    else:
-        lat1 = float(ds.latitude[point1_sel["y"], point1_sel["x"]])
-        lon1 = float(ds.longitude[point1_sel["y"], point1_sel["x"]])
-        lat2 = float(ds.latitude[point2_sel["y"], point2_sel["x"]])
-        lon2 = float(ds.longitude[point2_sel["y"], point2_sel["x"]])
+    point1 = ds.isel(point1_sel)
+    point2 = ds.isel(point2_sel)
+    lat1, lon1 = float(point1.latitude), float(point1.longitude)
+    lat2, lon2 = float(point2.latitude), float(point2.longitude)
     return point1_sel, point2_sel, (lat1, lon1), (lat2, lon2)
 
 
@@ -777,10 +799,11 @@ def vertical_dims(ds: xr.Dataset, var: str) -> list[str]:
     after flattening; single-level vars (``temperature_2m``) have none. Generic across
     level types (pressure_level, model_level, …) — no level name is hard-coded.
     """
+    spatial_dims = get_spatial_dimensions(ds)
     return [
         str(d)
         for d in ds[var].dims
-        if d not in (*_NON_VERTICAL_DIMS, "statistic")
+        if d not in (*_NON_VERTICAL_DIMS, *spatial_dims, "statistic")
         and np.issubdtype(ds[d].dtype, np.number)
     ]
 
@@ -790,10 +813,11 @@ def choose_statistic(
 ) -> dict[str, str]:
     from scripts.validation.scan_common import find_registered_dataset  # noqa: PLC0415
 
+    spatial_dims = get_spatial_dimensions(ds)
     label_dims = [
         str(d)
         for d in ds[var].dims
-        if d not in _NON_VERTICAL_DIMS
+        if d not in (*_NON_VERTICAL_DIMS, *spatial_dims)
         and (d == "statistic" or not np.issubdtype(ds[d].dtype, np.number))
     ]
     if not label_dims:

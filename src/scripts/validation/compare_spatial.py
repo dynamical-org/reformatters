@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from matplotlib.axes import Axes
+from matplotlib.collections import Collection
 
 from reformatters.common.logging import get_logger
 from scripts.validation.utils import (
@@ -13,6 +14,7 @@ from scripts.validation.utils import (
     deterministic_reference_allowed,
     end_date_option,
     format_lead_time,
+    get_spatial_dimensions,
     get_two_random_points,
     has_geographic_xy,
     init_time_option,
@@ -132,6 +134,12 @@ def _select_analysis_snapshot(ds: xr.Dataset, time: str | None) -> xr.Dataset:
 
 
 def _downsample_for_plot(ds: xr.Dataset, max_plot_dim: int = 1000) -> xr.Dataset:
+    spatial_dims = get_spatial_dimensions(ds)
+    if len(spatial_dims) == 1:
+        dim = spatial_dims[0]
+        max_points = max_plot_dim**2
+        stride = max(1, (ds.sizes[dim] + max_points - 1) // max_points)
+        return ds.isel({dim: slice(None, None, stride)})
     strides: dict[str, int] = {}
     for dim in ("latitude", "longitude", "y", "x"):
         if dim in ds.dims and ds.sizes[dim] > max_plot_dim:
@@ -199,6 +207,31 @@ def _spatial_color_range(
     return vmin, vmax
 
 
+def _draw_spatial_map(
+    ax: Axes, data: xr.DataArray, vmin: float, vmax: float
+) -> Collection:
+    if len(get_spatial_dimensions(data)) == 1:
+        figure = ax.get_figure()
+        assert figure is not None
+        bounds = ax.get_window_extent().transformed(figure.dpi_scale_trans.inverted())
+        # Overlap squares to cover the longitude stretch of cells at high latitudes.
+        marker_size = 4 * bounds.width * bounds.height * 72**2 / data.size
+        return ax.scatter(
+            data.longitude,
+            data.latitude,
+            c=data.values,
+            s=marker_size,
+            marker="s",
+            linewidths=0,
+            rasterized=True,
+            vmin=vmin,
+            vmax=vmax,
+        )
+    return ax.pcolormesh(
+        data.longitude, data.latitude, data.values, vmin=vmin, vmax=vmax
+    )
+
+
 def _draw_spatial_triplet(
     ax_ref: Axes,
     ax_val: Axes,
@@ -254,9 +287,7 @@ def _draw_spatial_triplet(
     ax_ref.set_ylabel("Latitude")
 
     # Validation map
-    im2 = ax_val.pcolormesh(
-        data.longitude, data.latitude, data.values, vmin=vmin, vmax=vmax
-    )
+    im2 = _draw_spatial_map(ax_val, data, vmin, vmax)
     plt.colorbar(im2, ax=ax_val, label=units or "")
     ax_val.set_title(ds_title, fontsize=10)
     ax_val.set_aspect("auto")

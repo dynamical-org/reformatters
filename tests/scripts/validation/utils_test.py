@@ -16,6 +16,7 @@ from scripts.validation.utils import (
     choose_statistic,
     format_lead_time,
     get_random_spatial_indices,
+    get_spatial_dimensions,
     get_two_random_points,
     level_label,
     load_zarr_dataset,
@@ -226,7 +227,7 @@ def test_random_spatial_indices_within_middle_50_percent() -> None:
     ds = _projected_ds()
     ny, nx = ds.sizes["y"], ds.sizes["x"]
     for _ in range(500):
-        p1, p2 = get_random_spatial_indices(ds, "y", "x")
+        p1, p2 = get_random_spatial_indices(ds)
         for p in (p1, p2):
             assert ny // 4 <= p["y"] < ny - ny // 4
             assert nx // 4 <= p["x"] < nx - nx // 4
@@ -248,6 +249,80 @@ def test_get_two_random_points_pins_provided_points() -> None:
     assert p2_sel == {"y": 18, "x": 28}
     assert (lat1, lon1) == (35.0, -100.0)
     assert (lat2, lon2) == (39.0, -96.0)
+
+
+@pytest.mark.parametrize("dim", ["cell", "face"])
+@pytest.mark.parametrize("size", [1, 2, 12])
+def test_unstructured_points_use_cell_locations(
+    unstructured_ds: xr.Dataset, dim: str, size: int
+) -> None:
+    ds = unstructured_ds.isel(cell=slice(size)).rename({"cell": dim})
+    spatial_dims = get_spatial_dimensions(ds)
+    assert spatial_dims == (dim,)
+    for _ in range(10):
+        p1, p2 = get_random_spatial_indices(ds)
+        for point in (p1, p2):
+            assert set(point) == {dim}
+            assert 0 <= point[dim] < size
+
+
+@pytest.mark.parametrize("dim", ["cell", "face"])
+def test_unstructured_random_points_avoid_margins_and_stay_spread_when_cells_are_shuffled(
+    dim: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ds = xr.Dataset(
+        coords={
+            "latitude": (dim, [0, 40, 60, 100, 50, 20, 70, 55, 30, 80, 45, 65]),
+            "longitude": (dim, [50, 30, 60, 50, 70, 40, 20, 40, 80, 60, 0, 100]),
+        }
+    )
+    rng = np.random.default_rng(0)
+    monkeypatch.setattr(np.random, "default_rng", Mock(return_value=rng))
+    for _ in range(50):
+        _, _, (lat1, lon1), (lat2, lon2) = get_two_random_points(ds)
+        assert 25 <= lat1 <= 75
+        assert 25 <= lat2 <= 75
+        assert 25 <= lon1 < 50 <= lon2 <= 75
+
+
+@pytest.mark.parametrize(("size", "expected"), [(1, (0, 0)), (2, (0, 1)), (3, (1, 1))])
+def test_unstructured_random_points_handle_empty_or_single_cell_middle_bands(
+    unstructured_ds: xr.Dataset,
+    size: int,
+    expected: tuple[int, int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ds = unstructured_ds.isel(cell=slice(size))
+    rng = np.random.default_rng(0)
+    monkeypatch.setattr(np.random, "default_rng", Mock(return_value=rng))
+    for _ in range(10):
+        p1, p2, _, _ = get_two_random_points(ds)
+        assert p1 == {"cell": expected[0]}
+        assert p2 == {"cell": expected[1]}
+
+
+def test_unstructured_nearest_point_weights_longitude_by_latitude() -> None:
+    ds = xr.Dataset(
+        coords={
+            "latitude": ("cell", [60.0, 61.5]),
+            "longitude": ("cell", [2.0, 0.0]),
+        }
+    )
+    assert nearest_point_index(ds, 60.0, 0.0) == {"cell": 0}
+    p1, p2, coords1, coords2 = get_two_random_points(ds, [(60.0, 0.0), (61.5, 0.0)])
+    assert p1 == {"cell": 0}
+    assert p2 == {"cell": 1}
+    assert coords1 == (60.0, 2.0)
+    assert coords2 == (61.5, 0.0)
+
+
+def test_unstructured_cell_is_not_selected_as_a_vertical_level(
+    unstructured_ds: xr.Dataset,
+) -> None:
+    ds = unstructured_ds.expand_dims(pressure_level=[1000, 500, 100])
+    assert choose_level(unstructured_ds, "temperature_2m", None) == {}
+    assert choose_statistic(unstructured_ds, "temperature_2m") == {}
+    assert choose_level(ds, "temperature_2m", None) == {"pressure_level": 500}
 
 
 def test_load_zarr_dataset_keeps_geographic_xy_labels_native(
