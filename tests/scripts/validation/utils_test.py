@@ -227,7 +227,7 @@ def test_random_spatial_indices_within_middle_50_percent() -> None:
     ds = _projected_ds()
     ny, nx = ds.sizes["y"], ds.sizes["x"]
     for _ in range(500):
-        p1, p2 = get_random_spatial_indices(ds, "y", "x")
+        p1, p2 = get_random_spatial_indices(ds)
         for p in (p1, p2):
             assert ny // 4 <= p["y"] < ny - ny // 4
             assert nx // 4 <= p["x"] < nx - nx // 4
@@ -260,19 +260,45 @@ def test_unstructured_points_use_cell_locations(
     spatial_dims = get_spatial_dimensions(ds)
     assert spatial_dims == (dim,)
     for _ in range(10):
-        p1, p2 = get_random_spatial_indices(ds, *spatial_dims)
+        p1, p2 = get_random_spatial_indices(ds)
         for point in (p1, p2):
             assert set(point) == {dim}
             assert 0 <= point[dim] < size
-        p1, p2, coords1, coords2 = get_two_random_points(ds)
-        for point, coords in ((p1, coords1), (p2, coords2)):
-            assert coords == (
-                float(ds.latitude.isel(point)),
-                float(ds.longitude.isel(point)),
-            )
-    p1, _, coords1, _ = get_two_random_points(ds, [(63.0, 8.0)])
-    assert p1 == nearest_point_index(ds, 63.0, 8.0)
-    assert coords1 == (float(ds.latitude.isel(p1)), float(ds.longitude.isel(p1)))
+
+
+@pytest.mark.parametrize("dim", ["cell", "face"])
+def test_unstructured_random_points_avoid_margins_and_stay_spread_when_cells_are_shuffled(
+    dim: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ds = xr.Dataset(
+        coords={
+            "latitude": (dim, [0, 40, 60, 100, 50, 20, 70, 55, 30, 80, 45, 65]),
+            "longitude": (dim, [50, 30, 60, 50, 70, 40, 20, 40, 80, 60, 0, 100]),
+        }
+    )
+    rng = np.random.default_rng(0)
+    monkeypatch.setattr(np.random, "default_rng", Mock(return_value=rng))
+    for _ in range(50):
+        _, _, (lat1, lon1), (lat2, lon2) = get_two_random_points(ds)
+        assert 25 <= lat1 <= 75
+        assert 25 <= lat2 <= 75
+        assert 25 <= lon1 < 50 <= lon2 <= 75
+
+
+@pytest.mark.parametrize(("size", "expected"), [(1, (0, 0)), (2, (0, 1)), (3, (1, 1))])
+def test_unstructured_random_points_handle_empty_or_single_cell_middle_bands(
+    unstructured_ds: xr.Dataset,
+    size: int,
+    expected: tuple[int, int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ds = unstructured_ds.isel(cell=slice(size))
+    rng = np.random.default_rng(0)
+    monkeypatch.setattr(np.random, "default_rng", Mock(return_value=rng))
+    for _ in range(10):
+        p1, p2, _, _ = get_two_random_points(ds)
+        assert p1 == {"cell": expected[0]}
+        assert p2 == {"cell": expected[1]}
 
 
 def test_unstructured_nearest_point_weights_longitude_by_latitude() -> None:

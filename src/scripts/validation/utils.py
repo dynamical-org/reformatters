@@ -601,16 +601,34 @@ def _two_spread_indices(rng: np.random.Generator, lo: int, hi: int) -> tuple[int
     return idx1, idx2
 
 
-def get_random_spatial_indices(
-    ds: xr.Dataset, lat_dim: str, lon_dim: str | None = None
-) -> tuple[dict[str, int], dict[str, int]]:
-    """Two random spatial indices; structured grids use the middle 50% of each axis."""
+def get_random_spatial_indices(ds: xr.Dataset) -> tuple[dict[str, int], dict[str, int]]:
+    """Two spread random points inside the middle 50% of each spatial axis.
+
+    Unstructured grids use coordinate ranges, falling back to all cells if the
+    middle band is empty and repeating the point if only one candidate remains.
+    """
     rng = np.random.default_rng()
+    spatial_dims = get_spatial_dimensions(ds)
+    if len(spatial_dims) == 1:
+        dim = spatial_dims[0]
+        latitudes, longitudes = ds.latitude.values, ds.longitude.values
+        lat_margin = np.ptp(latitudes) / 4
+        lon_margin = np.ptp(longitudes) / 4
+        candidates = np.flatnonzero(
+            (latitudes >= latitudes.min() + lat_margin)
+            & (latitudes <= latitudes.max() - lat_margin)
+            & (longitudes >= longitudes.min() + lon_margin)
+            & (longitudes <= longitudes.max() - lon_margin)
+        )
+        if candidates.size == 0:
+            candidates = np.arange(ds.sizes[dim])
+        candidates = candidates[np.argsort(longitudes[candidates])]
+        mid = max(1, candidates.size // 2)
+        first = int(rng.choice(candidates[:mid]))
+        second = int(rng.choice(candidates[min(mid, candidates.size - 1) :]))
+        return {dim: first}, {dim: second}
+    lat_dim, lon_dim = spatial_dims
     lat_size = ds.sizes[lat_dim]
-    if lon_dim is None:
-        return {lat_dim: int(rng.integers(lat_size))}, {
-            lat_dim: int(rng.integers(lat_size))
-        }
     lon_size = ds.sizes[lon_dim]
 
     lat_lo, lat_hi = 0, lat_size
@@ -638,7 +656,7 @@ def nearest_point_index(ds: xr.Dataset, lat: float, lon: float) -> dict[str, int
         return {"latitude": lat_idx, "longitude": lon_idx}
     latitudes = ds.latitude.values
     longitudes = ds.longitude.values
-    # Equirectangular approximation; exact enough to pick a grid cell at CONUS scale.
+    # Equirectangular approximation; exact enough to pick a grid cell at regional scale.
     dist = (latitudes - lat) ** 2 + ((longitudes - lon) * np.cos(np.deg2rad(lat))) ** 2
     indices = np.unravel_index(int(np.argmin(dist)), dist.shape)
     return dict(zip(spatial_dims, map(int, indices), strict=True))
@@ -653,8 +671,7 @@ def get_two_random_points(
     Each pinned (lat, lon) overrides the corresponding random point with its nearest grid
     cell; the returned coordinates are that cell's actual lat/lon.
     """
-    spatial_dims = get_spatial_dimensions(ds)
-    point1_sel, point2_sel = get_random_spatial_indices(ds, *spatial_dims)
+    point1_sel, point2_sel = get_random_spatial_indices(ds)
     if pinned:
         if len(pinned) >= 1:
             point1_sel = nearest_point_index(ds, *pinned[0])

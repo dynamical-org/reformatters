@@ -33,9 +33,11 @@ from scripts.validation.value_timeseries import run_value_timeseries
 def test_downsampling_bounds_unstructured_plot_cost(
     unstructured_ds: xr.Dataset,
 ) -> None:
-    sampled = _downsample_for_plot(unstructured_ds, max_plot_dim=2)
+    ds = xr.concat([unstructured_ds, unstructured_ds.isel(cell=[0])], dim="cell")
+    ds = ds.assign_coords(cell=np.arange(13))
+    sampled = _downsample_for_plot(ds, max_plot_dim=2)
     assert 1 < sampled.sizes["cell"] <= 4
-    xr.testing.assert_identical(sampled, unstructured_ds.sel(cell=sampled.cell))
+    xr.testing.assert_identical(sampled, ds.sel(cell=sampled.cell))
     xr.testing.assert_identical(_downsample_for_plot(sampled, max_plot_dim=2), sampled)
 
 

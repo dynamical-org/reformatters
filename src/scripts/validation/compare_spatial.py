@@ -214,6 +214,7 @@ def _draw_spatial_map(
         figure = ax.get_figure()
         assert figure is not None
         bounds = ax.get_window_extent().transformed(figure.dpi_scale_trans.inverted())
+        # Overlap squares to cover the longitude stretch of cells at high latitudes.
         marker_size = 4 * bounds.width * bounds.height * 72**2 / data.size
         return ax.scatter(
             data.longitude,
