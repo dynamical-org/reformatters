@@ -16,6 +16,7 @@ from scripts.validation.utils import (
     choose_statistic,
     format_lead_time,
     get_random_spatial_indices,
+    get_spatial_dimensions,
     get_two_random_points,
     level_label,
     load_zarr_dataset,
@@ -248,6 +249,54 @@ def test_get_two_random_points_pins_provided_points() -> None:
     assert p2_sel == {"y": 18, "x": 28}
     assert (lat1, lon1) == (35.0, -100.0)
     assert (lat2, lon2) == (39.0, -96.0)
+
+
+@pytest.mark.parametrize("dim", ["cell", "face"])
+@pytest.mark.parametrize("size", [1, 2, 12])
+def test_unstructured_points_use_cell_locations(
+    unstructured_ds: xr.Dataset, dim: str, size: int
+) -> None:
+    ds = unstructured_ds.isel(cell=slice(size)).rename({"cell": dim})
+    spatial_dims = get_spatial_dimensions(ds)
+    assert spatial_dims == (dim,)
+    for _ in range(10):
+        p1, p2 = get_random_spatial_indices(ds, *spatial_dims)
+        for point in (p1, p2):
+            assert set(point) == {dim}
+            assert 0 <= point[dim] < size
+        p1, p2, coords1, coords2 = get_two_random_points(ds)
+        for point, coords in ((p1, coords1), (p2, coords2)):
+            assert coords == (
+                float(ds.latitude.isel(point)),
+                float(ds.longitude.isel(point)),
+            )
+    p1, _, coords1, _ = get_two_random_points(ds, [(63.0, 8.0)])
+    assert p1 == nearest_point_index(ds, 63.0, 8.0)
+    assert coords1 == (float(ds.latitude.isel(p1)), float(ds.longitude.isel(p1)))
+
+
+def test_unstructured_nearest_point_weights_longitude_by_latitude() -> None:
+    ds = xr.Dataset(
+        coords={
+            "latitude": ("cell", [60.0, 61.5]),
+            "longitude": ("cell", [2.0, 0.0]),
+        }
+    )
+    assert nearest_point_index(ds, 60.0, 0.0) == {"cell": 0}
+    p1, p2, coords1, coords2 = get_two_random_points(ds, [(60.0, 0.0), (61.5, 0.0)])
+    assert p1 == {"cell": 0}
+    assert p2 == {"cell": 1}
+    assert coords1 == (60.0, 2.0)
+    assert coords2 == (61.5, 0.0)
+
+
+def test_unstructured_cell_is_not_selected_as_a_vertical_level(
+    unstructured_ds: xr.Dataset,
+) -> None:
+    ds = unstructured_ds.expand_dims(pressure_level=[1000, 500, 100])
+    assert choose_level(unstructured_ds, "temperature_2m", None) == {}
+    assert choose_statistic(unstructured_ds, "temperature_2m") == {}
+    assert choose_level(ds, "temperature_2m", None) == {"pressure_level": 500}
 
 
 def test_load_zarr_dataset_keeps_geographic_xy_labels_native(

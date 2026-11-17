@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import Mock
 
 import numpy as np
@@ -6,8 +7,10 @@ import pytest
 import xarray as xr
 
 from scripts.validation import compare_spatial
+from scripts.validation.availability import run_value_availability
 from scripts.validation.compare_spatial import (
     _compute_spatial_stats,
+    _downsample_for_plot,
     _select_analysis_snapshot,
     _select_forecast_snapshot,
     _spatial_color_range,
@@ -16,8 +19,98 @@ from scripts.validation.compare_spatial import (
     run_compare_spatial,
     select_reference_time,
 )
+from scripts.validation.compare_timeseries import run_compare_timeseries
 from scripts.validation.summary import _spatial_table
-from scripts.validation.utils import RunContext, VariableStats, load_zarr_dataset
+from scripts.validation.utils import (
+    RunContext,
+    VariableStats,
+    get_two_random_points,
+    load_zarr_dataset,
+)
+from scripts.validation.value_timeseries import run_value_timeseries
+
+
+def test_downsampling_bounds_unstructured_plot_cost(
+    unstructured_ds: xr.Dataset,
+) -> None:
+    sampled = _downsample_for_plot(unstructured_ds, max_plot_dim=2)
+    assert 1 < sampled.sizes["cell"] <= 4
+    xr.testing.assert_identical(sampled, unstructured_ds.sel(cell=sampled.cell))
+    xr.testing.assert_identical(_downsample_for_plot(sampled, max_plot_dim=2), sampled)
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_unstructured_forecast_renders_spatial_and_point_reports(
+    unstructured_ds: xr.Dataset, tmp_path: Path, missing: bool
+) -> None:
+    init = pd.date_range("2026-11-03", periods=2, freq="D")
+    lead = pd.to_timedelta([0, 6, 12], unit="h")
+    ds = unstructured_ds.expand_dims(init_time=init, lead_time=lead).copy(deep=True)
+    ds = ds.assign_coords(
+        valid_time=(
+            ("init_time", "lead_time"),
+            init.values[:, None] + lead.values[None, :],
+        )
+    )
+    if missing:
+        ds["temperature_2m"][:] = np.nan
+    times = pd.date_range(init[0], init[-1] + lead[-1], freq="6h")
+    ref = xr.Dataset(
+        {
+            "temperature_2m": (
+                ("time", "latitude", "longitude"),
+                np.ones((len(times), 3, 4)),
+            )
+        },
+        coords={
+            "time": times,
+            "latitude": [63.0, 61.5, 60.0],
+            "longitude": [2.0, 4.0, 6.0, 8.0],
+        },
+    )
+    p1, p2, coords1, coords2 = get_two_random_points(ds, [(60.0, 2.0), (63.0, 8.0)])
+    ctx = RunContext(
+        output_dir=tmp_path,
+        validation_url="unused",
+        reference_url=None,
+        validation_ds=ds,
+        reference_ds=ref,
+        started_at=init[0],
+        point1_sel=p1,
+        point2_sel=p2,
+        point1_lat=coords1[0],
+        point1_lon=coords1[1],
+        point2_lat=coords2[0],
+        point2_lon=coords2[1],
+        ensemble_member=None,
+        variables=["temperature_2m"],
+        init_time=str(init[0]),
+        lead_time="6",
+    )
+    run_value_availability(ctx)
+    run_value_timeseries(ctx)
+    run_compare_timeseries(ctx)
+    run_compare_spatial(ctx)
+    stats = ctx.stats_for("temperature_2m")
+    for plot in (
+        stats.availability_plot,
+        stats.value_ts_plot,
+        stats.temporal_plot,
+        stats.spatial_plot,
+    ):
+        assert plot is not None
+        assert (tmp_path / plot).stat().st_size > 0
+    np.testing.assert_allclose(
+        ctx.availability["temperature_2m"].fraction, 0.0 if missing else 1.0
+    )
+    if missing:
+        assert stats.val_spatial_mean is not None
+        assert np.isnan(stats.val_spatial_mean)
+    else:
+        assert stats.val_spatial_mean == 5.5
+        assert stats.value_mean_p1 == 0.0
+        assert stats.value_mean_p2 == 11.0
+        assert stats.val_temporal_mean_p2 == 11.0
 
 
 def _reference_ds() -> xr.Dataset:

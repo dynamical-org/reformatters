@@ -21,6 +21,18 @@ from scripts.validation.utils import RunContext
 
 
 @pytest.fixture
+def unstructured_ds() -> xr.Dataset:
+    return xr.Dataset(
+        {"temperature_2m": ("cell", np.arange(12, dtype=float))},
+        coords={
+            "cell": np.arange(12),
+            "latitude": ("cell", np.repeat([60.0, 61.5, 63.0], 4)),
+            "longitude": ("cell", np.tile([2.0, 4.0, 6.0, 8.0], 3)),
+        },
+    )
+
+
+@pytest.fixture
 def statistic_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RunContext:
     config = NoaaRefsForecastHourlyVirtualTemplateConfig()
     names = (
