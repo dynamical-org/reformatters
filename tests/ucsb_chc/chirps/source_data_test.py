@@ -1,12 +1,15 @@
 from pathlib import Path
 from unittest.mock import Mock
 
+import httpx
 import numpy as np
 import pandas as pd
 import pytest
 import rasterio
 import xarray as xr
 
+from reformatters.common.download import RateLimiter
+from reformatters.ucsb_chc.chirps import region_job
 from reformatters.ucsb_chc.chirps.analysis_final.region_job import (
     UcsbChcChirpsAnalysisFinalRegionJob,
 )
@@ -25,15 +28,33 @@ from reformatters.ucsb_chc.chirps.template_config import (
     GRID_LON_SIZE,
     SOURCE_FILL_VALUE,
 )
+from tests.ucsb_chc.chirps.refresh_fixtures import fixture_path
 from tests.ucsb_chc.chirps.region_job_test import _job
 
-# Every test that contacts the CHIRPS host lives in this file, so pytest-xdist's
-# loadfile scheduling runs them in one process under the one CHIRPS rate limiter.
+# These tests run against real CHIRPS responses checked in under fixtures/, fetched
+# on 2026-11-17 from data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/ at the paths in
+# refresh_fixtures.FIXTURE_PATHS; that module re-fetches them and documents how the
+# GeoTIFFs are reduced.
 
 
-@pytest.mark.slow
+@pytest.fixture(autouse=True)
+def serve_fixtures(monkeypatch: pytest.MonkeyPatch) -> None:
+    def get(url: str, *, rate_limiter: RateLimiter) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=fixture_path(url).read_bytes(),
+            request=httpx.Request("GET", url),
+        )
+
+    def download(url: str, dataset_id: str, *, rate_limiter: RateLimiter) -> Path:
+        return fixture_path(url)
+
+    monkeypatch.setattr(region_job, "httpx_get", get)
+    monkeypatch.setattr(region_job, "httpx_download_to_disk", download)
+
+
 @pytest.mark.parametrize("product", ["final", "preliminary"])
-def test_live_directory_listing(product: ChirpsProduct) -> None:
+def test_directory_listing(product: ChirpsProduct) -> None:
     times = pd.date_range("2025-01-01", periods=3)
     coords = _job(product).generate_source_file_coords(
         xr.Dataset(coords={"time": times}), []
@@ -41,12 +62,10 @@ def test_live_directory_listing(product: ChirpsProduct) -> None:
     assert [coord.time for coord in coords] == list(times)
 
 
-@pytest.fixture(scope="session")
-def example_source_file_paths(
-    tmp_path_factory: pytest.TempPathFactory,
-) -> dict[ChirpsProduct, Path]:
+@pytest.fixture
+def example_source_file_paths() -> dict[ChirpsProduct, Path]:
     config = UcsbChcChirpsAnalysisFinalTemplateConfig()
-    region_job = UcsbChcChirpsAnalysisFinalRegionJob.model_construct(
+    job = UcsbChcChirpsAnalysisFinalRegionJob.model_construct(
         tmp_store=Mock(),
         template_ds=config.get_template(config.append_dim_start),
         data_vars=list(config.data_vars),
@@ -54,26 +73,20 @@ def example_source_file_paths(
         region=slice(0, 1),
         reformat_job_name="test",
     )
-    with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setattr(
-            "reformatters.common.download.DOWNLOAD_DIR",
-            tmp_path_factory.mktemp("chirps-source"),
+    return {
+        product: job.download_file(
+            UcsbChcChirpsAnalysisSourceFileCoord(product=product, time=time)
         )
-        return {
-            product: region_job.download_file(
-                UcsbChcChirpsAnalysisSourceFileCoord(product=product, time=time)
-            )
-            for product, time in (
-                ("final", UcsbChcChirpsAnalysisFinalTemplateConfig().append_dim_start),
-                (
-                    "preliminary",
-                    UcsbChcChirpsAnalysisPreliminaryTemplateConfig().append_dim_start,
-                ),
-            )
-        }
+        for product, time in (
+            ("final", UcsbChcChirpsAnalysisFinalTemplateConfig().append_dim_start),
+            (
+                "preliminary",
+                UcsbChcChirpsAnalysisPreliminaryTemplateConfig().append_dim_start,
+            ),
+        )
+    }
 
 
-@pytest.mark.slow
 def test_grid_matches_source_file(
     example_source_file_paths: dict[ChirpsProduct, Path],
 ) -> None:
@@ -100,7 +113,6 @@ def test_grid_matches_source_file(
     assert np.isclose(bounds.bottom + pixel_size_y / 2, lat.min(), atol=atol, rtol=rtol)
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize("product", ["final", "preliminary"])
 def test_source_fill_value_is_the_only_missing_value_marker(
     example_source_file_paths: dict[ChirpsProduct, Path], product: ChirpsProduct
