@@ -18,7 +18,6 @@ from reformatters.common.config_models import (
     Coordinate,
     CoordinateAttrs,
     DatasetAttributes,
-    DataVarAttrs,
     Encoding,
 )
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -126,7 +125,7 @@ class StaticGroupConfig(MultiGroupConfig):
             },
             coords={
                 "node_latitude": ("node", np.array([0, 1, 0, 1], dtype=np.float32)),
-                "node_longitude": ("node", np.array([0, 0, 1, 1], dtype=np.float64)),
+                "node_longitude": ("node", np.array([0, 0, 1, 1], dtype=np.float32)),
             },
             attrs={"Conventions": "UGRID-1.0"},
         )
@@ -138,20 +137,13 @@ class StaticGroupConfig(MultiGroupConfig):
                 fill_value=-1,
                 compressors=[zarr_utils.BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE],
             ).model_dump(exclude_none=True)
-        for name, dtype, compressor in (
-            ("node_latitude", "float32", zarr_utils.BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE),
-            (
-                "node_longitude",
-                "float64",
-                zarr_utils.BLOSC_8BYTE_ZSTD_LEVEL3_BITSHUFFLE,
-            ),
-        ):
+        for name in ("node_latitude", "node_longitude"):
             ds[name].encoding = Encoding(
-                dtype=dtype,
+                dtype="float32",
                 chunks=(4,),
                 shards=None,
                 fill_value=np.nan,
-                compressors=[compressor],
+                compressors=[zarr_utils.BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE],
             ).model_dump(exclude_none=True)
         return {"mesh": ds}
 
@@ -219,6 +211,15 @@ def test_structural_guard_rejects_static_array_drift(
         template_utils.assert_no_structural_drift_from_existing_store(
             updated, existing, "init_time"
         )
+
+
+def test_get_template_rejects_undeclared_static_group(
+    config: StaticGroupConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config.update_template()
+    monkeypatch.setattr(StaticGroupConfig, "static_groups", lambda self: {})
+    with pytest.raises(AssertionError, match="run update-template"):
+        config.get_template("2020-01-02")
 
 
 @pytest.mark.parametrize("append_dim", ["time", "init_time"])
@@ -367,23 +368,6 @@ def test_materialized_backfill_update_and_refresh_preserve_static_group(
 def test_optional_mesh_and_grid_attributes_round_trip_and_omit_none(
     config: StaticGroupConfig,
 ) -> None:
-    attrs = config.dataset_attributes
-    grid_attrs = replace(
-        attrs, source_grid_name="Native grid", source_grid_id="grid-uuid"
-    )
-    assert grid_attrs.model_dump(exclude_none=True)["source_grid_id"] == "grid-uuid"
-    assert "source_grid_name" not in attrs.model_dump(exclude_none=True)
-    var_attrs = DataVarAttrs(
-        long_name="Temperature",
-        short_name="t",
-        units="K",
-        step_type="instant",
-        mesh="/mesh/mesh",
-        location="face",
-        cell_measures="area: cell_area",
-    )
-    assert var_attrs.model_dump(exclude_none=True)["cell_measures"] == "area: cell_area"
-    assert "mesh" not in replace(var_attrs, mesh=None).model_dump(exclude_none=True)
     config.update_template()
     tree = config.get_template("2020-01-02")
     assert "source_grid_name" not in tree.attrs

@@ -51,13 +51,6 @@ BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE = BloscCodec(
     shuffle="bitshuffle",
 ).to_dict()
 
-BLOSC_8BYTE_ZSTD_LEVEL3_BITSHUFFLE = BloscCodec(
-    typesize=8,
-    cname="zstd",
-    clevel=3,
-    shuffle="bitshuffle",
-).to_dict()
-
 
 def copy_data_var(
     data_var_path: str,
