@@ -70,6 +70,7 @@ def main() -> None:
             url = f"{_BASE_URL}/{path}"
             response = client.get(url)
             response.raise_for_status()
+            assert response.status_code == 200, f"{url}: HTTP {response.status_code}"
             destination = fixture_path(url)
             if path.endswith(".tif"):
                 download = destination.with_name(f"{destination.name}.download")
