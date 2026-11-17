@@ -18,24 +18,24 @@ from reformatters.ecmwf.archive_gribs.request_shards import (
     DAILY_LEAD_TIMES,
     initialization_selections,
 )
-from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.template_config import (
-    EcmwfIfsEnsForecast46Day15DegreeTemplateConfig,
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.common_template_config import (
+    EcmwfIfsEns46DayCommonTemplateConfig,
 )
-from reformatters.ecmwf.ifs_ens.forecast_46_day_6_hourly_1_5_degree.template_config import (
-    EcmwfIfsEnsForecast46Day6Hourly15DegreeTemplateConfig,
-)
-from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.config_models import (
     EcmwfIfsEns46DayDataVar,
 )
-from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.region_job import (
     EcmwfIfsEns46DayRegionJob,
     EcmwfIfsEns46DaySourceFileCoord,
     _deaccumulate_signed_inplace,
     _sub_step_lead_times,
     selections_by_variable,
 )
-from reformatters.ecmwf.ifs_ens.forecast_46_day_template_config import (
-    EcmwfIfsEns46DayCommonTemplateConfig,
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.template_config import (
+    EcmwfIfsEnsForecast46Day15DegreeTemplateConfig,
+)
+from reformatters.ecmwf.ifs_ens.forecast_46_day_6_hourly_1_5_degree.template_config import (
+    EcmwfIfsEnsForecast46Day6Hourly15DegreeTemplateConfig,
 )
 from tests.ecmwf.s2s_fixtures import blob_record, extract_messages
 

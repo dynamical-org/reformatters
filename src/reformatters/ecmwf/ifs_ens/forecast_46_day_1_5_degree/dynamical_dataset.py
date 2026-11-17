@@ -7,10 +7,10 @@ from reformatters.common import validation
 from reformatters.common.config_models import source_fill_value_var_names
 from reformatters.common.dynamical_dataset import DynamicalDataset
 from reformatters.common.kubernetes import CronJob, ReformatCronJob
-from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.config_models import (
     EcmwfIfsEns46DayDataVar,
 )
-from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.region_job import (
     EcmwfIfsEns46DayRegionJob,
     EcmwfIfsEns46DaySourceFileCoord,
 )

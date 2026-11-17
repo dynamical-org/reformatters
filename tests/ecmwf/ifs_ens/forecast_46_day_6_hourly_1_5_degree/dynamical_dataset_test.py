@@ -8,11 +8,11 @@ from reformatters.common.types import DatetimeLike
 from reformatters.ecmwf.archive_gribs.forecast_46_day_archiver import (
     MATERIALIZED_PRODUCT_ECDS_VARIABLES,
 )
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.region_job import (
+    EcmwfIfsEns46DayRegionJob,
+)
 from reformatters.ecmwf.ifs_ens.forecast_46_day_6_hourly_1_5_degree.dynamical_dataset import (
     EcmwfIfsEnsForecast46Day6Hourly15DegreeDataset,
-)
-from reformatters.ecmwf.ifs_ens.forecast_46_day_region_job import (
-    EcmwfIfsEns46DayRegionJob,
 )
 from tests.chunk_utils import patch_write_shards_containing, shrink_chunks_and_shards
 from tests.common.dynamical_dataset_test import (

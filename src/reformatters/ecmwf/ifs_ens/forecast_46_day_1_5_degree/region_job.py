@@ -58,7 +58,7 @@ from reformatters.ecmwf.archive_gribs.request_shards import (
     EcdsSelection,
     initialization_selections,
 )
-from reformatters.ecmwf.ifs_ens.forecast_46_day_config_models import (
+from reformatters.ecmwf.ifs_ens.forecast_46_day_1_5_degree.config_models import (
     EcmwfIfsEns46DayDataVar,
     SubStepReduction,
 )
