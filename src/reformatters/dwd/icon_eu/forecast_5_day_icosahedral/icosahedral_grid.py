@@ -18,7 +18,7 @@ CELL_COUNT: Final = 768_608
 NODE_COUNT: Final = 385_555
 GRID_UUID: Final = "832c1507-fbc7-3eb3-8413-9890094d2c60"
 GRID_NAME: Final = "ICON grid 62 (R03B08)"
-SPHERE_RADIUS_METRES: Final = 6_371_229
+SPHERE_RADIUS_METERS: Final = 6_371_229
 # 21 mantissa bits maintain 2.16 m maximum horizontal error.
 COORDINATE_KEEP_MANTISSA_BITS: Final = 21
 GRID_PATH: Final = Path(__file__).with_name("grid.npz.blosc")
@@ -93,7 +93,7 @@ def mesh_dataset() -> xr.Dataset:
 def spatial_reference_coordinate() -> Coordinate:
     wkt = (
         'GEOGCS["Coordinate System imported from GRIB file",DATUM["unnamed",'
-        f'SPHEROID["Sphere",{SPHERE_RADIUS_METRES},0]],PRIMEM["Greenwich",0],'
+        f'SPHEROID["Sphere",{SPHERE_RADIUS_METERS},0]],PRIMEM["Greenwich",0],'
         'UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],'
         'AXIS["Latitude",NORTH],AXIS["Longitude",EAST]]'
     )
@@ -104,8 +104,8 @@ def spatial_reference_coordinate() -> Coordinate:
             units=None,
             statistics_approximate=None,
             crs_wkt=wkt,
-            semi_major_axis=float(SPHERE_RADIUS_METRES),
-            semi_minor_axis=float(SPHERE_RADIUS_METRES),
+            semi_major_axis=float(SPHERE_RADIUS_METERS),
+            semi_minor_axis=float(SPHERE_RADIUS_METERS),
             inverse_flattening=0.0,
             reference_ellipsoid_name="Sphere",
             longitude_of_prime_meridian=0.0,
@@ -131,7 +131,7 @@ def regenerate_grid(grid_path: Path, output_path: Path = GRID_PATH) -> None:
             assert source.tags()["NC_GLOBAL#uuidOfHGrid"] == GRID_UUID
             assert (
                 float(source.tags()["NC_GLOBAL#semi_major_axis"])
-                == SPHERE_RADIUS_METRES
+                == SPHERE_RADIUS_METERS
             )
         for names in (("clat", "clon"), ("vlat", "vlon")):
             coordinates = []
