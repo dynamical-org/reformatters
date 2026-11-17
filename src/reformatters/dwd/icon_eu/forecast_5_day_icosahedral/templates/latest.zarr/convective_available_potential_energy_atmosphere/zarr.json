@@ -72,8 +72,8 @@
     "step_type": "instant",
     "mesh": "/mesh/mesh",
     "location": "face",
-    "cell_measures": "area: /mesh/cell_area",
-    "coordinates": "expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
+    "cell_measures": "area: cell_area",
+    "coordinates": "cell_area expected_forecast_length ingested_forecast_length latitude longitude spatial_ref valid_time",
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

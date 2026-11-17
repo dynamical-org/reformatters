@@ -37,8 +37,13 @@
     }
   ],
   "attributes": {
+    "long_name": "Cell area",
     "standard_name": "cell_area",
     "units": "m2",
+    "statistics_approximate": {
+      "min": 28571058.0,
+      "max": 44897092.0
+    },
     "_FillValue": "AAAAAAAA+H8="
   },
   "dimension_names": [

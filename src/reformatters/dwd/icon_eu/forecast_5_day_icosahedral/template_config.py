@@ -70,6 +70,7 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
             **self._regular_grid_config().derive_coordinates(ds),
             "latitude": (("cell",), latitude),
             "longitude": (("cell",), longitude),
+            "cell_area": (("cell",), icosahedral_grid.grid_arrays()["cell_area"]),
         }
 
     @computed_field
@@ -120,6 +121,27 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
                     ),
                 )
             )
+        area = icosahedral_grid.grid_arrays()["cell_area"]
+        result.append(
+            Coordinate(
+                name="cell_area",
+                encoding=Encoding(
+                    dtype="float32",
+                    fill_value=np.nan,
+                    chunks=icosahedral_grid.CELL_COUNT,
+                    shards=None,
+                    compressors=[BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE],
+                ),
+                attrs=CoordinateAttrs(
+                    long_name="Cell area",
+                    standard_name="cell_area",
+                    units="m2",
+                    statistics_approximate=StatisticsApproximate(
+                        min=float(area.min()), max=float(area.max())
+                    ),
+                ),
+            )
+        )
         return result
 
     @computed_field
@@ -131,7 +153,7 @@ class DwdIconEuForecast5DayIcosahedralTemplateConfig(TemplateConfig[DwdIconEuDat
                 var.attrs,
                 mesh="/mesh/mesh",
                 location="face",
-                cell_measures="area: /mesh/cell_area",
+                cell_measures="area: cell_area",
             )
             if var.name == "wind_gust_10m":
                 attrs = replace(

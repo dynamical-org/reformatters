@@ -69,7 +69,9 @@ def test_written_mesh_preserves_triangle_and_area_access(tmp_path: Path) -> None
         xr.open_zarr(store, group="mesh") as grid,
     ):
         measure = ds.temperature_2m.attrs["cell_measures"].split()[1]
-        assert measure == "/mesh/cell_area"
+        assert measure == "cell_area"
+        assert "cell_area" in ds.coords
+        assert "cell_area" not in ds.xindexes
         triangles = grid.face_node_connectivity.values
         assert triangles.min() == 0
         assert triangles.max() < grid.sizes["node"]
@@ -83,7 +85,7 @@ def test_written_mesh_preserves_triangle_and_area_access(tmp_path: Path) -> None
             atol=2e-5,
             rtol=0,
         )
-        assert grid.cell_area.attrs["units"] == "m2"
-        assert_allclose(grid.cell_area[0], 43068914.0242895, rtol=1e-7)
+        assert ds[measure].attrs["units"] == "m2"
+        assert_allclose(ds[measure][0], 43068914.0242895, rtol=1e-7)
         assert ds.attrs["source_grid_id"] == "832c1507-fbc7-3eb3-8413-9890094d2c60"
         assert ds.cell.dtype == np.int32

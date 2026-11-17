@@ -77,11 +77,6 @@ def mesh_dataset() -> xr.Dataset:
                 arrays["face_node_connectivity"],
                 {"cf_role": "face_node_connectivity", "start_index": 0},
             ),
-            "cell_area": (
-                "cell",
-                arrays["cell_area"],
-                {"standard_name": "cell_area", "units": "m2"},
-            ),
         }
     )
     for var in ds.data_vars.values():
