@@ -28,7 +28,7 @@ class DwdIconEuForecast5DayIcosahedralDataset(
         return [
             ReformatCronJob(
                 name=f"{self.dataset_id}-update",
-                # Hand-set from 4 complete native-grid runs over one day; the latest last file was init+3:13:53.
+                # Hand-set from 5 complete native-grid runs over about one day; the latest last file was init+3:13:53.
                 schedule="17 3,9,15,21 * * *",
                 concurrency_policy="Allow",
                 pod_active_deadline=timedelta(hours=6),
