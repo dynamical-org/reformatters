@@ -80,11 +80,7 @@ def test_operational_configuration(dataset: EcmwfIfsEnsForecastVirtualDataset) -
     assert cron.workers_total == cron.parallelism == 1
     fine = dataset.template_config.resolution == "0p1"
     prefixes = [c.url_prefix for c in dataset.icechunk_virtual_config.containers]
-    assert prefixes == (
-        ["gs://ecmwf-open-data/"]
-        if fine
-        else ["gs://ecmwf-open-data/", "s3://ecmwf-forecasts/"]
-    )
+    assert prefixes == ["gs://ecmwf-open-data/", "s3://ecmwf-forecasts/"]
     assert len(dataset.validators()) == 3
     for hour in (
         (0, 6, 12, 18) if dataset.template_config.forecast_days == 6 else (0, 12)

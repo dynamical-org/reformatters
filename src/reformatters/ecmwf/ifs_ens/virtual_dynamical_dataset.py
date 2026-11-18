@@ -35,7 +35,8 @@ class EcmwfIfsEnsForecastVirtualDataset(
     icechunk_virtual_config: IcechunkVirtualConfig = Field(
         default_factory=lambda data: IcechunkVirtualConfig(
             containers=ecmwf_virtual_chunk_containers(
-                s3_fallback_before=data["region_job_class"].s3_fallback_before
+                s3_fallback_before=data["region_job_class"].s3_fallback_before,
+                include_s3=True,
             ),
             # At 85 leads: 40 x 85 x 51 x 16 bytes = 2.65 MiB per root array;
             # 6 x 85 x 51 x 14 x 16 bytes = 5.56 MiB per pressure array.

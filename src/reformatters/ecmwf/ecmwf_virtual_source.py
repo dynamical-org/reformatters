@@ -27,12 +27,12 @@ class EcmwfVirtualSourceFileCoord(InitLeadSourceFileCoord):
 
 
 def ecmwf_virtual_chunk_containers(
-    *, s3_fallback_before: pd.Timestamp | None
+    *, s3_fallback_before: pd.Timestamp | None, include_s3: bool = False
 ) -> tuple[icechunk.VirtualChunkContainer, ...]:
     containers = (
         icechunk.VirtualChunkContainer(GCS_LOCATION_PREFIX, icechunk.gcs_store()),
     )
-    if s3_fallback_before is not None:
+    if include_s3 or s3_fallback_before is not None:
         containers += (
             icechunk.VirtualChunkContainer(
                 S3_LOCATION_PREFIX, icechunk.s3_store(region=S3_REGION)
