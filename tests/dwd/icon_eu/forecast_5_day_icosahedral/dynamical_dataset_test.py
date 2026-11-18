@@ -26,12 +26,12 @@ def dataset() -> DwdIconEuForecast5DayIcosahedralDataset:
     )
 
 
-def test_native_update_uses_native_timing_and_stays_suspended_until_backfilled(
+def test_native_update_uses_native_timing_and_runs(
     dataset: DwdIconEuForecast5DayIcosahedralDataset,
 ) -> None:
     _archive_job, update = dataset.operational_kubernetes_resources("test-image")
     assert update.name == f"{dataset.dataset_id}-update"
-    assert update.suspend is True
+    assert update.suspend is False
     assert update.schedule == "17 3,9,15,21 * * *"
     assert update.pod_active_deadline == timedelta(hours=6)
     assert update.active_deadline == timedelta(hours=6)
