@@ -277,7 +277,7 @@ class EcdsRequest:
 
         A job ECDS fails, or no longer holds, is submitted again after
         `resubmit_wait_seconds`, doubling each time. No job is submitted once
-        `resubmit_budget_seconds` have passed since this call began; the failure is
+        `resubmit_budget_seconds` have passed since polling began; the failure is
         raised as `EcdsJobFailedError` instead. Poll exhaustion raises `TimeoutError`
         and preserves the request for a later call. A request older than
         `maximum_request_age_seconds` is cancelled before it is replaced.
@@ -316,7 +316,7 @@ class EcdsRequest:
                     raise
                 log.warning("%s; submitting it again in %.0f s", e, wait_seconds)
                 time.sleep(wait_seconds)
-                submit()
+                submit(resubmit_deadline=deadline)
                 wait_seconds *= 2
             except TimeoutError:
                 state = self.state_store.read()
@@ -335,10 +335,15 @@ class EcdsRequest:
         poll_seconds: float,
         maximum_polls: int,
         maximum_request_age_seconds: float,
+        resubmit_deadline: float | None = None,
     ) -> RequestState:
         """Submit a job for `target`, discarding any partial download of an earlier job's result."""
         state = self.submit(
-            payload, poll_seconds, maximum_polls, maximum_request_age_seconds
+            payload,
+            poll_seconds,
+            maximum_polls,
+            maximum_request_age_seconds,
+            resubmit_deadline=resubmit_deadline,
         )
         _partial_path(target).unlink(missing_ok=True)
         _delete_part_files(target)
@@ -350,20 +355,27 @@ class EcdsRequest:
         poll_seconds: float = 30,
         maximum_polls: int = 240,
         maximum_request_age_seconds: float = MAXIMUM_REQUEST_AGE_SECONDS,
+        *,
+        resubmit_deadline: float | None = None,
     ) -> RequestState:
         assert self.session.headers.get("PRIVATE-TOKEN"), (
             "Set ECDS_API_KEY or a `key:` line in ~/.cdsapirc"
         )
         deadline = time.monotonic() + poll_seconds * maximum_polls
+        if resubmit_deadline is not None:
+            deadline = min(deadline, resubmit_deadline)
         outstanding = ""
         for poll_index in range(maximum_polls):
             if poll_index > 0 and time.monotonic() >= deadline:
                 break
             try:
                 with _SUBMISSION_LOCK:
-                    if state := self._matching_outstanding_request(
+                    _check_resubmit_deadline(resubmit_deadline)
+                    state = self._matching_outstanding_request(
                         payload, maximum_request_age_seconds
-                    ):
+                    )
+                    _check_resubmit_deadline(resubmit_deadline)
+                    if state is not None:
                         self.state_store.write(state)
                         log.info("Resuming outstanding ECDS job %s", state.request_id)
                         return state
@@ -371,6 +383,7 @@ class EcdsRequest:
             except EcdsAccountBusyError as e:
                 outstanding = str(e)
             _sleep_bounded(poll_seconds, deadline)
+        _check_resubmit_deadline(resubmit_deadline)
         raise TimeoutError(
             f"ECDS account queue did not clear within {maximum_polls} polls "
             f"of {poll_seconds}s: {outstanding}"
@@ -892,6 +905,11 @@ def _failure_priority(error: BaseException) -> int:
     if isinstance(error, _ResultGoneError):
         return 1
     return 2
+
+
+def _check_resubmit_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() >= deadline:
+        raise EcdsJobFailedError("ECDS failed-job resubmission budget expired")
 
 
 def _sleep_bounded(seconds: float, deadline: float) -> None:

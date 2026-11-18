@@ -1,5 +1,6 @@
 import json
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -40,6 +41,7 @@ class QueueApi(BaseAdapter):
         self.release_submission = threading.Event()
         self.listed_during_submission = threading.Event()
         self.list_count = 0
+        self.before_list: Callable[[], None] = lambda: None
         self.finish_on_second_list: set[str] = set()
 
     def add(
@@ -85,6 +87,7 @@ class QueueApi(BaseAdapter):
                 self.jobs[job_id]["status"] = "dismissed"
             body = self.jobs[job_id]
         elif job_id == "jobs":
+            self.before_list()
             self.list_count += 1
             if self.list_count == 2:
                 for finished in self.finish_on_second_list:
@@ -446,4 +449,63 @@ def test_overage_other_selection_is_cancelled_before_requested_selection_is_subm
         "DELETE",
         "POST",
     ]
+    assert target.read_bytes() == grib_message()
+
+
+@pytest.mark.parametrize("list_delay_seconds", [0, 2])
+def test_failed_job_retry_never_submits_after_budget_expires_in_account_queue(
+    tmp_path: Path, lifecycle_clock: FakeClock, list_delay_seconds: int
+) -> None:
+    api = QueueApi()
+    api.add("failed", PAYLOAD)
+    api.jobs["failed"]["status"] = "failed"
+    api.before_list = lambda: lifecycle_clock.sleep(list_delay_seconds)
+    if not list_delay_seconds:
+        api.add("other", {"variable": ["temperature"]})
+        api.finish_on_second_list.add("other")
+    request = client(tmp_path / "state.json", api)
+    request.state_store.write(
+        ecds_client.RequestState(
+            request_id="failed",
+            payload=PAYLOAD,
+            submitted_at=START.isoformat(),
+            status_url=f"{JOBS}/failed",
+            status="running",
+        )
+    )
+    api.complete_on_poll.add(f"new-{len(api.jobs)}")
+
+    with pytest.raises(ecds_client.EcdsJobFailedError):
+        request.retrieve(
+            PAYLOAD,
+            tmp_path / "result.grib2",
+            poll_seconds=2,
+            maximum_polls=3,
+            resubmit_wait_seconds=0,
+            resubmit_budget_seconds=1,
+        )
+
+    assert not any(method in {"POST", "DELETE"} for method, _ in api.sent)
+    assert lifecycle_clock.now == max(1, list_delay_seconds)
+
+
+def test_initial_submission_waits_for_queue_without_using_failed_job_retry_budget(
+    tmp_path: Path, lifecycle_clock: FakeClock
+) -> None:
+    api = QueueApi()
+    api.add("other", {"variable": ["temperature"]})
+    api.finish_on_second_list.add("other")
+    api.complete_on_poll.add("new-1")
+    target = tmp_path / "result.grib2"
+
+    client(tmp_path / "state.json", api).retrieve(
+        PAYLOAD,
+        target,
+        poll_seconds=2,
+        maximum_polls=3,
+        resubmit_wait_seconds=0,
+        resubmit_budget_seconds=1,
+    )
+
+    assert lifecycle_clock.now == 2
     assert target.read_bytes() == grib_message()
