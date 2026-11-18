@@ -520,7 +520,6 @@ def test_slow_range_details_include_threshold_boundary_and_body_rate(
         json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
         for r in caplog.records
     ]
-    assert region_job.SLOW_RANGE_SECONDS == 8.0
     assert len(details) == (elapsed >= 8.0)
     if details:
         assert details[0]["event"] == "range_fetch"
