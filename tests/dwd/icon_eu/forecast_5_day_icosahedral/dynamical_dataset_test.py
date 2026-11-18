@@ -5,6 +5,7 @@ from pathlib import PurePosixPath
 from unittest.mock import Mock, call, patch
 
 import pytest
+from typer.testing import CliRunner
 
 from reformatters.dwd.icon_eu.forecast_5_day_icosahedral import (
     DwdIconEuForecast5DayIcosahedralDataset,
@@ -167,14 +168,12 @@ def test_archive_grib_files_raises_both_errors_when_both_phases_fail(
     ]
 
 
-def test_get_cli_has_archive_command(
+def test_cli_runs_the_archive_jobs_command(
     dataset: DwdIconEuForecast5DayIcosahedralDataset,
 ) -> None:
-    cli = dataset.get_cli()
-    callback_names = [
-        getattr(cmd.callback, "__name__", None) for cmd in cli.registered_commands
-    ]
-    assert "archive_grib_files" in callback_names
+    archive_job, _update = dataset.operational_kubernetes_resources("test-image")
+    result = CliRunner().invoke(dataset.get_cli(), [*archive_job.command, "--help"])
+    assert result.exit_code == 0, result.output
 
 
 def test_archive_grib_files_fails_when_regular_lat_lon_copyurl_fails(
