@@ -19,7 +19,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final, NoReturn
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 import requests
 
@@ -33,16 +33,15 @@ log = get_logger(__name__)
 ECDS_API_URL: Final[str] = "https://ecds.ecmwf.int/api"
 S2S_FORECASTS_PROCESS: Final[str] = "s2s-forecasts"
 ECDS_FAILURE_STATUSES: Final[frozenset[str]] = frozenset(
-    {"failed", "rejected", "dismissed", "cancelled"}
+    {"failed", "rejected", "dismissed", "cancelled", "deleted"}
 )
-# Assigned by this client, not ECDS: the job or its result is gone from ECDS, or
-# polling gave up on it. Either way the job is never resumed, only replaced.
+# Assigned by this client, not ECDS: the job or its result is gone.
 EXPIRED_STATUS: Final[str] = "expired"
-ABANDONED_STATUS: Final[str] = "abandoned"
 TERMINAL_FAILURE_STATUSES: Final[frozenset[str]] = ECDS_FAILURE_STATUSES | {
     EXPIRED_STATUS,
-    ABANDONED_STATUS,
 }
+MAXIMUM_REQUEST_AGE_SECONDS: Final[float] = 24 * 60 * 60
+_SUBMISSION_LOCK = threading.Lock()
 REQUEST_TIMEOUT_SECONDS: Final[float] = 60
 DOWNLOAD_TIMEOUT_SECONDS: Final[float] = 120
 MAXIMUM_POLL_BACKOFF_EXPONENT: Final[int] = 6
@@ -55,6 +54,10 @@ DOWNLOAD_CHUNK_BYTES: Final[int] = 1024 * 1024
 
 class EcdsJobFailedError(Exception):
     """The job ended in a terminal status: ECDS failed it, or its result is gone."""
+
+
+class EcdsAccountBusyError(Exception):
+    """Another S2S selection is outstanding on this account."""
 
 
 class EcdsRangeMismatchError(RuntimeError):
@@ -251,6 +254,7 @@ class EcdsRequest:
         resubmit_wait_seconds: float = RESUBMIT_WAIT_SECONDS,
         resubmit_budget_seconds: float = RESUBMIT_BUDGET_SECONDS,
         parallel_range_downloads: int = PARALLEL_RANGE_DOWNLOADS,
+        maximum_request_age_seconds: float = MAXIMUM_REQUEST_AGE_SECONDS,
     ) -> Path:
         """Submit `payload` if it is not already in flight, then download to `target`.
 
@@ -261,10 +265,11 @@ class EcdsRequest:
         A job ECDS fails, or no longer holds, is submitted again after
         `resubmit_wait_seconds`, doubling each time. No job is submitted once
         `resubmit_budget_seconds` have passed since this call began; the failure is
-        raised as `EcdsJobFailedError` instead. A job still incomplete after
-        `maximum_polls` is abandoned and replaced once; a second such job raises
-        `TimeoutError`.
+        raised as `EcdsJobFailedError` instead. Poll exhaustion raises `TimeoutError`
+        and preserves the request for a later call. A request older than
+        `maximum_request_age_seconds` is cancelled before it is replaced.
         """
+        assert maximum_request_age_seconds > 0
         state = self.state_store.read_if_exists()
         if state is None or state.payload != dict(payload):
             self._submit_replacing(payload, target)
@@ -288,25 +293,107 @@ class EcdsRequest:
                 time.sleep(wait_seconds)
                 self._submit_replacing(payload, target)
                 wait_seconds *= 2
-            except TimeoutError as e:
+            except TimeoutError:
+                state = self.state_store.read()
+                age = (
+                    datetime.fromisoformat(_utc_now())
+                    - datetime.fromisoformat(state.submitted_at)
+                ).total_seconds()
+                if age < maximum_request_age_seconds:
+                    raise
+                self.cancel()
                 if replaced_after_timeout:
                     raise
                 replaced_after_timeout = True
-                log.warning("%s; submitting it again", e)
                 self._submit_replacing(payload, target)
 
     def _submit_replacing(
         self, payload: Mapping[str, Any], target: Path
     ) -> RequestState:
         """Submit a job for `target`, discarding any partial download of an earlier job's result."""
+        state = self.submit(payload)
         _partial_path(target).unlink(missing_ok=True)
         _delete_part_files(target)
-        return self.submit(payload)
+        return state
 
     def submit(self, payload: Mapping[str, Any]) -> RequestState:
         assert self.session.headers.get("PRIVATE-TOKEN"), (
             "Set ECDS_API_KEY or a `key:` line in ~/.cdsapirc"
         )
+        with _SUBMISSION_LOCK:
+            if state := self._matching_outstanding_request(payload):
+                self.state_store.write(state)
+                log.info("Resuming outstanding ECDS job %s", state.request_id)
+                return state
+            return self._submit(payload)
+
+    def _matching_outstanding_request(
+        self, payload: Mapping[str, Any]
+    ) -> RequestState | None:
+        jobs_url = f"{self.execution_url.split('/processes/', 1)[0]}/jobs"
+        page_url: str | None = jobs_url
+        params: dict[str, Any] | None = {
+            "status": ["accepted", "running"],
+            "limit": 100,
+        }
+        outstanding = []
+        while page_url is not None:
+            response = self.session.request(
+                "GET", page_url, params=params, timeout=REQUEST_TIMEOUT_SECONDS
+            )
+            response.raise_for_status()
+            body = response.json()
+            for job in body["jobs"]:
+                if job["processID"] != S2S_FORECASTS_PROCESS:
+                    continue
+                status_url = f"{jobs_url}/{quote(job['jobID'], safe='')}"
+                detail = self.session.request(
+                    "GET",
+                    status_url,
+                    params={"request": True},
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+                if detail.status_code == requests.codes.not_found:
+                    continue
+                detail.raise_for_status()
+                current = detail.json()
+                if current["status"] in ECDS_FAILURE_STATUSES:
+                    continue
+                if current["metadata"]["request"]["ids"] == dict(payload):
+                    return RequestState(
+                        request_id=current["jobID"],
+                        payload=dict(payload),
+                        submitted_at=current["created"],
+                        status_url=status_url,
+                        status=current["status"],
+                    )
+                if current["status"] != "successful":
+                    outstanding.append(current["jobID"])
+            next_url = _related_url(body, "next")
+            page_url = _api_url(next_url, page_url) if next_url else None
+            params = None
+        if outstanding:
+            raise EcdsAccountBusyError(
+                f"Outstanding S2S jobs prevent submission: {', '.join(outstanding)}"
+            )
+        return None
+
+    def cancel(self) -> None:
+        state = self.state_store.read()
+        status_url = _api_url(state.status_url, self.execution_url)
+        response = self.session.delete(status_url, timeout=REQUEST_TIMEOUT_SECONDS)
+        if response.status_code == requests.codes.not_found:
+            self._expire(state, f"job {status_url}")
+            return
+        response.raise_for_status()
+        state, _ = self.poll_once()
+        if state.status not in TERMINAL_FAILURE_STATUSES:
+            raise TimeoutError(
+                f"Cancellation of ECDS job {state.request_id} is not confirmed"
+            )
+        log.info("Cancelled ECDS job %s", state.request_id)
+
+    def _submit(self, payload: Mapping[str, Any]) -> RequestState:
         response = self.session.post(
             self.execution_url,
             json={"inputs": dict(payload)},
@@ -429,8 +516,6 @@ class EcdsRequest:
                 return state, result_url
             _sleep_bounded(poll_seconds, deadline)
         state = self.state_store.read()
-        state.status = ABANDONED_STATUS
-        self.state_store.write(state)
         raise TimeoutError(
             f"ECDS job {state.request_id} did not complete within {maximum_polls} "
             f"polls of {poll_seconds}s"

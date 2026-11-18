@@ -8,7 +8,7 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 
 import pytest
 import requests
@@ -54,6 +54,7 @@ def response(body: dict[str, Any], status_code: int = 200) -> Mock:
 def session_mock() -> Mock:
     session = Mock()
     session.headers = {"PRIVATE-TOKEN": "marker-a"}
+    session.request.return_value = response({"jobs": []})
     return session
 
 
@@ -689,7 +690,7 @@ def test_an_expired_job_is_recorded_as_terminal(tmp_path: Path) -> None:
     assert "404" in state.errors[-1]
 
 
-def test_retrieve_replaces_a_job_whose_polling_is_exhausted(
+def test_retrieve_resumes_after_poll_timeout_without_submitting_another_job(
     tmp_path: Path, clock: FakeClock
 ) -> None:
     payload = {"variable": ["total_precipitation"]}
@@ -705,17 +706,25 @@ def test_retrieve_replaces_a_job_whose_polling_is_exhausted(
         response({"status": "successful", "asset": {"value": {"href": "blob"}}}),
     ]
 
+    request = EcdsRequest(
+        state_store, session=session, download_session=download_session
+    )
+    with pytest.raises(TimeoutError):
+        request.retrieve(
+            payload, tmp_path / "blob.grib2", poll_seconds=30, maximum_polls=240
+        )
+
     EcdsRequest(
         state_store, session=session, download_session=download_session
-    ).retrieve(payload, tmp_path / "blob.grib2", poll_seconds=30, maximum_polls=240)
+    ).retrieve(payload, tmp_path / "blob.grib2", poll_seconds=30)
 
     assert clock.now >= 30 * 240
-    assert session.post.call_count == 2
-    assert state_store.read().request_id == "job-2"
+    assert session.post.call_count == 1
+    assert state_store.read().request_id == "job-1"
     assert (tmp_path / "blob.grib2").exists()
 
 
-def test_retrieve_gives_up_after_the_replacement_job_also_exhausts_polling(
+def test_repeated_poll_timeouts_preserve_the_same_server_request(
     tmp_path: Path, clock: FakeClock
 ) -> None:
     payload = {"variable": ["total_precipitation"]}
@@ -729,8 +738,8 @@ def test_retrieve_gives_up_after_the_replacement_job_also_exhausts_polling(
             payload, tmp_path / "blob.grib2", poll_seconds=30, maximum_polls=3
         )
 
-    assert session.post.call_count == 2
-    assert state_store.read().status == "abandoned"
+    assert session.post.call_count == 1
+    assert state_store.read().status == "running"
 
     session.reset_mock()
     with pytest.raises(TimeoutError):
@@ -738,12 +747,8 @@ def test_retrieve_gives_up_after_the_replacement_job_also_exhausts_polling(
             payload, tmp_path / "blob.grib2", poll_seconds=30, maximum_polls=3
         )
 
-    # An abandoned job is replaced before any poll, not resumed for another budget.
-    assert session.mock_calls[0] == call.post(
-        "https://ecds.ecmwf.int/api/retrieve/v1/processes/s2s-forecasts/execution",
-        json={"inputs": payload},
-        timeout=60,
-    )
+    session.post.assert_not_called()
+    assert state_store.read().request_id == "job-1"
 
 
 def test_a_replacement_job_does_not_resume_the_abandoned_jobs_partial_download(
@@ -944,7 +949,10 @@ def test_submitted_status_locations_are_resolved_and_validated(
 ) -> None:
     request, api, downloads = offline_request
     body = {"jobID": "id"} if in_header else {"jobID": "id", "location": location}
-    api.responses = [wire_response(body, location=location if in_header else None)]
+    api.responses = [
+        wire_response({"jobs": []}),
+        wire_response(body, location=location if in_header else None),
+    ]
 
     if "foreign.test" in location:
         with pytest.raises(ValueError, match="configured HTTPS origin"):
@@ -957,7 +965,7 @@ def test_submitted_status_locations_are_resolved_and_validated(
             if location.startswith("/")
             else "https://api.test/api/retrieve/v1/processes/s2s-forecasts/jobs/id"
         )
-    assert len(api.sent) == 1
+    assert [sent.method for sent in api.sent] == ["GET", "POST"]
     assert not downloads.sent
 
 
@@ -1283,6 +1291,7 @@ def test_submitted_relative_location_uses_the_final_response_url(
 ) -> None:
     request, api, downloads = offline_request
     api.responses = [
+        wire_response({"jobs": []}),
         wire_response(status_code=307, location="/submission/start"),
         wire_response({"jobID": "id"}, status_code=201, location="jobs/id"),
     ]
@@ -1290,8 +1299,7 @@ def test_submitted_relative_location_uses_the_final_response_url(
     state = request.submit({"variable": ["tp"]})
 
     assert state.status_url == "https://api.test/submission/jobs/id"
-    assert len(api.sent) == 2
-    assert all(sent.method == "POST" for sent in api.sent)
+    assert [sent.method for sent in api.sent] == ["GET", "POST", "POST"]
     assert all(sent.headers["PRIVATE-TOKEN"] == "marker-a" for sent in api.sent)
     assert not downloads.sent
 
