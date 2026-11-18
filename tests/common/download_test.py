@@ -139,6 +139,16 @@ def test_http_store_is_cached() -> None:
     assert store1 is store2
 
 
+def test_requests_made_under_the_test_suite_identify_as_tests() -> None:
+    expected = "dynamical.org reformatters tests"
+    store = http_store("https://example.com/user-agent")
+    assert store.client_options["user_agent"] == expected
+    request = download_module._httpx_client().build_request(
+        "GET", "https://example.com/file"
+    )
+    assert request.headers["User-Agent"] == expected
+
+
 def test_s3_store_returns_s3_store() -> None:
     store = s3_store("s3://noaa-gefs-pds", region="us-east-1", skip_signature=True)
     assert isinstance(store, obstore.store.S3Store)
