@@ -1,0 +1,46 @@
+{
+  "shape": [],
+  "data_type": "int32",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": []
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default",
+    "configuration": {
+      "separator": "/"
+    }
+  },
+  "fill_value": -1,
+  "codecs": [
+    {
+      "name": "bytes",
+      "configuration": {
+        "endian": "little"
+      }
+    },
+    {
+      "name": "blosc",
+      "configuration": {
+        "typesize": 4,
+        "cname": "zstd",
+        "clevel": 3,
+        "shuffle": "bitshuffle",
+        "blocksize": 0
+      }
+    }
+  ],
+  "attributes": {
+    "cf_role": "mesh_topology",
+    "topology_dimension": 2,
+    "node_coordinates": "node_longitude node_latitude",
+    "face_node_connectivity": "face_node_connectivity",
+    "face_dimension": "cell",
+    "node_dimension": "node"
+  },
+  "zarr_format": 3,
+  "node_type": "array",
+  "storage_transformers": []
+}

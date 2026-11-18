@@ -9,6 +9,9 @@ from reformatters.contrib.noaa.ndvi_cdr.analysis import (
 )
 from reformatters.contrib.uarizona.swann.analysis import UarizonaSwannAnalysisDataset
 from reformatters.dwd.icon_eu.forecast_5_day import DwdIconEuForecast5DayDataset
+from reformatters.dwd.icon_eu.forecast_5_day_icosahedral import (
+    DwdIconEuForecast5DayIcosahedralDataset,
+)
 from reformatters.eccc.hrdps.forecast import EcccHrdpsForecastDataset
 from reformatters.ecmwf.aifs_ens.forecast import (
     EcmwfAifsEnsForecastDataset,
@@ -429,6 +432,9 @@ CLUSTER_DYNAMICAL_DATASETS: list[DynamicalDataset[Any, Any]] = [
     ),
     # DWD
     DwdIconEuForecast5DayDataset(
+        primary_storage_config=DwdIconEuIcechunkAwsOpenDataDatasetStorageConfig(),
+    ),
+    DwdIconEuForecast5DayIcosahedralDataset(
         primary_storage_config=DwdIconEuIcechunkAwsOpenDataDatasetStorageConfig(),
     ),
     # ECCC
