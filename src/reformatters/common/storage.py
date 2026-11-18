@@ -502,8 +502,14 @@ def _get_icechunk_store(
         log.info(
             f"Opening icechunk store {store_path} on branch {branch} in readonly mode"
         )
-        repo = icechunk.Repository.open(
-            storage, config=repo_config, authorize_virtual_chunk_access=credentials
+        repo = retry(
+            functools.partial(
+                icechunk.Repository.open,
+                storage,
+                config=repo_config,
+                authorize_virtual_chunk_access=credentials,
+            ),
+            max_attempts=3,
         )
         session = repo.readonly_session(branch)
         return session.store

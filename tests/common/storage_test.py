@@ -3,7 +3,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, Mock
+from unittest.mock import DEFAULT, MagicMock, Mock
 
 import fsspec
 import icechunk
@@ -1007,6 +1007,60 @@ class TestPrimaryStoreReadonly:
     """`primary_store(writable=False)` opens a readonly icechunk session.
     Tested end-to-end for writable=True already; readonly is exercised by
     `all_stores_exist` and validators and was previously uncovered."""
+
+    def test_readonly_open_recovers_from_a_truncated_response(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+            icechunk_virtual_config=_example_virtual_config(),
+        )
+        writable = factory.primary_store(writable=True)
+        assert isinstance(writable, IcechunkStore)
+        group = zarr.open_group(writable, mode="w")
+        group.create_array("values", shape=(1,), dtype="i4")[:] = [42]
+        writable.session.commit(message="init")
+        open_repo = Mock(
+            wraps=icechunk.Repository.open,
+            side_effect=[
+                icechunk.IcechunkError("streaming error: unexpected EOF"),
+                DEFAULT,
+            ],
+        )
+        monkeypatch.setattr(icechunk.Repository, "open", open_repo)
+        monkeypatch.setattr(retry_module.time, "sleep", Mock())
+
+        readonly = factory.primary_store(writable=False)
+
+        assert zarr.open_array(readonly, path="values", mode="r")[0] == 42
+        assert open_repo.call_count == 2
+
+    def test_readonly_open_propagates_the_final_error_after_three_attempts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        factory = StoreFactory(
+            primary_storage_config=StorageConfig(
+                base_path="s3://bucket/data", format=DatasetFormat.ICECHUNK
+            ),
+            dataset_id="test-dataset",
+            template_config_version="v1.0",
+        )
+        errors = [
+            icechunk.IcechunkError("streaming error: unexpected EOF") for _ in range(3)
+        ]
+        open_repo = Mock(side_effect=errors)
+        monkeypatch.setattr(icechunk.Repository, "open", open_repo)
+        monkeypatch.setattr(retry_module.time, "sleep", Mock())
+
+        with pytest.raises(icechunk.IcechunkError) as raised:
+            factory.primary_store(writable=False)
+
+        assert raised.value is errors[-1]
+        assert open_repo.call_count == 3
 
     def test_readonly_session_opens_on_specified_branch(self) -> None:
         factory = StoreFactory(
