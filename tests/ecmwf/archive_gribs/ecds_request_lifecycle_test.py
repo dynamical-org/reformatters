@@ -39,6 +39,8 @@ class QueueApi(BaseAdapter):
         self.submission_started = threading.Event()
         self.release_submission = threading.Event()
         self.listed_during_submission = threading.Event()
+        self.list_count = 0
+        self.finish_on_second_list: set[str] = set()
 
     def add(
         self,
@@ -83,6 +85,10 @@ class QueueApi(BaseAdapter):
                 self.jobs[job_id]["status"] = "dismissed"
             body = self.jobs[job_id]
         elif job_id == "jobs":
+            self.list_count += 1
+            if self.list_count == 2:
+                for finished in self.finish_on_second_list:
+                    self.jobs[finished]["status"] = "successful"
             status = self.list_status
             if (
                 self.submission_started.is_set()
@@ -160,19 +166,20 @@ def test_restart_without_local_state_adopts_a_matching_job_on_a_later_page(
     assert not any(method in {"POST", "DELETE"} for method, _ in api.sent)
 
 
-def test_another_outstanding_selection_blocks_submission_without_cancelling_it(
+def test_waiting_for_a_younger_selection_times_out_without_cancelling_it(
     tmp_path: Path, lifecycle_clock: FakeClock
 ) -> None:
     api = QueueApi()
     api.add("other", {"variable": ["temperature"]})
 
-    with pytest.raises(ecds_client.EcdsAccountBusyError):
+    with pytest.raises(TimeoutError):
         client(tmp_path / "state.json", api).retrieve(
-            PAYLOAD, tmp_path / "result.grib2", poll_seconds=0
+            PAYLOAD, tmp_path / "result.grib2", poll_seconds=1, maximum_polls=2
         )
 
     assert not any(method in {"POST", "DELETE"} for method, _ in api.sent)
     assert api.jobs["other"]["status"] == "running"
+    assert lifecycle_clock.now == 2
 
 
 def test_concurrent_clients_only_submit_one_outstanding_selection(
@@ -183,10 +190,13 @@ def test_concurrent_clients_only_submit_one_outstanding_selection(
 
     def submit(index: int) -> str:
         try:
-            client(tmp_path / f"state-{index}.json", api).submit(
-                {"variable": [f"variable-{index}"]}
+            client(tmp_path / f"state-{index}.json", api).retrieve(
+                {"variable": [f"variable-{index}"]},
+                tmp_path / f"result-{index}.grib2",
+                poll_seconds=1,
+                maximum_polls=2,
             )
-        except ecds_client.EcdsAccountBusyError:
+        except TimeoutError:
             return "blocked"
         return "submitted"
 
@@ -198,7 +208,7 @@ def test_concurrent_clients_only_submit_one_outstanding_selection(
         api.release_submission.set()
         results = [first.result(), second.result()]
 
-    assert sorted(results) == ["blocked", "submitted"]
+    assert results == ["blocked", "blocked"]
     assert len(api.jobs) == 1
 
 
@@ -329,3 +339,111 @@ def test_non_s2s_job_is_neither_adopted_nor_cancelled(
     assert state.request_id != "different-process"
     assert api.jobs["different-process"]["status"] == "running"
     assert not any(method == "DELETE" for method, _ in api.sent)
+
+
+@pytest.mark.parametrize(
+    "created",
+    ["2026-01-01T00:00:00", "2026-01-01T00:00:00Z", "2025-12-31T19:00:00-05:00"],
+)
+@pytest.mark.parametrize("persisted", [False, True])
+@pytest.mark.parametrize("complete", [False, True])
+def test_server_timestamp_forms_allow_timeout_and_completion_after_restart(
+    tmp_path: Path,
+    lifecycle_clock: FakeClock,
+    created: str,
+    persisted: bool,
+    complete: bool,
+) -> None:
+    api = QueueApi()
+    api.add("existing", PAYLOAD)
+    api.jobs["existing"]["created"] = created
+    state_path = tmp_path / "state.json"
+    if persisted:
+        state_path.write_text(
+            json.dumps(
+                {
+                    "request_id": "existing",
+                    "payload": PAYLOAD,
+                    "submitted_at": created,
+                    "status_url": f"{JOBS}/existing",
+                    "status": "running",
+                }
+            )
+        )
+    if complete:
+        api.complete_on_poll.add("existing")
+    request = client(state_path, api)
+    target = tmp_path / "result.grib2"
+
+    if complete:
+        request.retrieve(PAYLOAD, target, poll_seconds=1, maximum_polls=2)
+        assert target.read_bytes() == grib_message()
+    else:
+        with pytest.raises(TimeoutError):
+            request.retrieve(PAYLOAD, target, poll_seconds=1, maximum_polls=2)
+    assert not any(method in {"POST", "DELETE"} for method, _ in api.sent)
+
+
+def test_identical_request_from_another_producer_is_adopted_then_cancelled_only_when_overage(
+    tmp_path: Path, lifecycle_clock: FakeClock
+) -> None:
+    api = QueueApi()
+    api.add("another-producer", PAYLOAD)
+    state_path = tmp_path / "state.json"
+    target = tmp_path / "result.grib2"
+
+    with pytest.raises(TimeoutError):
+        client(state_path, api).retrieve(
+            PAYLOAD, target, poll_seconds=1, maximum_polls=2
+        )
+    assert not any(method in {"POST", "DELETE"} for method, _ in api.sent)
+
+    lifecycle_clock.now = 86_400
+    api.complete_on_poll.add("new-1")
+    client(state_path, api).retrieve(PAYLOAD, target, poll_seconds=1, maximum_polls=2)
+
+    assert api.jobs["another-producer"]["status"] == "dismissed"
+    assert [method for method, _ in api.sent if method in {"POST", "DELETE"}] == [
+        "DELETE",
+        "POST",
+    ]
+    assert target.read_bytes() == grib_message()
+
+
+def test_other_selection_finishes_while_waiting_then_requested_selection_downloads(
+    tmp_path: Path, lifecycle_clock: FakeClock
+) -> None:
+    api = QueueApi()
+    api.add("other", {"variable": ["temperature"]})
+    api.finish_on_second_list.add("other")
+    api.complete_on_poll.add("new-1")
+    target = tmp_path / "result.grib2"
+
+    client(tmp_path / "state.json", api).retrieve(
+        PAYLOAD, target, poll_seconds=1, maximum_polls=2
+    )
+
+    assert lifecycle_clock.sleeps == [1]
+    assert not any(method == "DELETE" for method, _ in api.sent)
+    assert target.read_bytes() == grib_message()
+
+
+def test_overage_other_selection_is_cancelled_before_requested_selection_is_submitted(
+    tmp_path: Path, lifecycle_clock: FakeClock
+) -> None:
+    api = QueueApi()
+    api.add("other", {"variable": ["temperature"]})
+    lifecycle_clock.now = 20
+    api.complete_on_poll.add("new-1")
+    target = tmp_path / "result.grib2"
+
+    client(tmp_path / "state.json", api).retrieve(
+        PAYLOAD, target, poll_seconds=1, maximum_polls=2, maximum_request_age_seconds=10
+    )
+
+    assert api.jobs["other"]["status"] == "dismissed"
+    assert [method for method, _ in api.sent if method in {"POST", "DELETE"}] == [
+        "DELETE",
+        "POST",
+    ]
+    assert target.read_bytes() == grib_message()
