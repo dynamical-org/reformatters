@@ -60,11 +60,11 @@ sudo ln -s /snap/bin/rclone /usr/bin/rclone
 ```
 
 You can test locally like this:
-`uv run main dwd-icon-eu-forecast-5-day archive-grib-files --dst-root-path=/local/path/regular-lat-lon --icosahedral-dst-root-path=/local/path/icosahedral`
+`uv run main dwd-icon-eu-forecast-5-day-icosahedral archive-grib-files --dst-root-path=/local/path/regular-lat-lon --icosahedral-dst-root-path=/local/path/icosahedral`
 
 To test uploading to a cloud bucket, the destination paths can start with an `rclone` remote, in
 the form `--dst-root-path=remote:path`
 
 For command line arguments that allow you to limit the number of files downloaded (e.g.
 `--nwp-init-hours`, `--icosahedral-nwp-init-hours` and `--icosahedral-params`), see
-`uv run main dwd-icon-eu-forecast-5-day archive-grib-files --help`
+`uv run main dwd-icon-eu-forecast-5-day-icosahedral archive-grib-files --help`
