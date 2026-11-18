@@ -14,12 +14,13 @@ from reformatters.dwd.archive_gribs.copy_files_from_dwd import copy_files_from_d
 from reformatters.dwd.archive_gribs.copy_icosahedral_files_from_dwd import (
     copy_icosahedral_files_from_dwd_https,
 )
+from reformatters.dwd.icon_eu.icon_eu_template_config import DwdIconEuDataVar
 
 from .region_job import (
     DwdIconEuForecast5DayRegionJob,
     DwdIconEuForecast5DaySourceFileCoord,
 )
-from .template_config import DwdIconEuDataVar, DwdIconEuForecast5DayTemplateConfig
+from .template_config import DwdIconEuForecast5DayTemplateConfig
 
 log = get_logger(__name__)
 
