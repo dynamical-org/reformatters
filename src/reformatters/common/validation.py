@@ -186,7 +186,7 @@ class VariableSelection(FrozenBaseModel):
 def open_flattened_dataset(
     store: zarr.storage.StoreLike, *, consolidated: bool
 ) -> xr.Dataset:
-    """Open a store as one flat Dataset covering every group.
+    """Open a store as one flat Dataset covering every data group.
 
     xr.open_zarr reads only the root group, so a multi-group dataset's vertical-group
     variables (e.g. ``pressure_level/temperature``) would be invisible to validators —
@@ -194,7 +194,7 @@ def open_flattened_dataset(
     it (iterating.flatten_groups) exposes every group var keyed by its store path; root
     vars keep their bare names. Validators key variables — and their include/exclude
     filters — by that path, which is unique across groups. A single-group store flattens
-    to exactly its root dataset.
+    to exactly its root dataset. Static groups are excluded.
     """
     tree = xr.open_datatree(
         store,  # ty: ignore[invalid-argument-type]
@@ -203,7 +203,7 @@ def open_flattened_dataset(
         consolidated=consolidated,
         decode_timedelta=True,  # so lead_time selects by pd.Timedelta label
     )
-    return iterating.flatten_groups(tree)
+    return iterating.flatten_groups(tree, include_static=False)
 
 
 def validate_dataset(

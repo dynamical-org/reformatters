@@ -4,6 +4,7 @@ from typing import Any
 
 import pandas as pd
 import pytest
+import xarray as xr
 
 from reformatters.common import template_utils
 from reformatters.common.dynamical_dataset import DynamicalDataset
@@ -71,6 +72,14 @@ def test_update_template_matches_existing_template(
 
     with open(dataset.template_config.template_path() / "zarr.json") as f:
         assert json.load(f) == updated_template
+
+    for name in dataset.template_config.static_groups():
+        xr.testing.assert_identical(
+            xr.open_zarr(updated_template_path, group=name, chunks=None),
+            xr.open_zarr(
+                dataset.template_config.template_path(), group=name, chunks=None
+            ),
+        )
 
 
 @pytest.mark.parametrize(

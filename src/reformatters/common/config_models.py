@@ -87,6 +87,8 @@ class DataVarAttrs(FrozenBaseModel):
     comment: Annotated[str, pydantic.Field(min_length=1)] | None = None
     step_type: Literal["instant", "accum", "avg", "min", "max"]
     ensemble_statistic: EnsembleStatistic | None = None
+    mesh: str | None = None
+    location: Literal["face"] | None = None
     # CF flag attributes for categorical variables, see CF Conventions section 3.5.
     # flag_values lists the coded values; flag_meanings is a blank separated label per value.
     flag_values: tuple[int, ...] | None = None
@@ -173,7 +175,9 @@ class Encoding(pydantic.BaseModel):
 
     # Could be any np.typing.DTypeLike but that type is loose and allows any string.
     # It's fine to add any valid dtype string to this literal.
-    dtype: Literal["float32", "float64", "uint16", "int16", "int64", "bool", "object"]
+    dtype: Literal[
+        "float32", "float64", "uint16", "int16", "int32", "int64", "bool", "object"
+    ]
     chunks: tuple[int, ...] | int
     shards: tuple[int, ...] | int | None  # We don't shard coordinate arrays
 

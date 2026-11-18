@@ -3,9 +3,23 @@ import math
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from itertools import batched, islice, pairwise, product, starmap
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 import xarray as xr
+
+from reformatters.common.types import AppendDim, VerticalGroup
+
+_APPEND_DIMS = frozenset(get_args(AppendDim.__value__))
+_VERTICAL_GROUPS = frozenset(get_args(VerticalGroup.__value__))
+
+
+def is_static_group(node: xr.DataTree) -> bool:
+    """A non-root, non-vertical group whose local arrays have no append dimension."""
+    return (
+        node.path != "/"
+        and node.name not in _VERTICAL_GROUPS
+        and _APPEND_DIMS.isdisjoint(node.to_dataset(inherit=False).dims)
+    )
 
 
 def node_group_name(node: xr.DataTree) -> str | None:
@@ -19,15 +33,19 @@ def node_path_prefix(node: xr.DataTree) -> str:
     return "" if group is None else f"{group}/"
 
 
-def walk_data_arrays(tree: xr.DataTree) -> Iterator[tuple[str, xr.DataArray]]:
+def walk_data_arrays(
+    tree: xr.DataTree, *, include_static: bool = True
+) -> Iterator[tuple[str, xr.DataArray]]:
     """Yield (var_path, DataArray) for every data var across all of a template's groups."""
     for node in tree.subtree:
+        if not include_static and is_static_group(node):
+            continue
         prefix = node_path_prefix(node)
         for name, data_array in node.to_dataset().data_vars.items():
             yield f"{prefix}{name}", data_array
 
 
-def flatten_groups(tree: xr.DataTree) -> xr.Dataset:
+def flatten_groups(tree: xr.DataTree, *, include_static: bool = True) -> xr.Dataset:
     """Flatten a (possibly multi-group, possibly nested) DataTree into one Dataset whose
     data vars are keyed by group path — root vars keep their bare name, a group var
     becomes ``group/name`` (nested: ``a/b/name``), the same path `walk_data_arrays` and
@@ -35,10 +53,13 @@ def flatten_groups(tree: xr.DataTree) -> xr.Dataset:
     each group's own dim coords come along. A single-node tree returns its root dataset.
 
     Recursing over ``tree.subtree`` means arbitrarily nested groups flatten with no
-    special-casing — the node path is the var-name prefix."""
+    special-casing — the node path is the var-name prefix. Set include_static=False
+    for weather processing and validation."""
     # Start from the root dataset so its attrs (dataset_id, ...) survive the merge.
     flat = tree.to_dataset()
     for node in tree.subtree:
+        if not include_static and is_static_group(node):
+            continue
         prefix = node_path_prefix(node)
         if not prefix:
             continue  # root is already in flat

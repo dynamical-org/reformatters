@@ -9,7 +9,7 @@ from icechunk.store import IcechunkStore
 from zarr.abc.store import Store
 from zarr.codecs import BloscCodec
 
-from reformatters.common.iterating import node_path_prefix
+from reformatters.common.iterating import is_static_group, node_path_prefix
 from reformatters.common.logging import get_logger
 from reformatters.common.retry import retry
 
@@ -42,6 +42,13 @@ BLOSC_8BYTE_ZSTD_LEVEL3_SHUFFLE = BloscCodec(
     cname="zstd",
     clevel=3,
     shuffle="shuffle",
+).to_dict()
+
+BLOSC_4BYTE_ZSTD_LEVEL3_BITSHUFFLE = BloscCodec(
+    typesize=4,
+    cname="zstd",
+    clevel=3,
+    shuffle="bitshuffle",
 ).to_dict()
 
 
@@ -106,17 +113,23 @@ def _copy_data_var_chunks(
 def _coord_chunk_globs(
     template_ds: xr.DataTree, exclude_coords: Collection[str] = ()
 ) -> list[str]:
-    """Glob patterns for every coordinate's chunk files, group-prefixed. The `c/**/*`
+    """Glob patterns for coordinate and static-array chunks, group-prefixed. The `c/**/*`
     pattern catches chunked coords (`<coord>/c/0`, `<coord>/c/0/0`); the bare `c` catches
     a scalar coord whose single chunk is the file `<coord>/c` (the caller's is_file filter
     drops the `c/` directory matched by the bare pattern for non-scalar coords).
-    `exclude_coords` names (matched in every group) get no value-chunk globs — used to
-    protect store-written coordinate values from a template metadata refresh."""
+    `exclude_coords` protects store-written coordinates in data groups from a template
+    metadata refresh; static-array value chunks are always included."""
     globs = []
     for node in template_ds.subtree:
         prefix = node_path_prefix(node)
-        for coord in node.to_dataset().coords:
-            if coord in exclude_coords:
+        ds = (
+            node.to_dataset(inherit=False)
+            if is_static_group(node)
+            else node.to_dataset()
+        )
+        names = ds.variables if is_static_group(node) else ds.coords
+        for coord in names:
+            if not is_static_group(node) and coord in exclude_coords:
                 continue
             globs.append(f"{prefix}{coord}/c/**/*")
             globs.append(f"{prefix}{coord}/c")
@@ -134,7 +147,7 @@ def copy_zarr_metadata(
     exclude_coord_value_chunks: Collection[str] = (),
 ) -> None:
     """
-    Copy the metadata and coordinate label arrays from the temporary store to the primary and replica stores.
+    Copy metadata, coordinate labels and static arrays to the primary and replica stores.
 
     In the zarr3 case, the updated metadata will become available to readers, which is why we update the metadata
     after we have already written the actual data chunks.
