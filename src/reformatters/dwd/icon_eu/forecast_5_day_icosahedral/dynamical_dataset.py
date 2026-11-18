@@ -95,7 +95,6 @@ class DwdIconEuForecast5DayIcosahedralDataset(
             secret_names=self.store_factory.k8s_secret_names(),
             workers_total=workers,
             parallelism=workers,
-            suspend=True,
         )
 
         return [archive_grib_files_job, update_cron_job]
