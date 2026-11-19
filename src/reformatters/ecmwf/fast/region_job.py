@@ -58,7 +58,7 @@ log = get_logger(__name__)
 
 
 TARGET_RANGE_CHUNK = 64 * 1024**2
-SLOW_RANGE_SECONDS = 30.0
+SLOW_RANGE_SECONDS = 8.0
 
 
 class _RangeTiming(NamedTuple):
@@ -73,6 +73,7 @@ class _RangeTiming(NamedTuple):
     phase: str
     error_type: str | None
     cause_type: str | None
+    body_bytes_per_s: float | None
 
 
 @dataclass
@@ -610,6 +611,12 @@ def _fetch_range(
             phase,
             error_type,
             cause_type,
+            received / (body_s - headers_s)
+            if received is not None
+            and body_s is not None
+            and headers_s is not None
+            and body_s > headers_s
+            else None,
         )
         timing.ranges.append(result)
         if error_type is not None or result.elapsed_s >= SLOW_RANGE_SECONDS:

@@ -281,6 +281,7 @@ def test_application_retry_events_measure_attempts_and_actual_backoff_without_er
                     "complete",
                     None,
                     None,
+                    None,
                 )
                 for i in range(2)
             ]
@@ -468,6 +469,9 @@ def test_range_events_measure_headers_body_and_failure_without_secrets(
         if failure_phase in (None, "body_validation")
         else None
     )
+    assert result.body_bytes_per_s == (
+        None if result.bytes_received is None else result.bytes_received / 3.0
+    )
     assert all(
         value is None or isinstance(value, (str, int, float)) for value in result
     )
@@ -484,8 +488,8 @@ def test_range_events_measure_headers_body_and_failure_without_secrets(
     )
 
 
-@pytest.mark.parametrize("elapsed", [29.999, 30.0, 30.001])
-def test_slow_range_details_include_threshold_boundary(
+@pytest.mark.parametrize("elapsed", [7.999, 8.0, 8.001])
+def test_slow_range_details_include_threshold_boundary_and_body_rate(
     ranged_job: tuple[EcmwfFastRegionJob, EcmwfFastSourceFileCoord, bytes],
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
@@ -516,12 +520,12 @@ def test_slow_range_details_include_threshold_boundary(
         json.loads(r.getMessage().split("Virtual pipeline ", 1)[1])
         for r in caplog.records
     ]
-    assert region_job.SLOW_RANGE_SECONDS == 30.0
-    assert len(details) == (elapsed >= 30.0)
+    assert len(details) == (elapsed >= 8.0)
     if details:
         assert details[0]["event"] == "range_fetch"
         assert details[0]["elapsed_s"] == elapsed
         assert details[0]["error_type"] is None
+        assert details[0]["body_bytes_per_s"] == round(len(data) / elapsed, 3)
 
 
 @pytest.mark.parametrize("failed", [False, True])
