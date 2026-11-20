@@ -1,9 +1,7 @@
 from collections.abc import Iterator, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from functools import partial
 from pathlib import Path, PurePosixPath
-from threading import Event
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -128,33 +126,6 @@ def test_every_selection_is_retrieved_validated_then_uploaded(
     assert archive_bucket["list_files"].call_args.args == (
         ":s3:bucket/ecmwf-s2s-grib/2026-08-10",
     )
-
-
-def test_archiving_retrieves_one_selection_at_a_time_by_default(
-    tmp_path: Path, archive_bucket: dict[str, MagicMock]
-) -> None:
-    first_started = Event()
-    release_first = Event()
-    another_started = Event()
-
-    def retrieve(inputs: dict[str, Any], target: Path, **kwargs: object) -> Path:
-        if not first_started.is_set():
-            first_started.set()
-            assert release_first.wait(timeout=5)
-        elif not release_first.is_set():
-            another_started.set()
-        return _write_blob(inputs, target, **kwargs)
-
-    archive_bucket["request"].return_value.retrieve.side_effect = retrieve
-    with ThreadPoolExecutor(1) as pool:
-        result = pool.submit(archive, tmp_path)
-        assert first_started.wait(timeout=5)
-        another_started.wait(timeout=1)
-        release_first.set()
-        assert result.result()
-
-    assert not another_started.is_set()
-    assert archive_bucket["request"].return_value.retrieve.call_count == len(SELECTIONS)
 
 
 def test_only_the_missing_delta_is_transferred(

@@ -22,20 +22,16 @@ from reformatters.common.logging import get_logger
 from reformatters.common.rclone import copy_local_file, list_files
 from reformatters.common.retry import retry
 
-from .ecds_client import (
-    MAXIMUM_REQUEST_AGE_SECONDS,
-    EcdsRequest,
-    StateStore,
-    constraints,
-    costing,
-)
+from .ecds_client import EcdsRequest, StateStore, constraints, costing
 from .grib_inventory import check_and_index_archived_blob
 from .request_shards import ECMWF_ORIGIN, EcdsSelection
 
 log = get_logger(__name__)
 
 ARCHIVE_WORK_DIR: Final[Path] = DOWNLOAD_DIR / "ecmwf-s2s-archive"
-DEFAULT_CONCURRENT_REQUESTS: Final[int] = 1
+# ECDS serves 8 simultaneous requests without error; 2 keeps some of the queue-time
+# saving while leaving most of the account to its other users.
+DEFAULT_CONCURRENT_REQUESTS: Final[int] = 2
 DEFAULT_PUBLICATION_POLL_INTERVAL: Final = pd.Timedelta(minutes=2)
 
 type Publication = Literal["unpublished", "partial", "published"]
@@ -57,11 +53,10 @@ def archive_initialization(
     checkers: int = 8,
     concurrent_requests: int = DEFAULT_CONCURRENT_REQUESTS,
     poll_seconds: float = 30,
-    maximum_polls: int = 240,
+    maximum_polls: int = 480,
     env_vars: dict[str, Any] | None = None,
     publication_deadline: pd.Timestamp | None = None,
     publication_poll_interval: pd.Timedelta = DEFAULT_PUBLICATION_POLL_INTERVAL,
-    maximum_request_age_seconds: float = MAXIMUM_REQUEST_AGE_SECONDS,
 ) -> bool:
     """Transfer the selections of `init_time` that are not already archived.
 
@@ -85,8 +80,6 @@ def archive_initialization(
         publication_deadline: Keep probing ECDS for publication until this UTC time;
             after the first probe, none starts after it. None probes once.
         publication_poll_interval: Time between the starts of successive probes.
-        maximum_request_age_seconds: Cancel an overdue request after polling times out,
-            confirming cancellation before submitting a replacement.
     """
     assert len(selections) > 0
     init_time_str = format_init_time(init_time)
@@ -138,7 +131,6 @@ def archive_initialization(
                 api_url=api_url,
                 poll_seconds=poll_seconds,
                 maximum_polls=maximum_polls,
-                maximum_request_age_seconds=maximum_request_age_seconds,
                 env_vars=env_vars,
             ),
             max_attempts=3,
@@ -221,7 +213,6 @@ def _archive_one_selection(
     api_url: str | None,
     poll_seconds: float,
     maximum_polls: int,
-    maximum_request_age_seconds: float,
     env_vars: dict[str, Any] | None,
 ) -> None:
     selection_work_dir = work_dir / selection.file_name
@@ -235,7 +226,6 @@ def _archive_one_selection(
         target,
         poll_seconds=poll_seconds,
         maximum_polls=maximum_polls,
-        maximum_request_age_seconds=maximum_request_age_seconds,
     )
     retrieved = time.monotonic()
     index_path = check_and_index_archived_blob(

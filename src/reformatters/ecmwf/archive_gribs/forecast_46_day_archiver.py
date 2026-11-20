@@ -24,7 +24,6 @@ from reformatters.ecmwf.archive_gribs.archive import (
     DEFAULT_CONCURRENT_REQUESTS,
     archive_initialization,
 )
-from reformatters.ecmwf.archive_gribs.ecds_client import MAXIMUM_REQUEST_AGE_SECONDS
 from reformatters.ecmwf.archive_gribs.request_shards import initialization_selections
 
 log = get_logger(__name__)
@@ -162,7 +161,6 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
         init_times_back: int = 3,
         checkers: int = 32,
         concurrent_requests: int = DEFAULT_CONCURRENT_REQUESTS,
-        maximum_request_age_seconds: float = MAXIMUM_REQUEST_AGE_SECONDS,
     ) -> None:
         """Retrieve `ECDS_VARIABLES` for recent initializations into the archive.
 
@@ -177,8 +175,6 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                 recent initializations is how an interrupted transfer resumes.
             checkers: Passed to `rclone --checkers` when listing the destination.
             concurrent_requests: How many ECDS requests to retrieve at once.
-            maximum_request_age_seconds: Cancel an overdue request after polling times
-                out, confirming cancellation before submitting a replacement.
         """
         with self._monitor(
             CronJob,
@@ -198,7 +194,6 @@ class EcmwfIfsEns46DayGribArchiver(OperationalResources):
                     dst_root_path,
                     checkers=checkers,
                     concurrent_requests=concurrent_requests,
-                    maximum_request_age_seconds=maximum_request_age_seconds,
                     env_vars=_source_coop_rclone_env_vars(),
                     publication_deadline=(
                         (init_time + PUBLICATION_DEADLINE).tz_localize("UTC")
