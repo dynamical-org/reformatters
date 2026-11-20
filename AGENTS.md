@@ -149,7 +149,7 @@ Follow [operational update timing](docs/operational_update_timing.md) when choos
 
 **Spatial dimensions:** If the source data uses a geographic projection we use dimensions latitude and longitude, else y and x are used for projected datasets. A projected dataset's y/x carry CF's `projection_y_coordinate`/`projection_x_coordinate` in metres, except on a rotated pole grid, whose axes are `grid_latitude`/`grid_longitude` in degrees.
 
-A native grid uses `cell` in source order with a zero-based int32 index and `latitude(cell)`/`longitude(cell)` cell centers. When the source defines polygons, put UGRID topology in the static child group `mesh`; data variables point to it with `mesh="/mesh/mesh"` and `location="face"`. Static groups are not yet implemented for virtual datasets. A different grid or cell order requires a new dataset.
+A grid that does not fit a 2-D array (icosahedral such as ICON, reduced Gaussian, HEALPix) uses one `cell` dimension with `latitude(cell)`/`longitude(cell)` cell centers. `cell` is a zero-based int32 index in source order, except on HEALPix, where it holds the HEALPix pixel ids. When the source defines polygons (e.g. ICON's triangles), put UGRID topology in the static child group `mesh`; data variables point to it with `mesh="/mesh/mesh"` and `location="face"`. Grids without source polygons (reduced Gaussian, HEALPix) have no `mesh` group. Where CF defines the grid, add CF's grid attributes (the HEALPix grid mapping, the reduced Gaussian reduced-grid definition); HEALPix also follows the Zarr DGGS convention. Set a root `Conventions` attribute naming the conventions the dataset follows. Static groups are not yet implemented for virtual datasets. A different grid or cell order requires a new dataset.
 
 ## CLI commands
 
