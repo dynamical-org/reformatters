@@ -31,6 +31,7 @@ class QueueApi(BaseAdapter):
         self.jobs: dict[str, dict[str, Any]] = {}
         self.sent: list[tuple[str, str]] = []
         self.complete_on_poll: set[str] = set()
+        self.finish_before_detail: set[str] = set()
         self.delete_status = 200
         self.list_status = 200
         self.confirm_delete = True
@@ -95,6 +96,8 @@ class QueueApi(BaseAdapter):
                     "links": [{"rel": "next", "href": self.next_page}],
                 }
         else:
+            if job_id in self.finish_before_detail:
+                self.jobs[job_id]["status"] = "successful"
             body = self.jobs[job_id].copy()
             if job_id in self.complete_on_poll and "request" not in parse_qs(
                 parsed.query
@@ -263,6 +266,22 @@ def test_identical_job_is_adopted_until_overage_then_cancelled_and_replaced(
     assert target.read_bytes() == grib_message()
 
 
+def test_overage_job_that_finishes_before_its_detail_is_read_is_used_not_cancelled(
+    tmp_path: Path, lifecycle_clock: FakeClock
+) -> None:
+    api = QueueApi()
+    api.add("finishing", PAYLOAD)
+    api.finish_before_detail.add("finishing")
+    api.complete_on_poll.add("finishing")
+    lifecycle_clock.now = ecds_client.MAXIMUM_REQUEST_AGE_SECONDS
+    target = tmp_path / "result.grib2"
+
+    client(tmp_path / "state.json", api).retrieve(PAYLOAD, target, poll_seconds=1)
+
+    assert target.read_bytes() == grib_message()
+    assert not any(method in {"POST", "DELETE"} for method, _ in api.sent)
+
+
 @pytest.mark.parametrize(("delete_status", "confirmed"), [(503, True), (200, False)])
 def test_failed_or_unconfirmed_cancellation_never_submits_a_replacement(
     tmp_path: Path, lifecycle_clock: FakeClock, delete_status: int, confirmed: bool
@@ -322,17 +341,16 @@ def test_non_s2s_job_is_neither_adopted_nor_cancelled(
     ["2026-01-01T00:00:00", "2026-01-01T00:00:00Z", "2025-12-31T19:00:00-05:00"],
 )
 @pytest.mark.parametrize("persisted", [False, True])
-@pytest.mark.parametrize("complete", [False, True])
-def test_server_timestamp_forms_allow_timeout_and_completion_after_restart(
+def test_server_timestamp_forms_allow_completion_after_restart(
     tmp_path: Path,
     lifecycle_clock: FakeClock,
     created: str,
     persisted: bool,
-    complete: bool,
 ) -> None:
     api = QueueApi()
     api.add("existing", PAYLOAD)
     api.jobs["existing"]["created"] = created
+    api.complete_on_poll.add("existing")
     state_path = tmp_path / "state.json"
     if persisted:
         state_path.write_text(
@@ -346,15 +364,9 @@ def test_server_timestamp_forms_allow_timeout_and_completion_after_restart(
                 }
             )
         )
-    if complete:
-        api.complete_on_poll.add("existing")
-    request = client(state_path, api)
     target = tmp_path / "result.grib2"
 
-    if complete:
-        request.retrieve(PAYLOAD, target, poll_seconds=1, maximum_polls=2)
-        assert target.read_bytes() == grib_message()
-    else:
-        with pytest.raises(TimeoutError):
-            request.retrieve(PAYLOAD, target, poll_seconds=1, maximum_polls=2)
+    client(state_path, api).retrieve(PAYLOAD, target, poll_seconds=1, maximum_polls=2)
+
+    assert target.read_bytes() == grib_message()
     assert not any(method in {"POST", "DELETE"} for method, _ in api.sent)

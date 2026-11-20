@@ -41,6 +41,7 @@ EXPIRED_STATUS: Final[str] = "expired"
 TERMINAL_FAILURE_STATUSES: Final[frozenset[str]] = ECDS_FAILURE_STATUSES | {
     EXPIRED_STATUS,
 }
+OUTSTANDING_STATUSES: Final[frozenset[str]] = frozenset({"accepted", "running"})
 MAXIMUM_REQUEST_AGE_SECONDS: Final[float] = 6 * 60 * 60
 REQUEST_TIMEOUT_SECONDS: Final[float] = 60
 DOWNLOAD_TIMEOUT_SECONDS: Final[float] = 120
@@ -346,7 +347,7 @@ class EcdsRequest:
         jobs_url = f"{self.execution_url.split('/processes/', 1)[0]}/jobs"
         page_url: str | None = jobs_url
         params: dict[str, Any] | None = {
-            "status": ["accepted", "running"],
+            "status": sorted(OUTSTANDING_STATUSES),
             "limit": 100,
         }
         while page_url is not None:
@@ -380,7 +381,10 @@ class EcdsRequest:
                     status_url=status_url,
                     status=current["status"],
                 )
-                if state.age_seconds() < maximum_request_age_seconds:
+                if (
+                    state.status not in OUTSTANDING_STATUSES
+                    or state.age_seconds() < maximum_request_age_seconds
+                ):
                     return state
                 self._cancel_job(state)
             next_url = _related_url(body, "next")
