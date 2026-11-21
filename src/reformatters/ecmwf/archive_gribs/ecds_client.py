@@ -17,9 +17,10 @@ from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_EXCEPTION, ThreadPoolExecutor, wait
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, Final, NoReturn
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 import requests
 
@@ -33,16 +34,15 @@ log = get_logger(__name__)
 ECDS_API_URL: Final[str] = "https://ecds.ecmwf.int/api"
 S2S_FORECASTS_PROCESS: Final[str] = "s2s-forecasts"
 ECDS_FAILURE_STATUSES: Final[frozenset[str]] = frozenset(
-    {"failed", "rejected", "dismissed", "cancelled"}
+    {"failed", "rejected", "dismissed", "cancelled", "deleted"}
 )
-# Assigned by this client, not ECDS: the job or its result is gone from ECDS, or
-# polling gave up on it. Either way the job is never resumed, only replaced.
+# Assigned by this client, not ECDS: the job or its result is gone.
 EXPIRED_STATUS: Final[str] = "expired"
-ABANDONED_STATUS: Final[str] = "abandoned"
 TERMINAL_FAILURE_STATUSES: Final[frozenset[str]] = ECDS_FAILURE_STATUSES | {
     EXPIRED_STATUS,
-    ABANDONED_STATUS,
 }
+OUTSTANDING_STATUSES: Final[frozenset[str]] = frozenset({"accepted", "running"})
+MAXIMUM_REQUEST_AGE_SECONDS: Final[float] = 6 * 60 * 60
 REQUEST_TIMEOUT_SECONDS: Final[float] = 60
 DOWNLOAD_TIMEOUT_SECONDS: Final[float] = 120
 MAXIMUM_POLL_BACKOFF_EXPONENT: Final[int] = 6
@@ -145,6 +145,18 @@ class RequestState:
     grib_messages: int | None = None
     poll_failures: int = 0
     errors: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        submitted = datetime.fromisoformat(self.submitted_at)
+        if submitted.tzinfo is None:
+            submitted = submitted.replace(tzinfo=UTC)
+        self.submitted_at = submitted.astimezone(UTC).isoformat()
+
+    def age_seconds(self) -> float:
+        return (
+            datetime.fromisoformat(_utc_now())
+            - datetime.fromisoformat(self.submitted_at)
+        ).total_seconds()
 
 
 class StateStore:
@@ -251,6 +263,7 @@ class EcdsRequest:
         resubmit_wait_seconds: float = RESUBMIT_WAIT_SECONDS,
         resubmit_budget_seconds: float = RESUBMIT_BUDGET_SECONDS,
         parallel_range_downloads: int = PARALLEL_RANGE_DOWNLOADS,
+        maximum_request_age_seconds: float = MAXIMUM_REQUEST_AGE_SECONDS,
     ) -> Path:
         """Submit `payload` if it is not already in flight, then download to `target`.
 
@@ -262,20 +275,30 @@ class EcdsRequest:
         `resubmit_wait_seconds`, doubling each time. No job is submitted once
         `resubmit_budget_seconds` have passed since this call began; the failure is
         raised as `EcdsJobFailedError` instead. A job still incomplete after
-        `maximum_polls` is abandoned and replaced once; a second such job raises
-        `TimeoutError`.
+        `maximum_polls` raises `TimeoutError` and stays outstanding for a later call
+        to resume.
+
+        Each submission first adopts an outstanding job on the account for the same
+        request, whichever producer submitted it, instead of duplicating it. One older
+        than `maximum_request_age_seconds` is presumed stuck: it is cancelled, and the
+        cancellation confirmed, before a replacement is submitted. Adoption is
+        best-effort: a job whose stored request differs from `payload` beyond value
+        order or scalar-versus-list form is not recognised, and is duplicated.
         """
+        assert maximum_request_age_seconds > 0
+        submit = partial(
+            self._submit_replacing, payload, target, maximum_request_age_seconds
+        )
         state = self.state_store.read_if_exists()
         if state is None or state.payload != dict(payload):
-            self._submit_replacing(payload, target)
+            submit()
         elif _downloaded_blob_is_intact(state, target):
             log.info("Reusing the %s already downloaded for this request", target)
             return target
         elif state.status in TERMINAL_FAILURE_STATUSES:
-            self._submit_replacing(payload, target)
+            submit()
         deadline = time.monotonic() + resubmit_budget_seconds
         wait_seconds = resubmit_wait_seconds
-        replaced_after_timeout = False
         while True:
             try:
                 _, result_url = self.poll_until_complete(poll_seconds, maximum_polls)
@@ -286,27 +309,110 @@ class EcdsRequest:
                     raise
                 log.warning("%s; submitting it again in %.0f s", e, wait_seconds)
                 time.sleep(wait_seconds)
-                self._submit_replacing(payload, target)
+                submit()
                 wait_seconds *= 2
-            except TimeoutError as e:
-                if replaced_after_timeout:
-                    raise
-                replaced_after_timeout = True
-                log.warning("%s; submitting it again", e)
-                self._submit_replacing(payload, target)
 
     def _submit_replacing(
-        self, payload: Mapping[str, Any], target: Path
+        self,
+        payload: Mapping[str, Any],
+        target: Path,
+        maximum_request_age_seconds: float,
     ) -> RequestState:
         """Submit a job for `target`, discarding any partial download of an earlier job's result."""
         _partial_path(target).unlink(missing_ok=True)
         _delete_part_files(target)
-        return self.submit(payload)
+        return self.submit(payload, maximum_request_age_seconds)
 
-    def submit(self, payload: Mapping[str, Any]) -> RequestState:
+    def submit(
+        self,
+        payload: Mapping[str, Any],
+        maximum_request_age_seconds: float = MAXIMUM_REQUEST_AGE_SECONDS,
+    ) -> RequestState:
         assert self.session.headers.get("PRIVATE-TOKEN"), (
             "Set ECDS_API_KEY or a `key:` line in ~/.cdsapirc"
         )
+        state = self._outstanding_identical_request(
+            payload, maximum_request_age_seconds
+        )
+        if state is None:
+            return self._submit(payload)
+        self.state_store.write(state)
+        log.info("Resuming outstanding ECDS job %s", state.request_id)
+        return state
+
+    def _outstanding_identical_request(
+        self, payload: Mapping[str, Any], maximum_request_age_seconds: float
+    ) -> RequestState | None:
+        """The account's outstanding job for `payload`, after cancelling any presumed stuck."""
+        jobs_url = f"{self.execution_url.split('/processes/', 1)[0]}/jobs"
+        page_url: str | None = jobs_url
+        params: dict[str, Any] | None = {
+            "status": sorted(OUTSTANDING_STATUSES),
+            "limit": 100,
+        }
+        while page_url is not None:
+            response = self.session.request(
+                "GET", page_url, params=params, timeout=REQUEST_TIMEOUT_SECONDS
+            )
+            response.raise_for_status()
+            body = response.json()
+            for job in body["jobs"]:
+                if job["processID"] != S2S_FORECASTS_PROCESS:
+                    continue
+                status_url = f"{jobs_url}/{quote(job['jobID'], safe='')}"
+                detail = self.session.request(
+                    "GET",
+                    status_url,
+                    params={"request": True},
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+                if detail.status_code == requests.codes.not_found:
+                    continue
+                detail.raise_for_status()
+                current = detail.json()
+                if current["status"] in ECDS_FAILURE_STATUSES or _canonical_request(
+                    current["metadata"]["request"]["ids"]
+                ) != _canonical_request(payload):
+                    continue
+                state = RequestState(
+                    request_id=current["jobID"],
+                    payload=dict(payload),
+                    submitted_at=current["created"],
+                    status_url=status_url,
+                    status=current["status"],
+                )
+                if (
+                    state.status not in OUTSTANDING_STATUSES
+                    or state.age_seconds() < maximum_request_age_seconds
+                ):
+                    return state
+                self._cancel_job(state)
+            next_url = _related_url(body, "next")
+            page_url = _api_url(next_url, page_url) if next_url else None
+            params = None
+        return None
+
+    def _cancel_job(self, state: RequestState) -> None:
+        status_url = _api_url(state.status_url, self.execution_url)
+        response = self.session.delete(status_url, timeout=REQUEST_TIMEOUT_SECONDS)
+        if response.status_code == requests.codes.not_found:
+            state.status = EXPIRED_STATUS
+            return
+        response.raise_for_status()
+        confirmation = self.session.get(status_url, timeout=REQUEST_TIMEOUT_SECONDS)
+        if confirmation.status_code == requests.codes.not_found:
+            state.status = EXPIRED_STATUS
+            return
+        confirmation.raise_for_status()
+        body = confirmation.json()
+        state.status = str(body.get("status") or body.get("state")).lower()
+        if state.status not in TERMINAL_FAILURE_STATUSES:
+            raise TimeoutError(
+                f"Cancellation of ECDS job {state.request_id} is not confirmed"
+            )
+        log.info("Cancelled ECDS job %s", state.request_id)
+
+    def _submit(self, payload: Mapping[str, Any]) -> RequestState:
         response = self.session.post(
             self.execution_url,
             json={"inputs": dict(payload)},
@@ -429,8 +535,6 @@ class EcdsRequest:
                 return state, result_url
             _sleep_bounded(poll_seconds, deadline)
         state = self.state_store.read()
-        state.status = ABANDONED_STATUS
-        self.state_store.write(state)
         raise TimeoutError(
             f"ECDS job {state.request_id} did not complete within {maximum_polls} "
             f"polls of {poll_seconds}s"
@@ -744,6 +848,13 @@ def _failure_priority(error: BaseException) -> int:
     if isinstance(error, _ResultGoneError):
         return 1
     return 2
+
+
+def _canonical_request(request: Mapping[str, Any]) -> dict[str, list[str]]:
+    return {
+        key: sorted(map(str, value if isinstance(value, list | tuple) else [value]))
+        for key, value in request.items()
+    }
 
 
 def _sleep_bounded(seconds: float, deadline: float) -> None:

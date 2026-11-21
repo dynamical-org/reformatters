@@ -29,9 +29,9 @@ from .request_shards import ECMWF_ORIGIN, EcdsSelection
 log = get_logger(__name__)
 
 ARCHIVE_WORK_DIR: Final[Path] = DOWNLOAD_DIR / "ecmwf-s2s-archive"
-# ECDS serves 8 simultaneous requests without error; 4 keeps most of the queue-time
-# saving while leaving room for other users of the account.
-DEFAULT_CONCURRENT_REQUESTS: Final[int] = 4
+# ECDS serves 8 simultaneous requests without error; 2 keeps some of the queue-time
+# saving while leaving most of the account to its other users.
+DEFAULT_CONCURRENT_REQUESTS: Final[int] = 2
 DEFAULT_PUBLICATION_POLL_INTERVAL: Final = pd.Timedelta(minutes=2)
 
 type Publication = Literal["unpublished", "partial", "published"]
@@ -53,7 +53,7 @@ def archive_initialization(
     checkers: int = 8,
     concurrent_requests: int = DEFAULT_CONCURRENT_REQUESTS,
     poll_seconds: float = 30,
-    maximum_polls: int = 240,
+    maximum_polls: int = 480,
     env_vars: dict[str, Any] | None = None,
     publication_deadline: pd.Timestamp | None = None,
     publication_poll_interval: pd.Timedelta = DEFAULT_PUBLICATION_POLL_INTERVAL,
