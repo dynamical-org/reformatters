@@ -712,6 +712,26 @@ def test_update_cronjob_has_service_account_and_validation_failure_policy() -> N
     )
 
 
+def test_only_update_cronjobs_raise_the_per_index_pod_retry_limit() -> None:
+    def cron_limit(cron: CronJob) -> int:
+        return cron.as_kubernetes_object()["spec"]["jobTemplate"]["spec"][
+            "backoffLimitPerIndex"
+        ]
+
+    assert cron_limit(_cron_job("0 * * * *")) == 8
+    assert cron_limit(_cron_job_with_name("archive-grib-files")) == 5
+    backfill = Job(
+        command=["backfill-kubernetes"],
+        image="img",
+        dataset_id="weather-data",
+        cpu="1",
+        memory="1G",
+        workers_total=1,
+        parallelism=1,
+    )
+    assert backfill.as_kubernetes_object()["spec"]["backoffLimitPerIndex"] == 5
+
+
 def _deployed_cronjob(*, suspend: bool = False) -> Mock:
     cronjob = Mock()
     cronjob.metadata.uid = "12345678-1234-1234-1234-123456789abc"

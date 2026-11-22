@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, ClassVar, Literal, Self
 
 import pandas as pd
 import pydantic
@@ -34,6 +34,7 @@ type ConcurrencyPolicy = Literal["Allow", "Forbid", "Replace"]
 
 class Job(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+    backoff_limit_per_index: ClassVar[int] = 5
 
     command: Annotated[Sequence[str], pydantic.Field(min_length=1)]
     image: Annotated[str, pydantic.Field(min_length=1)]
@@ -86,7 +87,7 @@ class Job(pydantic.BaseModel):
                     if self.active_deadline is not None
                     else {}
                 ),
-                "backoffLimitPerIndex": 5,
+                "backoffLimitPerIndex": self.backoff_limit_per_index,
                 "completionMode": "Indexed",
                 "completions": self.workers_total,
                 # A low numbers of workers max == total, then max = total // 8, finally max = 100
@@ -346,6 +347,8 @@ class CronJob(Job):
 
 
 class ReformatCronJob(CronJob):
+    # More pod retries span a longer transient fault before the Job fails.
+    backoff_limit_per_index: ClassVar[int] = 8
     name: Annotated[CronJobName, pydantic.Field(pattern=r".+-update$")]
     command: Sequence[str] = ["update"]
     # Operational updates expect a single worker
