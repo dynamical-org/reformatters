@@ -1,16 +1,18 @@
 import contextlib
 import functools
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
+from time import sleep
 from typing import Any, Literal, assert_never
 from urllib.parse import urlparse
 from uuid import uuid4
 
 import fsspec
 import icechunk
+import pandas as pd
 import xarray as xr
 import zarr
 import zarr.abc.store
@@ -24,17 +26,64 @@ from reformatters.common.config import Config, Env
 from reformatters.common.download import load_s3_credentials
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
-from reformatters.common.retry import retry
-from reformatters.common.types import AppendDim
+from reformatters.common.retry import exponential_backoff_time, retry
+from reformatters.common.types import AppendDim, Timestamp
 
 log = get_logger(__name__)
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 JOB_STATE_RETENTION = timedelta(days=1)
+STORAGE_FAULT_ALERT_AFTER = timedelta(minutes=3)
 
 # This is a sentinel value to indicate that we should not try to load the storage options from a Kubernetes secret.
 # This is useful in the test and dev environments where we don't have a Kubernetes secret mounted.
 _NO_SECRET_NAME = "no-secret"  # noqa: S105
+
+
+def wait_out_storage_faults[T](attempt: Callable[[], T], *, give_up_at: Timestamp) -> T:
+    """Retry Icechunk storage errors until another attempt cannot start before the deadline."""
+    fault_started_at = None
+    alerted = False
+    backoff_attempt = 0
+    started_at = pd.Timestamp.now(tz=give_up_at.tz)
+    while True:
+        try:
+            return attempt()
+        except icechunk.StorageError as error:
+            failed_at = pd.Timestamp.now(tz=give_up_at.tz)
+            duration = failed_at - started_at
+            if fault_started_at is None or duration > STORAGE_FAULT_ALERT_AFTER:
+                fault_started_at = failed_at
+                alerted = False
+                backoff_attempt = 0
+
+            delay = exponential_backoff_time(backoff_attempt)
+            if failed_at + timedelta(seconds=delay) >= give_up_at:
+                raise
+
+            fault_duration = failed_at - fault_started_at
+            if not alerted and fault_duration >= STORAGE_FAULT_ALERT_AFTER:
+                log.error(
+                    "The output store has been failing for %.1f minutes (%s: %s). "
+                    "The update is still retrying until %s and needs no rerun unless the Job later fails.",
+                    fault_duration.total_seconds() / 60,
+                    error.kind,
+                    error.message,
+                    give_up_at,
+                )
+                alerted = True
+
+            log.warning(
+                "Retrying after output store error (%s: %s) in an attempt that ran for %.1f s",
+                error.kind,
+                error.message,
+                duration.total_seconds(),
+            )
+            sleep(delay)
+            started_at = pd.Timestamp.now(tz=give_up_at.tz)
+            if started_at >= give_up_at:
+                raise
+            backoff_attempt = min(backoff_attempt + 1, 5)
 
 
 class DatasetFormat(StrEnum):

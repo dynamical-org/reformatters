@@ -51,6 +51,7 @@ from reformatters.common.storage import (
     StorageConfig,
     StoreFactory,
     get_local_tmp_store,
+    wait_out_storage_faults,
 )
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike, Timestamp
@@ -195,7 +196,22 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     should_run = self._prepare_and_wait_materialized_update(
                         materialized_job, cron, is_first=is_first
                     )
-            if should_run:
+            if is_virtual:
+                wait_out_storage_faults(
+                    partial(
+                        self._virtual_update_attempt,
+                        reformat_job_name,
+                        worker_index,
+                        workers_total,
+                        job_fire_time=job_fire_time,
+                    ),
+                    give_up_at=self._virtual_poll_deadline(
+                        job_fire_time
+                        if job_fire_time is not None
+                        else pd.Timestamp.now()
+                    ),
+                )
+            elif should_run:
                 tmp_store = self._tmp_store()
 
                 all_jobs, template_ds = self._operational_update_jobs(
@@ -205,27 +221,16 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                     job_reference_time=job_reference_time,
                 )
 
-                if is_virtual:
-                    # Virtual operational updates stream one worker per Job (see docs/parallel_processing.md).
-                    if is_first:
-                        self._assert_no_structural_drift(template_ds)
-                    self._run_virtual_operational_update(
-                        all_jobs,
-                        worker_index,
-                        workers_total,
-                        job_fire_time=job_fire_time,
-                    )
-                else:
-                    self._process_region_jobs(
-                        all_jobs=all_jobs,
-                        worker_index=worker_index,
-                        workers_total=workers_total,
-                        reformat_job_name=reformat_job_name,
-                        template_ds=template_ds,
-                        tmp_store=tmp_store,
-                        update_template_with_results=True,
-                        job_uid=job_uid,
-                    )
+                self._process_region_jobs(
+                    all_jobs=all_jobs,
+                    worker_index=worker_index,
+                    workers_total=workers_total,
+                    reformat_job_name=reformat_job_name,
+                    template_ds=template_ds,
+                    tmp_store=tmp_store,
+                    update_template_with_results=True,
+                    job_uid=job_uid,
+                )
 
         try:
             if not should_run:
@@ -821,6 +826,24 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 job_uid=job_uid,
                 keep_branch=keep_branch is not None,
             )
+
+    def _virtual_update_attempt(
+        self,
+        reformat_job_name: str,
+        worker_index: int,
+        workers_total: int,
+        *,
+        job_fire_time: Timestamp | None,
+    ) -> None:
+        all_jobs, template_ds = self._operational_update_jobs(
+            reformat_job_name, self._tmp_store(), job_fire_time=job_fire_time
+        )
+        # Virtual operational updates stream one worker per Job (see docs/parallel_processing.md).
+        if worker_index == 0:
+            self._assert_no_structural_drift(template_ds)
+        self._run_virtual_operational_update(
+            all_jobs, worker_index, workers_total, job_fire_time=job_fire_time
+        )
 
     def _run_virtual_operational_update(
         self,

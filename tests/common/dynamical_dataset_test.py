@@ -1,12 +1,14 @@
 import json
 import subprocess
+from collections import Counter
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from functools import partial
+from itertools import chain, repeat
 from pathlib import Path
 from typing import ClassVar
-from unittest.mock import Mock, patch
+from unittest.mock import DEFAULT, Mock, patch
 
 import icechunk
 import icechunk.store
@@ -40,6 +42,7 @@ from reformatters.common.kubernetes import CronJob, ReformatCronJob
 from reformatters.common.materialized_region_job import MaterializedRegionJob
 from reformatters.common.monitoring import monitor_cron
 from reformatters.common.region_job import SourceFileCoord
+from reformatters.common.retry import time as retry_time
 from reformatters.common.staging import staging_cronjob_name
 from reformatters.common.storage import (
     _NO_SECRET_NAME,
@@ -964,6 +967,205 @@ def test_virtual_update_rejects_structural_drift_before_any_commit(
 
     # Worker 0's guard raised before any commit landed on main.
     assert repo.lookup_branch("main") == main_before
+
+
+def _published_temperature_refs(
+    repo: icechunk.Repository, seed: str
+) -> Counter[tuple[int, ...]]:
+    refs: Counter[tuple[int, ...]] = Counter()
+    for snapshot in repo.ancestry(branch="main"):
+        if snapshot.id == seed:
+            break
+        diff = repo.diff(
+            from_snapshot_id=snapshot.parent_id, to_snapshot_id=snapshot.id
+        )
+        refs.update(tuple(i) for i in diff.updated_chunks.get("/temperature_2m", []))
+    session = repo.readonly_session("main")
+    assert all(
+        session.chunk_type("/temperature_2m", index) == icechunk.ChunkType.virtual
+        for index in refs
+    )
+    return refs
+
+
+@pytest.fixture
+def local_virtual_update_dispatch(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda cls, tz=None: pd.Timestamp("2024-01-02", tz=tz)),
+    )
+    monkeypatch.setattr(
+        VirtualTestDataset, "_get_template", lambda *args: _create_template_ds(4)
+    )
+    monkeypatch.setattr(
+        dynamical_dataset, "Config", Config.model_copy(update={"env": Env.prod})
+    )
+    monkeypatch.setenv("CRON_JOB_NAME", "test-virtual-dataset-update")
+    dispatch = Mock()
+    monkeypatch.setattr(
+        VirtualTestDataset, "materialized_update_triggers", (Mock(dispatch=dispatch),)
+    )
+    monkeypatch.setattr(retry_time, "sleep", lambda _: None)
+    monkeypatch.setattr(storage, "sleep", lambda _: None, raising=False)
+    monkeypatch.setattr(
+        storage,
+        "_get_store_path",
+        lambda dataset_id, version, config: f"{config.base_path}/{dataset_id}.icechunk",
+    )
+    return dispatch
+
+
+@pytest.mark.parametrize(
+    "fault",
+    ["open-and-commit", "lost-mid-window", "replica-before-primary", "lost-final"],
+)
+def test_virtual_update_resumes_without_duplicate_file_commits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    local_virtual_update_dispatch: Mock,
+    fault: str,
+) -> None:
+    dispatch = local_virtual_update_dispatch
+    real_open = icechunk.Repository.open
+    real_commit = icechunk.Session.commit
+
+    def run_update(
+        path: Path, fault: str | None
+    ) -> tuple[list[xr.Dataset], list[Counter[tuple[int, ...]]], int]:
+        path.mkdir()
+        dataset = _make_dataset(path)
+        if replica:
+            dataset = dataset.model_copy(
+                update={
+                    "replica_storage_configs": (
+                        StorageConfig(
+                            base_path=str(path / "replica"),
+                            format=DatasetFormat.ICECHUNK,
+                        ),
+                    ),
+                }
+            )
+        template_utils.write_metadata(_create_template_ds(2), dataset.store_factory)
+        repos = [
+            repo
+            for _, repo in dataset.store_factory.icechunk_repos(sort="primary-first")
+        ]
+        seed_heads = [repo.lookup_branch("main") for repo in repos]
+        primary_head = seed_heads[0]
+        commit_failures = 1 if fault == "open-and-commit" else 10 if fault else 0
+        commit_fault_started = False
+        dispatch.reset_mock()
+
+        def commit_with_fault(
+            session: icechunk.Session,
+            message: str,
+            *,
+            rebase_with: icechunk.ConflictSolver | None = None,
+        ) -> str:
+            nonlocal commit_fault_started, commit_failures, primary_head
+            if session.snapshot_id != primary_head:
+                return real_commit(session, message, rebase_with=rebase_with)
+            files = session.status().updated_chunks.get("/temperature_2m", [])
+            last_batch = any(index[:2] == [3, 1] for index in files)
+            if commit_failures and (
+                commit_fault_started
+                or (files and (fault != "lost-final" or last_batch))
+            ):
+                if replica and not commit_fault_started:
+                    assert _published_temperature_refs(
+                        repos[1], seed_heads[1]
+                    ).keys() >= {tuple(index) for index in files}
+                if (
+                    fault in ("lost-mid-window", "lost-final")
+                    and not commit_fault_started
+                ):
+                    primary_head = real_commit(
+                        session, message, rebase_with=rebase_with
+                    )
+                commit_fault_started = True
+                commit_failures -= 1
+                raise icechunk.StorageError("commit unavailable", "io")
+            primary_head = real_commit(session, message, rebase_with=rebase_with)
+            return primary_head
+
+        with monkeypatch.context() as patch_fault:
+            if fault == "open-and-commit":
+                first_opens = (
+                    icechunk.StorageError("planning store unavailable", "io"),
+                    DEFAULT,
+                    icechunk.StorageError("drift check store unavailable", "io"),
+                )
+                patch_fault.setattr(
+                    icechunk.Repository,
+                    "open",
+                    Mock(
+                        wraps=real_open,
+                        side_effect=chain(first_opens, repeat(DEFAULT)),
+                    ),
+                )
+            patch_fault.setattr(icechunk.Session, "commit", commit_with_fault)
+            dataset.update("fault-retry")
+        assert commit_failures == 0
+
+        datasets = [
+            xr.open_zarr(
+                repo.readonly_session("main").store, chunks=None, decode_timedelta=True
+            ).load()
+            for repo in repos
+        ]
+        writes = [
+            _published_temperature_refs(repo, seed)
+            for repo, seed in zip(repos, seed_heads, strict=True)
+        ]
+        return datasets, writes, dispatch.call_count
+
+    replica = fault == "replica-before-primary"
+    clean, clean_writes, clean_triggers = run_update(tmp_path / "clean", None)
+    recovered, recovered_writes, recovered_triggers = run_update(
+        tmp_path / "recovered", fault
+    )
+
+    for expected, actual in zip(clean, recovered, strict=True):
+        xr.testing.assert_identical(actual, expected)
+        assert actual.sizes["init_time"] == 4
+        assert np.isfinite(actual.temperature_2m).all()
+    assert (
+        recovered_writes
+        == clean_writes
+        == [Counter((i, lead, 0, 0) for i in range(4) for lead in range(2))]
+        * (2 if replica else 1)
+    )
+    assert clean_triggers == 1
+    assert recovered_triggers == (0 if fault == "lost-final" else clean_triggers)
+
+
+def test_virtual_update_reraises_storage_failure_at_original_poll_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _make_dataset(tmp_path)
+    now = pd.Timestamp("2024-01-02T00:04:28")
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda cls, tz=None: now.tz_localize(tz)),
+    )
+    monkeypatch.setattr(storage, "exponential_backoff_time", lambda _: 1, raising=False)
+
+    def sleep(seconds: float) -> None:
+        nonlocal now
+        now += timedelta(seconds=seconds)
+
+    monkeypatch.setattr(storage, "sleep", sleep, raising=False)
+    first = icechunk.StorageError("initial failure", "io")
+    last = icechunk.StorageError("storage still unavailable", "io")
+    fail_open = Mock(side_effect=[first, last])
+    monkeypatch.setattr(icechunk.Repository, "open", fail_open)
+    with pytest.raises(icechunk.StorageError) as raised:
+        dataset.update("fault-deadline")
+
+    assert raised.value is last
+    assert fail_open.call_count == 2
 
 
 class ExampleDatasetWithTwoCronJobs(
