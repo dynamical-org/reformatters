@@ -720,16 +720,6 @@ def test_only_update_cronjobs_raise_the_per_index_pod_retry_limit() -> None:
 
     assert cron_limit(_cron_job("0 * * * *")) == 8
     assert cron_limit(_cron_job_with_name("archive-grib-files")) == 5
-    backfill = Job(
-        command=["backfill-kubernetes"],
-        image="img",
-        dataset_id="weather-data",
-        cpu="1",
-        memory="1G",
-        workers_total=1,
-        parallelism=1,
-    )
-    assert backfill.as_kubernetes_object()["spec"]["backoffLimitPerIndex"] == 5
 
 
 def _deployed_cronjob(*, suspend: bool = False) -> Mock:

@@ -347,7 +347,6 @@ class CronJob(Job):
 
 
 class ReformatCronJob(CronJob):
-    # More pod retries span a longer transient fault before the Job fails.
     backoff_limit_per_index: ClassVar[int] = 8
     name: Annotated[CronJobName, pydantic.Field(pattern=r".+-update$")]
     command: Sequence[str] = ["update"]
