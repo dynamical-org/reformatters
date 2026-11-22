@@ -182,7 +182,8 @@ def test_unexpected_update_error_alerts_once_immediately_with_stack_and_fingerpr
         return "recovered"
 
     try:
-        with sentry_sdk.new_scope() as scope:
+        with sentry_sdk.isolation_scope() as isolation, sentry_sdk.new_scope() as scope:
+            isolation.fingerprint = ["existing-fingerprint"]
             scope.set_client(client)
             assert (
                 retry_module.retry_virtual_update(
@@ -216,7 +217,7 @@ def test_unexpected_update_error_alerts_once_immediately_with_stack_and_fingerpr
         first_alert["exception"]["values"][0]["stacktrace"]["frames"][-1]["function"]
         == "attempt"
     )
-    assert "fingerprint" not in unrelated_alert
+    assert unrelated_alert["fingerprint"] == ["existing-fingerprint"]
     first_message = next(
         r.getMessage() for r in caplog.records if r.levelno == logging.ERROR
     )
