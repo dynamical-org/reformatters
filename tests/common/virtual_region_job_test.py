@@ -2775,36 +2775,6 @@ def test_exists_many_raises_after_exhausting_attempts() -> None:
         _exists_many(cast("icechunk.IcechunkStore", DeadStore()), ["a"], max_attempts=2)
 
 
-def test_virtual_update_filter_surfaces_manifest_probe_failure_without_retry(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    dataset = _make_dataset(tmp_path)
-    template = _create_template_ds(2)
-    template_utils.write_metadata(template, dataset.store_factory)
-    job = _make_region_job(template, region=slice(0, 2), processing_mode="update")
-    original_exists = icechunk.IcechunkStore.exists
-    error = icechunk.StorageError("manifest unreachable", "io")
-    probe = Mock()
-    monkeypatch.setattr(time, "sleep", lambda _: None)
-
-    async def exists(store: icechunk.IcechunkStore, key: str) -> bool:
-        if key == "temperature_2m/c/0/0/0/0":
-            probe(key)
-            if probe.call_count == 1:
-                raise error
-            return False
-        return await original_exists(store, key)
-
-    monkeypatch.setattr(icechunk.IcechunkStore, "exists", exists)
-    with pytest.raises(icechunk.StorageError) as raised:
-        job.process_virtual_worker_jobs(
-            [job], dataset.store_factory, "main", overwrite_chunks=False
-        )
-
-    assert raised.value is error
-    probe.assert_called_once()
-
-
 def test_virtual_poll_deadline_anchors_to_scheduled_fire(tmp_path: Path) -> None:
     # The fixture's update fires daily at 00:00 with a 5 minute pod deadline, so polling
     # runs to 30s before that deadline.

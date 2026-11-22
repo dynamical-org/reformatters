@@ -168,13 +168,16 @@ def test_unexpected_update_error_alerts_once_immediately_with_stack_and_fingerpr
         integrations=[LoggingIntegration()],
     )
     attempts = 0
+    fault_clock.now = pd.Timestamp("2024-01-01T00:00:00.123456-05:00")
     start = fault_clock.now
 
     def attempt() -> str:
         nonlocal attempts
-        assert len(envelopes) == min(attempts, 1)
+        assert len(envelopes) == (0, 1, 1, 2, 2)[attempts]
         attempts += 1
-        if attempts <= 2:
+        if attempts == 3:
+            fault_clock.now = start + timedelta(minutes=8)
+        if attempts <= 4:
             raise RuntimeError("discovery failed")
         return "recovered"
 
@@ -185,7 +188,7 @@ def test_unexpected_update_error_alerts_once_immediately_with_stack_and_fingerpr
                 retry_module.retry_virtual_update(
                     attempt,
                     dataset_id="test-dataset",
-                    give_up_at=start + timedelta(minutes=5),
+                    give_up_at=start + timedelta(minutes=10),
                 )
                 == "recovered"
             )
@@ -193,20 +196,34 @@ def test_unexpected_update_error_alerts_once_immediately_with_stack_and_fingerpr
     finally:
         client.close()
 
-    first_alert, later_alert = [
+    first_alert, second_fault_alert, unrelated_alert = [
         payload
         for envelope in envelopes
         for item in envelope.items
         if item.type == "event" and (payload := item.payload.json) is not None
     ]
-    assert first_alert["fingerprint"] == ["test-dataset", "RuntimeError"]
+    assert first_alert["fingerprint"] == [
+        "test-dataset",
+        "RuntimeError",
+        "2024-01-01T05:00:00Z",
+    ]
+    assert second_fault_alert["fingerprint"] == [
+        "test-dataset",
+        "RuntimeError",
+        "2024-01-01T05:08:00Z",
+    ]
     assert (
         first_alert["exception"]["values"][0]["stacktrace"]["frames"][-1]["function"]
         == "attempt"
     )
-    assert "fingerprint" not in later_alert
+    assert "fingerprint" not in unrelated_alert
+    first_message = next(
+        r.getMessage() for r in caplog.records if r.levelno == logging.ERROR
+    )
+    assert "2024-01-01T05:00:00Z" in first_message
+    assert "1 failed attempt" in first_message
     warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    assert len(warnings) == 2
+    assert len(warnings) == 4
     assert all(
         "RuntimeError" in warning and "discovery failed" in warning
         for warning in warnings
@@ -339,26 +356,54 @@ def test_storage_fault_alerts_between_two_and_three_minutes_even_with_backoff(
 
 
 @pytest.mark.parametrize(
-    ("second_fault_start_minute", "second_fault_seconds", "expected_alerts"),
-    [(18, 220, 1), (20, 30, 1), (20, 220, 2)],
-    ids=["within-reset-window", "brief-new-fault", "sustained-new-fault"],
+    (
+        "first_fault_seconds",
+        "second_fault_start_minute",
+        "second_fault_seconds",
+        "alert_seconds",
+    ),
+    [
+        (220, 7, 220, [120]),
+        (10, 8, 10, []),
+        (10, 4, 10, [240]),
+        (220, 10, 220, [120, 720]),
+    ],
+    ids=[
+        "deduplicates-recent-fault",
+        "brief-new-fault",
+        "brief-same-fault",
+        "sustained-new-fault",
+    ],
 )
-def test_storage_alerts_reset_only_after_long_running_attempt(
+def test_storage_blips_reset_alerts_after_five_minutes_and_backoff_after_one_minute(
     fault_clock: FaultClock,
     alert_times: list[pd.Timestamp],
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    first_fault_seconds: int,
     second_fault_start_minute: int,
     second_fault_seconds: int,
-    expected_alerts: int,
+    alert_seconds: list[int],
 ) -> None:
+    rng = Mock()
+    rng.uniform.side_effect = lambda low, high: low
+    monkeypatch.setattr(retry_module.np.random, "default_rng", lambda: rng)
     start = fault_clock.now
     second_fault_start = start + timedelta(minutes=second_fault_start_minute)
+    first_failures = 0
+    second_fault_delays: list[float] = []
 
     def attempt() -> str:
-        if fault_clock.now < start + timedelta(seconds=220):
+        nonlocal first_failures
+        if fault_clock.now < start + timedelta(seconds=first_fault_seconds):
+            first_failures += 1
             raise icechunk.StorageError("first fault", "io")
         if fault_clock.now < second_fault_start:
             fault_clock.now = second_fault_start
             raise icechunk.StorageError("second fault", "io")
+        second_fault_delays.append(
+            (fault_clock.now - second_fault_start).total_seconds()
+        )
         if fault_clock.now < second_fault_start + timedelta(
             seconds=second_fault_seconds
         ):
@@ -373,10 +418,16 @@ def test_storage_alerts_reset_only_after_long_running_attempt(
         )
         == "recovered"
     )
-    fault_starts = [start, second_fault_start][:expected_alerts]
-    assert len(alert_times) == len(fault_starts)
-    for fault_start, alert_at in zip(fault_starts, alert_times, strict=True):
-        assert alert_at - fault_start == timedelta(minutes=2)
+    assert alert_times == [start + timedelta(seconds=s) for s in alert_seconds]
+    assert second_fault_delays[0] == 0.1
+    if second_fault_seconds == 10:
+        assert second_fault_delays[1] < second_fault_seconds
+    if alert_seconds == [240]:
+        (alert,) = [
+            r.getMessage() for r in caplog.records if r.levelno == logging.ERROR
+        ]
+        assert "2024-01-01T00:00:00Z" in alert
+        assert f"{first_failures + 1} failed attempts" in alert
 
 
 def test_virtual_retry_slows_after_five_failures_without_overflowing(

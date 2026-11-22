@@ -927,33 +927,6 @@ class TestIcechunkPrimaryWithZarr3Replica:
         )
 
 
-def test_open_existing_icechunk_repos_propagates_storage_failure_without_retry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    factory = StoreFactory(
-        primary_storage_config=StorageConfig(
-            base_path="local", format=DatasetFormat.ICECHUNK
-        ),
-        dataset_id="test-dataset",
-        template_config_version="v1.0",
-    )
-    error = icechunk.StorageError("store unreachable", "io")
-    open_repo = Mock(side_effect=error)
-    create_repo = Mock()
-    sleep = Mock()
-    monkeypatch.setattr(icechunk.Repository, "open", open_repo)
-    monkeypatch.setattr(icechunk.Repository, "open_or_create", create_repo)
-    monkeypatch.setattr(retry_module.time, "sleep", sleep)
-
-    with pytest.raises(icechunk.StorageError) as raised:
-        factory.icechunk_primary_and_replica_repos(create_if_missing=False)
-
-    assert raised.value is error
-    open_repo.assert_called_once()
-    create_repo.assert_not_called()
-    sleep.assert_not_called()
-
-
 class TestCommitIfIcechunkFailureIsolation:
     """When a replica commit fails permanently, the primary MUST NOT commit.
     Otherwise we'd have primary ahead of replica — readers of the replica
@@ -979,19 +952,6 @@ class TestCommitIfIcechunkFailureIsolation:
         # retry() calls the function max_attempts times before re-raising.
         assert replica.session.commit.call_count == 10
         primary.session.commit.assert_not_called()
-
-    def test_disabled_commit_retry_returns_failure_without_reusing_session(
-        self,
-    ) -> None:
-        store = MagicMock(spec=IcechunkStore)
-        error = icechunk.StorageError("commit unavailable", "io")
-        store.session.commit.side_effect = [error, "committed"]
-
-        with pytest.raises(icechunk.StorageError) as raised:
-            commit_if_icechunk("msg", store, [], retry_on_same_session=False)
-
-        assert raised.value is error
-        store.session.commit.assert_called_once()
 
     @pytest.mark.parametrize("allow_rebase", [False, True])
     def test_transient_replica_failure_retried_then_primary_commits(

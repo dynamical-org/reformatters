@@ -15,7 +15,7 @@ _FAST_UPDATE_RETRIES = 5
 _SLOW_UPDATE_RETRY_MIN_SECONDS = 30
 _SLOW_UPDATE_RETRY_MAX_SECONDS = 60
 _STORAGE_FAULT_ALERT_AFTER = timedelta(minutes=2)
-_STORAGE_FAULT_RESET_AFTER = timedelta(minutes=15)
+_STORAGE_FAULT_RESET_AFTER = timedelta(minutes=5)
 
 log = get_logger(__name__)
 
@@ -63,6 +63,7 @@ def retry_virtual_update[T](
     )
     fault_started_at = None
     alerted: set[type[Exception]] = set()
+    failed_attempts = 0
     retry_count = 0
     started_at = pd.Timestamp.now(tz=give_up_at.tz)
 
@@ -77,6 +78,9 @@ def retry_virtual_update[T](
             if fault_started_at is None or duration > _STORAGE_FAULT_RESET_AFTER:
                 fault_started_at = failed_at
                 alerted.clear()
+                failed_attempts = 0
+            failed_attempts += 1
+            if duration.total_seconds() > _SLOW_UPDATE_RETRY_MAX_SECONDS:
                 retry_count = 0
 
             delay = (
@@ -115,13 +119,21 @@ def retry_virtual_update[T](
                 now = pd.Timestamp.now(tz=give_up_at.tz)
                 if now >= give_up_at:
                     raise
+                fault_start_utc = (
+                    fault_started_at.tz_convert(None)
+                    if fault_started_at.tz is not None
+                    else fault_started_at
+                )
+                fault_start = f"{fault_start_utc.isoformat(timespec='seconds')}Z"
                 with sentry_sdk.new_scope() as scope:
-                    scope.fingerprint = [dataset_id, error_type.__name__]
+                    scope.fingerprint = [dataset_id, error_type.__name__, fault_start]
                     log.exception(
-                        "%s has been failing for %.1f minutes (%s: %s). "
+                        "%s first failed at %s (%d failed attempt%s so far, latest error %s: %s). "
                         "The update is still retrying until %sZ and needs no rerun unless the Job later fails.",
                         dataset_id,
-                        (now - fault_started_at).total_seconds() / 60,
+                        fault_start,
+                        failed_attempts,
+                        "" if failed_attempts == 1 else "s",
                         error_type.__name__,
                         error_message,
                         deadline_utc.isoformat(),

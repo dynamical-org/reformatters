@@ -1,7 +1,9 @@
+import asyncio
 import json
+import logging
 import subprocess
 from collections import Counter
-from collections.abc import Generator, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from functools import partial
@@ -961,6 +963,12 @@ def test_virtual_update_rejects_structural_drift_before_any_commit(
         _create_template_ds(2), region=slice(0, 2), processing_mode="update"
     )
     plan = Mock(return_value=([job], drifted))
+    now = pd.Timestamp("2024-01-02")
+    monkeypatch.setattr(
+        pd.Timestamp,
+        "now",
+        classmethod(lambda cls, tz=None: now.tz_localize(tz)),
+    )
     sleep = Mock(side_effect=AssertionError("structural drift must fail immediately"))
     monkeypatch.setattr(retry_time, "sleep", sleep)
     monkeypatch.setattr(
@@ -999,10 +1007,12 @@ def _published_temperature_refs(
 
 
 @pytest.fixture
-def local_virtual_update_dispatch(monkeypatch: pytest.MonkeyPatch) -> Mock:
+def advance_virtual_update_clock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[float], None]:
     now = pd.Timestamp("2024-01-02")
 
-    def sleep(seconds: float) -> None:
+    def advance(seconds: float) -> None:
         nonlocal now
         now += timedelta(seconds=seconds)
 
@@ -1011,6 +1021,12 @@ def local_virtual_update_dispatch(monkeypatch: pytest.MonkeyPatch) -> Mock:
         "now",
         classmethod(lambda cls, tz=None: now.tz_localize(tz)),
     )
+    monkeypatch.setattr(retry_time, "sleep", advance)
+    return advance
+
+
+@pytest.fixture
+def local_virtual_update_dispatch(monkeypatch: pytest.MonkeyPatch) -> Mock:
     monkeypatch.setattr(
         VirtualTestDataset, "_get_template", lambda *args: _create_template_ds(4)
     )
@@ -1022,7 +1038,6 @@ def local_virtual_update_dispatch(monkeypatch: pytest.MonkeyPatch) -> Mock:
     monkeypatch.setattr(
         VirtualTestDataset, "materialized_update_triggers", (Mock(dispatch=dispatch),)
     )
-    monkeypatch.setattr(retry_time, "sleep", sleep)
     monkeypatch.setattr(
         storage,
         "_get_store_path",
@@ -1155,6 +1170,7 @@ def _run_virtual_update_with_fault(
         "unexpected-mid-window",
     ],
 )
+@pytest.mark.usefixtures("advance_virtual_update_clock")
 def test_virtual_update_resumes_without_duplicate_file_commits(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1189,6 +1205,150 @@ def test_virtual_update_resumes_without_duplicate_file_commits(
         assert recovered_triggers <= 1
     else:
         assert recovered_triggers == clean_triggers
+
+
+def _arm_storage_fault_after_update_progress(
+    monkeypatch: pytest.MonkeyPatch,
+    dispatch: Mock,
+    fault: str,
+    arm: Callable[[], None],
+) -> None:
+    if fault == "write-open":
+        refresh = VirtualTestRegionJob.refresh_metadata
+
+        def refresh_then_arm(
+            job: VirtualTestRegionJob,
+            store_factory: storage.StoreFactory,
+            tmp_store: Path,
+        ) -> None:
+            refresh(job, store_factory, tmp_store)
+            arm()
+
+        monkeypatch.setattr(VirtualTestRegionJob, "refresh_metadata", refresh_then_arm)
+    elif fault == "batch-probe":
+        process_refs = VirtualTestRegionJob.process_virtual_refs
+
+        def refs_then_arm(
+            job: VirtualTestRegionJob, remaining: Sequence[VirtualTestSourceFileCoord]
+        ) -> Iterator[
+            Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]
+        ]:
+            for batch in process_refs(job, remaining):
+                arm()
+                yield batch
+
+        monkeypatch.setattr(VirtualTestRegionJob, "process_virtual_refs", refs_then_arm)
+    elif fault.startswith("trim-"):
+        dispatch.side_effect = lambda _: arm()
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "write-open",
+        "trim-open",
+        "initial-probe",
+        "batch-probe",
+        "batch-commit",
+        "trim-commit",
+    ],
+)
+def test_virtual_update_alerts_within_three_minutes_of_a_slow_storage_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    local_virtual_update_dispatch: Mock,
+    advance_virtual_update_clock: Callable[[float], None],
+    caplog: pytest.LogCaptureFixture,
+    fault: str,
+) -> None:
+    dataset = _make_dataset(tmp_path).model_copy(
+        update={"rolling_positions": 2 if fault.startswith("trim-") else None}
+    )
+    template_utils.write_metadata(_create_template_ds(2), dataset.store_factory)
+
+    fault_started_at = None
+    armed = fault in {"initial-probe", "batch-commit"}
+
+    def arm_fault() -> None:
+        nonlocal armed
+        armed = True
+
+    def fail_if_unavailable(
+        starts_fault: bool, *, operation_started_at: pd.Timestamp | None = None
+    ) -> None:
+        nonlocal fault_started_at
+        now = pd.Timestamp.now()
+        if fault_started_at is None:
+            if not starts_fault:
+                return
+            fault_started_at = now
+        if operation_started_at is None or operation_started_at == now:
+            advance_virtual_update_clock(30)
+        raise icechunk.StorageError("injected storage timeout", "io")
+
+    def fail_open[**P](
+        open_repo: Callable[P, icechunk.Repository],
+    ) -> Callable[P, icechunk.Repository]:
+        def wrapped(*args: P.args, **kwargs: P.kwargs) -> icechunk.Repository:
+            fail_if_unavailable(armed and fault.endswith("-open"))
+            return open_repo(*args, **kwargs)
+
+        return wrapped
+
+    real_exists = icechunk.IcechunkStore.exists
+
+    async def exists(store: icechunk.IcechunkStore, key: str) -> bool:
+        if fault_started_at is not None or (
+            armed and fault.endswith("-probe") and key.startswith("temperature_2m/c/")
+        ):
+            started_at = pd.Timestamp.now()
+            # Manifest probes in one concurrent batch time out together.
+            await asyncio.sleep(0)
+            fail_if_unavailable(True, operation_started_at=started_at)
+        return await real_exists(store, key)
+
+    real_commit = icechunk.Session.commit
+
+    def commit(
+        session: icechunk.Session,
+        message: str,
+        *,
+        rebase_with: icechunk.ConflictSolver | None = None,
+    ) -> str:
+        fail_if_unavailable(armed and fault.endswith("-commit"))
+        return real_commit(session, message, rebase_with=rebase_with)
+
+    _arm_storage_fault_after_update_progress(
+        monkeypatch, local_virtual_update_dispatch, fault, arm_fault
+    )
+    monkeypatch.setattr(
+        icechunk.Repository, "open", fail_open(icechunk.Repository.open)
+    )
+    monkeypatch.setattr(
+        icechunk.Repository,
+        "open_or_create",
+        fail_open(icechunk.Repository.open_or_create),
+    )
+    monkeypatch.setattr(icechunk.IcechunkStore, "exists", exists)
+    monkeypatch.setattr(icechunk.Session, "commit", commit)
+    alerts: list[pd.Timestamp] = []
+
+    class RecordAlertTime(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            if (
+                record.levelno == logging.ERROR
+                and record.exc_info
+                and record.exc_info[0] is icechunk.StorageError
+            ):
+                alerts.append(pd.Timestamp.now())
+            return True
+
+    with caplog.filtering(RecordAlertTime()), pytest.raises(icechunk.StorageError):
+        dataset.update("slow-storage-fault")
+
+    assert fault_started_at is not None
+    assert alerts
+    assert timedelta(minutes=2) <= alerts[0] - fault_started_at <= timedelta(minutes=3)
 
 
 @pytest.mark.parametrize(
