@@ -34,13 +34,16 @@ log = get_logger(__name__)
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 JOB_STATE_RETENTION = timedelta(days=1)
 STORAGE_FAULT_ALERT_AFTER = timedelta(minutes=3)
+STORAGE_FAULT_RESET_AFTER = timedelta(minutes=15)
 
 # This is a sentinel value to indicate that we should not try to load the storage options from a Kubernetes secret.
 # This is useful in the test and dev environments where we don't have a Kubernetes secret mounted.
 _NO_SECRET_NAME = "no-secret"  # noqa: S105
 
 
-def wait_out_storage_faults[T](attempt: Callable[[], T], *, give_up_at: Timestamp) -> T:
+def wait_out_storage_faults[T](
+    attempt: Callable[[], T], *, dataset_id: str, give_up_at: Timestamp
+) -> T:
     """Retry Icechunk storage errors until another attempt cannot start before the deadline."""
     fault_started_at = None
     alerted = False
@@ -52,7 +55,7 @@ def wait_out_storage_faults[T](attempt: Callable[[], T], *, give_up_at: Timestam
         except icechunk.StorageError as error:
             failed_at = pd.Timestamp.now(tz=give_up_at.tz)
             duration = failed_at - started_at
-            if fault_started_at is None or duration > STORAGE_FAULT_ALERT_AFTER:
+            if fault_started_at is None or duration > STORAGE_FAULT_RESET_AFTER:
                 fault_started_at = failed_at
                 alerted = False
                 backoff_attempt = 0
@@ -63,13 +66,16 @@ def wait_out_storage_faults[T](attempt: Callable[[], T], *, give_up_at: Timestam
 
             fault_duration = failed_at - fault_started_at
             if not alerted and fault_duration >= STORAGE_FAULT_ALERT_AFTER:
+                deadline_utc = (
+                    give_up_at.tz_convert(None)
+                    if give_up_at.tz is not None
+                    else give_up_at
+                )
                 log.error(
-                    "The output store has been failing for %.1f minutes (%s: %s). "
-                    "The update is still retrying until %s and needs no rerun unless the Job later fails.",
-                    fault_duration.total_seconds() / 60,
-                    error.kind,
-                    error.message,
-                    give_up_at,
+                    f"{dataset_id}: the output store has been failing for "
+                    f"{fault_duration.total_seconds() / 60:.1f} minutes ({error.kind}: {error.message}). "
+                    f"The update is still retrying until {deadline_utc.isoformat()}Z "
+                    "and needs no rerun unless the Job later fails."
                 )
                 alerted = True
 

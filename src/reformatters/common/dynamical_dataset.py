@@ -205,6 +205,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                         workers_total,
                         job_fire_time=job_fire_time,
                     ),
+                    dataset_id=self.dataset_id,
                     give_up_at=self._virtual_poll_deadline(
                         job_fire_time
                         if job_fire_time is not None
