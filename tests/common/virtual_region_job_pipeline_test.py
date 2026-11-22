@@ -208,12 +208,19 @@ def test_batch_logs_once_and_primary_logs_only_actual_successful_membership(
             replicas: Sequence[Store],
             *,
             allow_rebase: bool = True,
+            retry_on_same_session: bool = True,
         ) -> None:
             if opened and store.session == opened[-1]:
                 if race == "failure":
                     raise RuntimeError("primary failed")
                 raise icechunk.ConflictError()
-            original_commit(message, store, replicas, allow_rebase=allow_rebase)
+            original_commit(
+                message,
+                store,
+                replicas,
+                allow_rebase=allow_rebase,
+                retry_on_same_session=retry_on_same_session,
+            )
 
         monkeypatch.setattr(
             virtual_region_job.storage, "commit_if_icechunk", failing_commit

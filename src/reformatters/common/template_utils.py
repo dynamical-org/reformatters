@@ -252,6 +252,10 @@ def _static_encoding_signature(var: xr.DataArray) -> str:
     )
 
 
+class StructuralDriftError(ValueError):
+    pass
+
+
 def assert_no_structural_drift_from_existing_store(
     template_ds: xr.DataTree, existing_ds: xr.DataTree, append_dim: str
 ) -> None:
@@ -278,7 +282,7 @@ def assert_no_structural_drift_from_existing_store(
     """
     mismatches = structural_mismatches(template_ds, existing_ds, append_dim)
     if mismatches:
-        raise ValueError(
+        raise StructuralDriftError(
             "Update template structure does not match the existing store. "
             "Operational updates cannot change the structure of a published dataset; "
             "run a backfill to change structure. Mismatches:\n"
@@ -290,7 +294,7 @@ def assert_no_structural_drift_from_existing_store(
         existing_origin = node.coords[append_dim].values[0]
         template_origin = template_ds[node.path].coords[append_dim].values[0]
         if existing_origin != template_origin:
-            raise ValueError(
+            raise StructuralDriftError(
                 f"{node.path}: {append_dim} origin differs: existing store starts at "
                 f"{existing_origin}, update template starts at {template_origin}"
             )

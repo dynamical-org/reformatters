@@ -90,8 +90,8 @@ Virtual stores carry no consolidated metadata in the root zarr.json — nothing 
 
 Crash recovery is automatic: committed refs are durable and the filter skips them on the next cron fire; uncommitted refs and expansions vanish and are re-discovered.
 
-On an Icechunk storage error, the update retries in the same pod with backoff, skipping files it has already committed, until the poll deadline.
-After three minutes of storage failures it reports one error for the fault and keeps retrying.
+Unless it hits an assertion failure or detects structural drift, the update retries errors in the same pod with backoff until the poll deadline and skips files it has already committed.
+The update reports one alert per error type in each fault, after two minutes for Icechunk storage errors and immediately for other errors.
 
 The write loop discovers at the region job's `tick_interval` and commits each tick's usable files. By default an unreadable file is skipped for the rest of that pod's life and retried by the next pod. Setting `retain_failed_files = True` keeps failed files pending for later sweeps until `poll_deadline`; the source adapter may suppress unchanged versions. Before opting in, discovery gates that depend on pending coordinates must allow retained files after their siblings commit. Files still uningested at the deadline remain eligible for a later update.
 

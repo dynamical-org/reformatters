@@ -43,7 +43,7 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileResult,
 )
-from reformatters.common.retry import retry
+from reformatters.common.retry import retry, retry_virtual_update
 from reformatters.common.staging import staging_cronjob_name
 from reformatters.common.storage import (
     DatasetFormat,
@@ -51,7 +51,6 @@ from reformatters.common.storage import (
     StorageConfig,
     StoreFactory,
     get_local_tmp_store,
-    wait_out_storage_faults,
 )
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import DatetimeLike, Timestamp
@@ -197,7 +196,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                         materialized_job, cron, is_first=is_first
                     )
             if is_virtual:
-                wait_out_storage_faults(
+                retry_virtual_update(
                     partial(
                         self._virtual_update_attempt,
                         reformat_job_name,
@@ -206,6 +205,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                         job_fire_time=job_fire_time,
                     ),
                     dataset_id=self.dataset_id,
+                    non_retryable_exceptions=(template_utils.StructuralDriftError,),
                     give_up_at=self._virtual_poll_deadline(
                         job_fire_time
                         if job_fire_time is not None
@@ -891,7 +891,9 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
                 for trigger in self.materialized_update_triggers:
                     trigger.dispatch(pd.Timestamp(unit))
         if self.rolling_positions is not None:
-            for _, repo in self.store_factory.icechunk_repos(sort="primary-last"):
+            for _, repo in self.store_factory.icechunk_repos(
+                sort="primary-last", create_if_missing=False
+            ):
                 retry(
                     partial(job.trim_rolling_window, repo, "main"),
                     max_attempts=5,

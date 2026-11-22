@@ -36,6 +36,8 @@ from reformatters.common.types import AppendDim, DatetimeLike, Dim, Timedelta, T
 
 log = get_logger(__name__)
 
+_MANIFEST_PROBE_ATTEMPTS = 8
+
 
 class VirtualRef(NamedTuple):
     """A single virtual chunk reference: one GRIB message -> one zarr chunk.
@@ -229,6 +231,8 @@ class VirtualRegionJob(
         self,
         candidates: Sequence[SOURCE_FILE_COORD],
         store: IcechunkStore,
+        *,
+        max_attempts: int = _MANIFEST_PROBE_ATTEMPTS,
     ) -> list[SOURCE_FILE_COORD]:
         """Drop candidates whose representative chunk is already in the manifest.
 
@@ -236,7 +240,9 @@ class VirtualRegionJob(
         would trigger a download + decode.
         """
         if self.rolling_positions is not None:
-            return self.for_store(store).filter_already_present(candidates, store)
+            return self.for_store(store).filter_already_present(
+                candidates, store, max_attempts=max_attempts
+            )
         group = zarr.open_group(store, mode="r")
         rep_vars = [self.representative_var(coord) for coord in candidates]
         indices = self._resolve_chunk_keys(
@@ -259,7 +265,11 @@ class VirtualRegionJob(
                 continue
             keyed.append((coord, encode_key[var.path](index)))
 
-        present = _exists_many(store, [key for _, key in keyed if key is not None])
+        present = _exists_many(
+            store,
+            [key for _, key in keyed if key is not None],
+            max_attempts=max_attempts,
+        )
         return [coord for coord, key in keyed if key is None or not present[key]]
 
     def for_store(self, store: IcechunkStore) -> Self:
@@ -418,7 +428,9 @@ class VirtualRegionJob(
         )
         del worker_jobs
 
-        primary_repo, replica_repos = store_factory.icechunk_primary_and_replica_repos()
+        primary_repo, replica_repos = store_factory.icechunk_primary_and_replica_repos(
+            create_if_missing=jobs[0].processing_mode != "update"
+        )
         readonly_store = primary_repo.readonly_session(branch_name).store
         remaining = [
             coord
@@ -427,7 +439,11 @@ class VirtualRegionJob(
                 job.source_file_coords()
                 if overwrite_chunks
                 else job.filter_already_present(
-                    job.source_file_coords(), readonly_store
+                    job.source_file_coords(),
+                    readonly_store,
+                    max_attempts=1
+                    if job.processing_mode == "update"
+                    else _MANIFEST_PROBE_ATTEMPTS,
                 )
             )
         ]
@@ -533,7 +549,13 @@ class VirtualRegionJob(
             ]
         if not overwrite_chunks:
             candidates = [coord for coord, _ in file_refs_batch]
-            remaining = mapper.filter_already_present(candidates, session.store)
+            remaining = mapper.filter_already_present(
+                candidates,
+                session.store,
+                max_attempts=1
+                if self.processing_mode == "update"
+                else _MANIFEST_PROBE_ATTEMPTS,
+            )
             remaining_ids = {id(coord) for coord in remaining}
             file_refs_batch = [
                 (coord, refs)
@@ -576,6 +598,7 @@ class VirtualRegionJob(
             session.store,
             [],
             allow_rebase=self.rolling_positions is None and not resized,
+            retry_on_same_session=self.processing_mode != "update",
         )
         if pipeline_batch_id is not None:
             log_virtual_event(
@@ -635,7 +658,11 @@ class VirtualRegionJob(
             if values is not None:
                 array[:] = values
         storage.commit_if_icechunk(
-            "Rolling retention window trim", session.store, [], allow_rebase=False
+            "Rolling retention window trim",
+            session.store,
+            [],
+            allow_rebase=False,
+            retry_on_same_session=self.processing_mode != "update",
         )
 
     def _assert_probe_chunk_covered(
@@ -941,7 +968,7 @@ def _exists_many(
     store: IcechunkStore,
     keys: Sequence[str],
     *,
-    max_attempts: int = 8,
+    max_attempts: int = _MANIFEST_PROBE_ATTEMPTS,
     batch_size: int = 1_000,  # manifest cache locality + bound memory
 ) -> dict[str, bool]:
     """Probe many chunk keys concurrently, at most `batch_size` at a time."""
@@ -954,7 +981,8 @@ def _exists_many(
             batch = probe_keys[start : start + batch_size]
             outcomes.extend(
                 await asyncio.gather(
-                    *(store.exists(key) for key in batch), return_exceptions=True
+                    *(store.exists(key) for key in batch),
+                    return_exceptions=max_attempts > 1,
                 )
             )
         return outcomes

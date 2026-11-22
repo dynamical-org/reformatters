@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -8,7 +7,6 @@ from unittest.mock import MagicMock, Mock
 
 import fsspec
 import icechunk
-import pandas as pd
 import pytest
 import zarr
 import zarr.storage
@@ -43,248 +41,6 @@ def _example_virtual_config() -> IcechunkVirtualConfig:
         containers=(container,),
         manifest_split=manifest_append_dim_split(split_size=1000, dim="init_time"),
     )
-
-
-class StorageFaultClock:
-    now = pd.Timestamp("2024-01-01")
-
-    def __init__(self) -> None:
-        self.sleeps: list[float] = []
-
-    def advance(self, seconds: float) -> None:
-        self.now += pd.Timedelta(seconds=seconds)
-
-    def sleep(self, seconds: float) -> None:
-        self.sleeps.append(seconds)
-        self.advance(seconds)
-
-
-@pytest.fixture
-def storage_fault_clock(monkeypatch: pytest.MonkeyPatch) -> StorageFaultClock:
-    clock = StorageFaultClock()
-    monkeypatch.setattr(
-        pd.Timestamp, "now", classmethod(lambda cls, tz=None: clock.now)
-    )
-    monkeypatch.setattr(storage, "sleep", clock.sleep)
-    return clock
-
-
-@pytest.mark.parametrize("seconds_until_deadline", [60, 0])
-def test_first_storage_attempt_returns_without_sleep_or_logs(
-    storage_fault_clock: StorageFaultClock,
-    caplog: pytest.LogCaptureFixture,
-    seconds_until_deadline: int,
-) -> None:
-    result = object()
-    attempt = Mock(return_value=result)
-    caplog.set_level(logging.DEBUG, logger=storage.__name__)
-
-    assert (
-        storage.wait_out_storage_faults(
-            attempt,
-            dataset_id="test-dataset",
-            give_up_at=storage_fault_clock.now
-            + timedelta(seconds=seconds_until_deadline),
-        )
-        is result
-    )
-    attempt.assert_called_once()
-    assert not storage_fault_clock.sleeps
-    assert not caplog.records
-
-
-def test_storage_retries_return_value_and_log_each_error_kind_and_message(
-    storage_fault_clock: StorageFaultClock, caplog: pytest.LogCaptureFixture
-) -> None:
-    result = object()
-    attempt = Mock(
-        side_effect=[
-            icechunk.StorageError("read timed out", "io"),
-            icechunk.StorageError("backend unavailable", "object-store"),
-            result,
-        ]
-    )
-
-    assert (
-        storage.wait_out_storage_faults(
-            attempt,
-            dataset_id="test-dataset",
-            give_up_at=storage_fault_clock.now + timedelta(minutes=1),
-        )
-        is result
-    )
-    assert len(storage_fault_clock.sleeps) == 2
-    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    assert len(warnings) == 2
-    assert "io" in warnings[0]
-    assert "read timed out" in warnings[0]
-    assert "object-store" in warnings[1]
-    assert "backend unavailable" in warnings[1]
-
-
-@pytest.mark.parametrize(
-    "error",
-    [AssertionError(), icechunk.RebaseFailedError("snapshot", []), Exception()],
-    ids=["assertion", "conflict", "plain-exception"],
-)
-def test_storage_retry_propagates_other_errors_on_first_attempt(
-    storage_fault_clock: StorageFaultClock, error: Exception
-) -> None:
-    attempt = Mock(side_effect=error)
-
-    with pytest.raises(type(error)) as raised:
-        storage.wait_out_storage_faults(
-            attempt,
-            dataset_id="test-dataset",
-            give_up_at=storage_fault_clock.now + timedelta(minutes=1),
-        )
-
-    assert raised.value is error
-    attempt.assert_called_once()
-    assert not storage_fault_clock.sleeps
-
-
-@pytest.mark.parametrize("remaining_seconds", [1.0, 0.5], ids=["at", "past"])
-def test_storage_retry_preserves_last_error_when_next_attempt_would_miss_deadline(
-    monkeypatch: pytest.MonkeyPatch,
-    storage_fault_clock: StorageFaultClock,
-    remaining_seconds: float,
-) -> None:
-    monkeypatch.setattr(storage, "exponential_backoff_time", lambda _: 1)
-    first = icechunk.StorageError("first fault", "io")
-    last = icechunk.StorageError("last fault", "io")
-    attempt = Mock(side_effect=[first, last])
-
-    with pytest.raises(icechunk.StorageError) as raised:
-        storage.wait_out_storage_faults(
-            attempt,
-            dataset_id="test-dataset",
-            give_up_at=storage_fault_clock.now
-            + timedelta(seconds=1 + remaining_seconds),
-        )
-
-    assert raised.value is last
-    assert attempt.call_count == 2
-    assert storage_fault_clock.sleeps == [1]
-
-
-def test_storage_retry_does_not_start_another_attempt_after_oversleeping(
-    monkeypatch: pytest.MonkeyPatch, storage_fault_clock: StorageFaultClock
-) -> None:
-    clock = storage_fault_clock
-    give_up_at = clock.now + timedelta(seconds=1)
-    monkeypatch.setattr(storage, "sleep", lambda _: clock.advance(2))
-    error = icechunk.StorageError("storage unavailable", "io")
-    attempt = Mock(side_effect=error)
-
-    with pytest.raises(icechunk.StorageError) as raised:
-        storage.wait_out_storage_faults(
-            attempt, dataset_id="test-dataset", give_up_at=give_up_at
-        )
-
-    assert raised.value is error
-    assert clock.now >= give_up_at
-    attempt.assert_called_once()
-
-
-def test_slow_storage_failures_alert_once_and_keep_retrying(
-    storage_fault_clock: StorageFaultClock, caplog: pytest.LogCaptureFixture
-) -> None:
-    clock = storage_fault_clock
-    alert_counts: list[int] = []
-
-    def attempt() -> str:
-        alert_counts.append(sum(r.levelno == logging.ERROR for r in caplog.records))
-        if len(alert_counts) <= 3:
-            clock.advance(6 * 60)
-            raise icechunk.StorageError("commit timed out", "io")
-        return "recovered"
-
-    assert (
-        storage.wait_out_storage_faults(
-            attempt,
-            dataset_id="test-dataset",
-            give_up_at=clock.now + timedelta(hours=1),
-        )
-        == "recovered"
-    )
-    assert alert_counts == [0, 0, 1, 1]
-
-
-@pytest.mark.parametrize(
-    ("second_fault_start_minute", "second_fault_seconds", "expected_alerts"),
-    [(18, 220, 1), (20, 40, 1), (20, 220, 2)],
-    ids=["within-reset-window", "brief-new-fault", "sustained-new-fault"],
-)
-def test_storage_alerts_once_per_three_minute_fault_and_keeps_retrying(
-    storage_fault_clock: StorageFaultClock,
-    caplog: pytest.LogCaptureFixture,
-    second_fault_start_minute: int,
-    second_fault_seconds: int,
-    expected_alerts: int,
-) -> None:
-    clock = storage_fault_clock
-    start = clock.now
-    second_fault_start = start + timedelta(minutes=second_fault_start_minute)
-
-    def attempt() -> str:
-        if clock.now < start + timedelta(seconds=220):
-            raise icechunk.StorageError("first fault", "io")
-        if clock.now < second_fault_start:
-            clock.now = second_fault_start
-            raise icechunk.StorageError("second fault", "io")
-        if clock.now < second_fault_start + timedelta(seconds=second_fault_seconds):
-            raise icechunk.StorageError("second fault", "io")
-        return "recovered"
-
-    alert_times: list[pd.Timestamp] = []
-
-    class RecordAlertTime(logging.Filter):
-        def filter(self, record: logging.LogRecord) -> bool:
-            if record.levelno == logging.ERROR:
-                alert_times.append(clock.now)
-            return True
-
-    with caplog.filtering(RecordAlertTime()):
-        assert (
-            storage.wait_out_storage_faults(
-                attempt,
-                dataset_id="test-dataset",
-                give_up_at=second_fault_start + timedelta(minutes=6),
-            )
-            == "recovered"
-        )
-
-    fault_starts = [start]
-    if expected_alerts == 2:
-        fault_starts.append(second_fault_start)
-    assert len(alert_times) == len(fault_starts)
-    for fault_start, alert_at in zip(fault_starts, alert_times, strict=True):
-        assert timedelta(minutes=3) <= alert_at - fault_start < timedelta(seconds=196)
-    assert clock.now > alert_times[-1]
-
-
-def test_storage_backoff_does_not_overflow_after_many_attempts(
-    storage_fault_clock: StorageFaultClock,
-) -> None:
-    attempts = 0
-
-    def attempt() -> int:
-        nonlocal attempts
-        attempts += 1
-        if attempts <= 1100:
-            raise icechunk.StorageError("persistent fault", "io")
-        return attempts
-
-    assert (
-        storage.wait_out_storage_faults(
-            attempt,
-            dataset_id="test-dataset",
-            give_up_at=storage_fault_clock.now + timedelta(hours=6),
-        )
-        == 1101
-    )
-    assert max(storage_fault_clock.sleeps) <= 16
 
 
 @pytest.mark.parametrize(
@@ -1171,6 +927,33 @@ class TestIcechunkPrimaryWithZarr3Replica:
         )
 
 
+def test_open_existing_icechunk_repos_propagates_storage_failure_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    factory = StoreFactory(
+        primary_storage_config=StorageConfig(
+            base_path="local", format=DatasetFormat.ICECHUNK
+        ),
+        dataset_id="test-dataset",
+        template_config_version="v1.0",
+    )
+    error = icechunk.StorageError("store unreachable", "io")
+    open_repo = Mock(side_effect=error)
+    create_repo = Mock()
+    sleep = Mock()
+    monkeypatch.setattr(icechunk.Repository, "open", open_repo)
+    monkeypatch.setattr(icechunk.Repository, "open_or_create", create_repo)
+    monkeypatch.setattr(retry_module.time, "sleep", sleep)
+
+    with pytest.raises(icechunk.StorageError) as raised:
+        factory.icechunk_primary_and_replica_repos(create_if_missing=False)
+
+    assert raised.value is error
+    open_repo.assert_called_once()
+    create_repo.assert_not_called()
+    sleep.assert_not_called()
+
+
 class TestCommitIfIcechunkFailureIsolation:
     """When a replica commit fails permanently, the primary MUST NOT commit.
     Otherwise we'd have primary ahead of replica — readers of the replica
@@ -1196,6 +979,19 @@ class TestCommitIfIcechunkFailureIsolation:
         # retry() calls the function max_attempts times before re-raising.
         assert replica.session.commit.call_count == 10
         primary.session.commit.assert_not_called()
+
+    def test_disabled_commit_retry_returns_failure_without_reusing_session(
+        self,
+    ) -> None:
+        store = MagicMock(spec=IcechunkStore)
+        error = icechunk.StorageError("commit unavailable", "io")
+        store.session.commit.side_effect = [error, "committed"]
+
+        with pytest.raises(icechunk.StorageError) as raised:
+            commit_if_icechunk("msg", store, [], retry_on_same_session=False)
+
+        assert raised.value is error
+        store.session.commit.assert_called_once()
 
     @pytest.mark.parametrize("allow_rebase", [False, True])
     def test_transient_replica_failure_retried_then_primary_commits(

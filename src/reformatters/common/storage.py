@@ -1,18 +1,16 @@
 import contextlib
 import functools
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
-from time import sleep
 from typing import Any, Literal, assert_never
 from urllib.parse import urlparse
 from uuid import uuid4
 
 import fsspec
 import icechunk
-import pandas as pd
 import xarray as xr
 import zarr
 import zarr.abc.store
@@ -26,70 +24,17 @@ from reformatters.common.config import Config, Env
 from reformatters.common.download import load_s3_credentials
 from reformatters.common.logging import get_logger
 from reformatters.common.pydantic import FrozenBaseModel
-from reformatters.common.retry import exponential_backoff_time, retry
-from reformatters.common.types import AppendDim, Timestamp
+from reformatters.common.retry import retry
+from reformatters.common.types import AppendDim
 
 log = get_logger(__name__)
 
 _LOCAL_ZARR_STORE_BASE_PATH = "data/output"
 JOB_STATE_RETENTION = timedelta(days=1)
-STORAGE_FAULT_ALERT_AFTER = timedelta(minutes=3)
-STORAGE_FAULT_RESET_AFTER = timedelta(minutes=15)
 
 # This is a sentinel value to indicate that we should not try to load the storage options from a Kubernetes secret.
 # This is useful in the test and dev environments where we don't have a Kubernetes secret mounted.
 _NO_SECRET_NAME = "no-secret"  # noqa: S105
-
-
-def wait_out_storage_faults[T](
-    attempt: Callable[[], T], *, dataset_id: str, give_up_at: Timestamp
-) -> T:
-    """Retry Icechunk storage errors until another attempt cannot start before the deadline."""
-    fault_started_at = None
-    alerted = False
-    backoff_attempt = 0
-    started_at = pd.Timestamp.now(tz=give_up_at.tz)
-    while True:
-        try:
-            return attempt()
-        except icechunk.StorageError as error:
-            failed_at = pd.Timestamp.now(tz=give_up_at.tz)
-            duration = failed_at - started_at
-            if fault_started_at is None or duration > STORAGE_FAULT_RESET_AFTER:
-                fault_started_at = failed_at
-                alerted = False
-                backoff_attempt = 0
-
-            delay = exponential_backoff_time(backoff_attempt)
-            if failed_at + timedelta(seconds=delay) >= give_up_at:
-                raise
-
-            fault_duration = failed_at - fault_started_at
-            if not alerted and fault_duration >= STORAGE_FAULT_ALERT_AFTER:
-                deadline_utc = (
-                    give_up_at.tz_convert(None)
-                    if give_up_at.tz is not None
-                    else give_up_at
-                )
-                log.error(
-                    f"{dataset_id}: the output store has been failing for "
-                    f"{fault_duration.total_seconds() / 60:.1f} minutes ({error.kind}: {error.message}). "
-                    f"The update is still retrying until {deadline_utc.isoformat()}Z "
-                    "and needs no rerun unless the Job later fails."
-                )
-                alerted = True
-
-            log.warning(
-                "Retrying after output store error (%s: %s) in an attempt that ran for %.1f s",
-                error.kind,
-                error.message,
-                duration.total_seconds(),
-            )
-            sleep(delay)
-            started_at = pd.Timestamp.now(tz=give_up_at.tz)
-            if started_at >= give_up_at:
-                raise
-            backoff_attempt = min(backoff_attempt + 1, 5)
 
 
 class DatasetFormat(StrEnum):
@@ -215,12 +160,14 @@ class StoreFactory(FrozenBaseModel):
         )
 
     def icechunk_primary_and_replica_repos(
-        self,
+        self, *, create_if_missing: bool = True
     ) -> tuple[icechunk.Repository, tuple[icechunk.Repository, ...]]:
         """Returns (primary_repo, (replica_repos, ...)) for the common case where
         the caller just wants the primary and its replicas. Use icechunk_repos
         when you also need roles or a specific primary-first/last ordering."""
-        repos = self.icechunk_repos(sort="primary-first")
+        repos = self.icechunk_repos(
+            sort="primary-first", create_if_missing=create_if_missing
+        )
         primaries = [repo for role, repo in repos if role == "primary"]
         # Virtual datasets require an icechunk primary (enforced by the
         # DynamicalDataset validator), so exactly one primary repo is expected.
@@ -254,7 +201,10 @@ class StoreFactory(FrozenBaseModel):
         return storages
 
     def icechunk_repos(
-        self, *, sort: Literal["primary-first", "primary-last"]
+        self,
+        *,
+        sort: Literal["primary-first", "primary-last"],
+        create_if_missing: bool = True,
     ) -> list[tuple[str, icechunk.Repository]]:
         """Returns (role, Repository) for each icechunk store in the specified order.
 
@@ -266,15 +216,17 @@ class StoreFactory(FrozenBaseModel):
         )
         repos: list[tuple[str, icechunk.Repository]] = []
         for role, _store_path, ic_storage in self._icechunk_storages():
+            open_repo = functools.partial(
+                icechunk.Repository.open_or_create
+                if create_if_missing
+                else icechunk.Repository.open,
+                ic_storage,
+                config=repo_config,
+                authorize_virtual_chunk_access=credentials,
+            )
             # Retry to resolve multiple workers racing to create a new repo
-            repo = retry(
-                functools.partial(
-                    icechunk.Repository.open_or_create,
-                    ic_storage,
-                    config=repo_config,
-                    authorize_virtual_chunk_access=credentials,
-                ),
-                max_attempts=3,
+            repo = (
+                retry(open_repo, max_attempts=3) if create_if_missing else open_repo()
             )
             repos.append((role, repo))
 
@@ -570,12 +522,13 @@ def commit_if_icechunk(
     replica_stores: Sequence[Store],
     *,
     allow_rebase: bool = True,
+    retry_on_same_session: bool = True,
 ) -> None:
     """Commit Icechunk replicas before the primary, optionally rebasing disjoint writes.
 
     With allow_rebase=False, any branch advance raises icechunk.ConflictError.
-    Unresolved conflicts also raise icechunk.ConflictError. Other errors are
-    retried on the same session, up to ten attempts per store.
+    Unresolved conflicts also raise icechunk.ConflictError. By default, other errors
+    are retried on the same session, up to ten attempts per store.
     """
 
     def _commit(icechunk_store: IcechunkStore) -> None:
@@ -584,20 +537,13 @@ def commit_if_icechunk(
             rebase_with=icechunk.ConflictDetector() if allow_rebase else None,
         )
 
-    for store in replica_stores:
+    for store in (*replica_stores, primary_store):
         if isinstance(store, IcechunkStore):
             retry(
                 functools.partial(_commit, store),
-                max_attempts=10,
+                max_attempts=10 if retry_on_same_session else 1,
                 non_retryable_exceptions=(icechunk.ConflictError,),
             )
-
-    if isinstance(primary_store, IcechunkStore):
-        retry(
-            functools.partial(_commit, primary_store),
-            max_attempts=10,
-            non_retryable_exceptions=(icechunk.ConflictError,),
-        )
 
 
 def manifest_append_dim_split(

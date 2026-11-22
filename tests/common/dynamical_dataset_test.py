@@ -1,7 +1,7 @@
 import json
 import subprocess
 from collections import Counter
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from functools import partial
@@ -30,6 +30,9 @@ from reformatters.common import (
     template_utils,
     validation,
 )
+from reformatters.common import (
+    retry as retry_module,
+)
 from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -53,11 +56,12 @@ from reformatters.common.storage import (
 )
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
-from reformatters.common.virtual_region_job import VirtualRegionJob
+from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.deployments import targets
 from tests.common.virtual_region_job_test import (
     VirtualTestDataset,
     VirtualTestRegionJob,
+    VirtualTestSourceFileCoord,
     _create_template_ds,
     _main_store_bytes,
     _make_dataset,
@@ -956,14 +960,20 @@ def test_virtual_update_rejects_structural_drift_before_any_commit(
     job = _make_region_job(
         _create_template_ds(2), region=slice(0, 2), processing_mode="update"
     )
+    plan = Mock(return_value=([job], drifted))
+    sleep = Mock(side_effect=AssertionError("structural drift must fail immediately"))
+    monkeypatch.setattr(retry_time, "sleep", sleep)
     monkeypatch.setattr(
         VirtualTestRegionJob,
         "operational_update_jobs",
-        classmethod(lambda cls, **kwargs: ([job], drifted)),
+        classmethod(lambda cls, **kwargs: plan(**kwargs)),
     )
 
     with pytest.raises(ValueError, match="does not match the existing store"):
         dataset.update("test")
+
+    plan.assert_called_once()
+    sleep.assert_not_called()
 
     # Worker 0's guard raised before any commit landed on main.
     assert repo.lookup_branch("main") == main_before
@@ -990,10 +1000,16 @@ def _published_temperature_refs(
 
 @pytest.fixture
 def local_virtual_update_dispatch(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    now = pd.Timestamp("2024-01-02")
+
+    def sleep(seconds: float) -> None:
+        nonlocal now
+        now += timedelta(seconds=seconds)
+
     monkeypatch.setattr(
         pd.Timestamp,
         "now",
-        classmethod(lambda cls, tz=None: pd.Timestamp("2024-01-02", tz=tz)),
+        classmethod(lambda cls, tz=None: now.tz_localize(tz)),
     )
     monkeypatch.setattr(
         VirtualTestDataset, "_get_template", lambda *args: _create_template_ds(4)
@@ -1006,8 +1022,7 @@ def local_virtual_update_dispatch(monkeypatch: pytest.MonkeyPatch) -> Mock:
     monkeypatch.setattr(
         VirtualTestDataset, "materialized_update_triggers", (Mock(dispatch=dispatch),)
     )
-    monkeypatch.setattr(retry_time, "sleep", lambda _: None)
-    monkeypatch.setattr(storage, "sleep", lambda _: None)
+    monkeypatch.setattr(retry_time, "sleep", sleep)
     monkeypatch.setattr(
         storage,
         "_get_store_path",
@@ -1016,9 +1031,129 @@ def local_virtual_update_dispatch(monkeypatch: pytest.MonkeyPatch) -> Mock:
     return dispatch
 
 
+def _run_virtual_update_with_fault(
+    path: Path,
+    fault: str | None,
+    *,
+    replica: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    dispatch: Mock,
+) -> tuple[list[xr.Dataset], list[Counter[tuple[int, ...]]], int]:
+    real_open = icechunk.Repository.open
+    real_commit = icechunk.Session.commit
+    real_refs = VirtualTestRegionJob.process_virtual_refs
+    path.mkdir()
+    dataset = _make_dataset(path)
+    if replica:
+        dataset = dataset.model_copy(
+            update={
+                "replica_storage_configs": (
+                    StorageConfig(
+                        base_path=str(path / "replica"),
+                        format=DatasetFormat.ICECHUNK,
+                    ),
+                ),
+            }
+        )
+    template_utils.write_metadata(_create_template_ds(2), dataset.store_factory)
+    repos = [
+        repo for _, repo in dataset.store_factory.icechunk_repos(sort="primary-first")
+    ]
+    seed_heads = [repo.lookup_branch("main") for repo in repos]
+    primary_head = seed_heads[0]
+    commit_failures = {
+        "open-and-commit": 1,
+        "lost-mid-window": 1,
+        "replica-before-primary": 1,
+        "lost-final": 1,
+    }.get(fault or "", 0)
+    commit_fault_started = False
+    dispatch.reset_mock()
+
+    def commit_with_fault(
+        session: icechunk.Session,
+        message: str,
+        *,
+        rebase_with: icechunk.ConflictSolver | None = None,
+    ) -> str:
+        nonlocal commit_fault_started, commit_failures, primary_head
+        if session.snapshot_id != primary_head:
+            return real_commit(session, message, rebase_with=rebase_with)
+        files = session.status().updated_chunks.get("/temperature_2m", [])
+        last_batch = any(index[:2] == [3, 1] for index in files)
+        if commit_failures and (
+            commit_fault_started or (files and (fault != "lost-final" or last_batch))
+        ):
+            if replica and not commit_fault_started:
+                assert _published_temperature_refs(repos[1], seed_heads[1]).keys() >= {
+                    tuple(index) for index in files
+                }
+            if fault in ("lost-mid-window", "lost-final") and not commit_fault_started:
+                primary_head = real_commit(session, message, rebase_with=rebase_with)
+            commit_fault_started = True
+            commit_failures -= 1
+            raise icechunk.StorageError("commit unavailable", "io")
+        primary_head = real_commit(session, message, rebase_with=rebase_with)
+        return primary_head
+
+    unexpected_failures = 0
+
+    def refs_with_fault(
+        job: VirtualTestRegionJob, remaining: Sequence[VirtualTestSourceFileCoord]
+    ) -> Iterator[Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]]]:
+        nonlocal unexpected_failures
+        for index, batch in enumerate(real_refs(job, remaining)):
+            if index == 1 and not unexpected_failures:
+                unexpected_failures += 1
+                raise RuntimeError("could not discover the next file")
+            yield batch
+
+    with monkeypatch.context() as patch_fault:
+        if fault == "open-and-commit":
+            first_opens = (
+                icechunk.StorageError("planning store unavailable", "io"),
+                DEFAULT,
+                icechunk.StorageError("drift check store unavailable", "io"),
+            )
+            patch_fault.setattr(
+                icechunk.Repository,
+                "open",
+                Mock(
+                    wraps=real_open,
+                    side_effect=chain(first_opens, repeat(DEFAULT)),
+                ),
+            )
+        if fault == "unexpected-mid-window":
+            patch_fault.setattr(
+                VirtualTestRegionJob, "process_virtual_refs", refs_with_fault
+            )
+        patch_fault.setattr(icechunk.Session, "commit", commit_with_fault)
+        dataset.update("fault-retry")
+    assert commit_failures == 0
+    assert unexpected_failures == (1 if fault == "unexpected-mid-window" else 0)
+
+    datasets = [
+        xr.open_zarr(
+            repo.readonly_session("main").store, chunks=None, decode_timedelta=True
+        ).load()
+        for repo in repos
+    ]
+    writes = [
+        _published_temperature_refs(repo, seed)
+        for repo, seed in zip(repos, seed_heads, strict=True)
+    ]
+    return datasets, writes, dispatch.call_count
+
+
 @pytest.mark.parametrize(
     "fault",
-    ["open-and-commit", "lost-mid-window", "replica-before-primary", "lost-final"],
+    [
+        "open-and-commit",
+        "lost-mid-window",
+        "replica-before-primary",
+        "lost-final",
+        "unexpected-mid-window",
+    ],
 )
 def test_virtual_update_resumes_without_duplicate_file_commits(
     tmp_path: Path,
@@ -1026,101 +1161,14 @@ def test_virtual_update_resumes_without_duplicate_file_commits(
     local_virtual_update_dispatch: Mock,
     fault: str,
 ) -> None:
-    dispatch = local_virtual_update_dispatch
-    real_open = icechunk.Repository.open
-    real_commit = icechunk.Session.commit
-
-    def run_update(
-        path: Path, fault: str | None
-    ) -> tuple[list[xr.Dataset], list[Counter[tuple[int, ...]]], int]:
-        path.mkdir()
-        dataset = _make_dataset(path)
-        if replica:
-            dataset = dataset.model_copy(
-                update={
-                    "replica_storage_configs": (
-                        StorageConfig(
-                            base_path=str(path / "replica"),
-                            format=DatasetFormat.ICECHUNK,
-                        ),
-                    ),
-                }
-            )
-        template_utils.write_metadata(_create_template_ds(2), dataset.store_factory)
-        repos = [
-            repo
-            for _, repo in dataset.store_factory.icechunk_repos(sort="primary-first")
-        ]
-        seed_heads = [repo.lookup_branch("main") for repo in repos]
-        primary_head = seed_heads[0]
-        commit_failures = 1 if fault == "open-and-commit" else 10 if fault else 0
-        commit_fault_started = False
-        dispatch.reset_mock()
-
-        def commit_with_fault(
-            session: icechunk.Session,
-            message: str,
-            *,
-            rebase_with: icechunk.ConflictSolver | None = None,
-        ) -> str:
-            nonlocal commit_fault_started, commit_failures, primary_head
-            if session.snapshot_id != primary_head:
-                return real_commit(session, message, rebase_with=rebase_with)
-            files = session.status().updated_chunks.get("/temperature_2m", [])
-            last_batch = any(index[:2] == [3, 1] for index in files)
-            if commit_failures and (
-                commit_fault_started
-                or (files and (fault != "lost-final" or last_batch))
-            ):
-                if replica and not commit_fault_started:
-                    assert _published_temperature_refs(
-                        repos[1], seed_heads[1]
-                    ).keys() >= {tuple(index) for index in files}
-                if (
-                    fault in ("lost-mid-window", "lost-final")
-                    and not commit_fault_started
-                ):
-                    primary_head = real_commit(
-                        session, message, rebase_with=rebase_with
-                    )
-                commit_fault_started = True
-                commit_failures -= 1
-                raise icechunk.StorageError("commit unavailable", "io")
-            primary_head = real_commit(session, message, rebase_with=rebase_with)
-            return primary_head
-
-        with monkeypatch.context() as patch_fault:
-            if fault == "open-and-commit":
-                first_opens = (
-                    icechunk.StorageError("planning store unavailable", "io"),
-                    DEFAULT,
-                    icechunk.StorageError("drift check store unavailable", "io"),
-                )
-                patch_fault.setattr(
-                    icechunk.Repository,
-                    "open",
-                    Mock(
-                        wraps=real_open,
-                        side_effect=chain(first_opens, repeat(DEFAULT)),
-                    ),
-                )
-            patch_fault.setattr(icechunk.Session, "commit", commit_with_fault)
-            dataset.update("fault-retry")
-        assert commit_failures == 0
-
-        datasets = [
-            xr.open_zarr(
-                repo.readonly_session("main").store, chunks=None, decode_timedelta=True
-            ).load()
-            for repo in repos
-        ]
-        writes = [
-            _published_temperature_refs(repo, seed)
-            for repo, seed in zip(repos, seed_heads, strict=True)
-        ]
-        return datasets, writes, dispatch.call_count
 
     replica = fault == "replica-before-primary"
+    run_update = partial(
+        _run_virtual_update_with_fault,
+        replica=replica,
+        monkeypatch=monkeypatch,
+        dispatch=local_virtual_update_dispatch,
+    )
     clean, clean_writes, clean_triggers = run_update(tmp_path / "clean", None)
     recovered, recovered_writes, recovered_triggers = run_update(
         tmp_path / "recovered", fault
@@ -1143,8 +1191,22 @@ def test_virtual_update_resumes_without_duplicate_file_commits(
         assert recovered_triggers == clean_triggers
 
 
-def test_virtual_update_reraises_storage_failure_at_original_poll_deadline(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("first", "last"),
+    [
+        (
+            icechunk.StorageError("initial failure", "io"),
+            icechunk.StorageError("storage still unavailable", "io"),
+        ),
+        (ValueError("initial failure"), ValueError("update still unavailable")),
+    ],
+    ids=["storage", "unexpected"],
+)
+def test_virtual_update_reraises_last_failure_at_original_poll_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    first: Exception,
+    last: Exception,
 ) -> None:
     dataset = _make_dataset(tmp_path)
     now = pd.Timestamp("2024-01-02T00:04:28")
@@ -1153,18 +1215,16 @@ def test_virtual_update_reraises_storage_failure_at_original_poll_deadline(
         "now",
         classmethod(lambda cls, tz=None: now.tz_localize(tz)),
     )
-    monkeypatch.setattr(storage, "exponential_backoff_time", lambda _: 1)
+    monkeypatch.setattr(retry_module, "exponential_backoff_time", lambda _: 1)
 
     def sleep(seconds: float) -> None:
         nonlocal now
         now += timedelta(seconds=seconds)
 
-    monkeypatch.setattr(storage, "sleep", sleep)
-    first = icechunk.StorageError("initial failure", "io")
-    last = icechunk.StorageError("storage still unavailable", "io")
+    monkeypatch.setattr(retry_time, "sleep", sleep)
     fail_open = Mock(side_effect=[first, last])
     monkeypatch.setattr(icechunk.Repository, "open", fail_open)
-    with pytest.raises(icechunk.StorageError) as raised:
+    with pytest.raises(type(last)) as raised:
         dataset.update("fault-deadline")
 
     assert raised.value is last
