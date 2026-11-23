@@ -932,11 +932,11 @@ def test_run_virtual_operational_update_asserts_one_worker_per_job() -> None:
     dataset = ExampleVirtualDataset()
     with pytest.raises(AssertionError, match="one worker per Job"):
         dataset._run_virtual_operational_update(
-            [Mock()], worker_index=0, workers_total=2
+            [Mock()], worker_index=0, workers_total=2, poll_deadline=pd.Timestamp.max
         )
     with pytest.raises(AssertionError, match="one worker per Job"):
         dataset._run_virtual_operational_update(
-            [Mock()], worker_index=1, workers_total=1
+            [Mock()], worker_index=1, workers_total=1, poll_deadline=pd.Timestamp.max
         )
 
 
@@ -1374,7 +1374,7 @@ def test_virtual_loop_dispatches_before_replica_then_primary_trim(
     )
     monkeypatch.setattr(Config, "env", Env.prod)
     monkeypatch.setenv("CRON_JOB_NAME", "test-virtual-dataset-update")
-    dataset._run_virtual_operational_update([job], 0, 1)
+    dataset._run_virtual_operational_update([job], 0, 1, poll_deadline=pd.Timestamp.max)
     assert events == ["files", "completion"] + (
         ["trim-replica", "trim-primary"] if positions else []
     )
@@ -1382,7 +1382,7 @@ def test_virtual_loop_dispatches_before_replica_then_primary_trim(
     assert trim.call_count == (2 if positions else 0)
 
 
-@pytest.mark.parametrize("failure_point", ["primary-commit", "dispatch"])
+@pytest.mark.parametrize("failure_point", ["primary-commit", "rolling-trim"])
 def test_virtual_update_recovers_without_recommitting_files_or_dispatching_twice(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure_point: str
 ) -> None:
@@ -1400,6 +1400,7 @@ def test_virtual_update_recovers_without_recommitting_files_or_dispatching_twice
     sleep = Mock(side_effect=[None, AssertionError("update did not recover")])
     monkeypatch.setattr(retry_module.time, "sleep", sleep)
 
+    n_inits = 4
     dataset = _make_dataset(tmp_path)
     dataset = dataset.model_copy(
         update={
@@ -1407,10 +1408,10 @@ def test_virtual_update_recovers_without_recommitting_files_or_dispatching_twice
                 StorageConfig(
                     base_path=str(tmp_path / "replica"), format=DatasetFormat.ICECHUNK
                 ),
-            )
+            ),
+            "rolling_positions": n_inits if failure_point == "rolling-trim" else None,
         }
     )
-    n_inits = 4
     monkeypatch.setattr(
         VirtualTestDataset, "_get_template", lambda *args: _create_template_ds(n_inits)
     )
@@ -1423,11 +1424,23 @@ def test_virtual_update_recovers_without_recommitting_files_or_dispatching_twice
     trigger = Mock()
     monkeypatch.setattr(VirtualTestDataset, "materialized_update_triggers", (trigger,))
     failure = OSError("transient update failure")
-    if failure_point == "dispatch":
-        trigger.dispatch.side_effect = [failure, None]
+    failed = False
+    if failure_point == "rolling-trim":
+        original_trim = VirtualTestRegionJob.trim_rolling_window
+
+        def trim(
+            job: VirtualTestRegionJob, repo: icechunk.Repository, branch: str
+        ) -> None:
+            nonlocal failed
+            if not failed:
+                trigger.dispatch.assert_called_once()
+                failed = True
+                raise failure
+            original_trim(job, repo, branch)
+
+        monkeypatch.setattr(VirtualTestRegionJob, "trim_rolling_window", trim)
     else:
         original_commit = VirtualTestRegionJob._commit_virtual_batch
-        failed = False
 
         def commit(
             job: VirtualTestRegionJob,

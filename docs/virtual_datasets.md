@@ -153,7 +153,7 @@ A source message may supply multiple arrays. Declare each output in the source c
 
 ## Replicas
 
-The loop opens sessions on all stores and commits replicas-then-primary. "Committed" is defined by the primary (the filter probes the primary's manifest), so a crash between replica and primary commits is replayed idempotently on the next fire; replicas may briefly be a commit ahead, never behind.
+The loop opens sessions on all stores and commits replicas-then-primary. "Committed" is defined by the primary (the filter probes the primary's manifest), so a crash between replica and primary commits is replayed idempotently on the next attempt or fire; replicas may briefly be a commit ahead, never behind.
 
 ## Operational validation
 
