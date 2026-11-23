@@ -33,7 +33,7 @@ Readers must always see a consistent view — either the old data or the fully u
 
 ### Structure guard (operational updates)
 
-Before any writes, worker 0 of an operational update asserts that the update template's structure still matches the already-published store — the first append-dimension coordinate must match in each nonempty stored group (rolling virtual stores compare the template from the stored origin), and every variable present in the store must still exist with unchanged dims, on-disk dtype, chunks, and shards (`template_utils.assert_no_structural_drift_from_existing_store`). A drifted template (a changed append origin, a removed/renamed variable, or a changed dtype/dims/chunks/shards) would corrupt the existing archive or break readers, so the update fails fast and leaves the live store untouched. Changing structure requires a backfill.
+Before any writes, worker 0 of an operational update asserts that the update template's structure still matches the already-published store — the first append-dimension coordinate must match in each nonempty stored group (rolling virtual stores compare the template from the stored origin), and every variable present in the store must still exist with unchanged dims, on-disk dtype, chunks, and shards (`template_utils.assert_no_structural_drift_from_existing_store`). A drifted template (a changed append origin, a removed/renamed variable, or a changed dtype/dims/chunks/shards) would corrupt the existing archive or break readers, so the guard rejects the attempt before any writes. A virtual update retries within its polling window. Changing structure requires a backfill.
 
 ### Retraction guard (operational updates)
 
@@ -145,6 +145,6 @@ Because any operational update that publishes during an overwrite backfill makes
 
 ## Replica ordering
 
-Replicas are always updated before the primary store. This ensures that if a failure occurs between updating replicas and primary, the primary (which drives what work needs to be done) still reflects the pre-update state, causing a retry to redo all the work including re-updating replicas.
+Replicas are always updated before the primary store. If a failure occurs between updating replicas and primary, the retry resumes from the primary's published state. Virtual updates also check each replica and skip files already committed there.
 
 Finalization publishes in two passes by format — zarr v3 stores, then icechunk stores. Zarr v3 is deprecated: no new zarr v3 store is created, and a zarr v3 store is never the primary of an icechunk replica (a registry test in `tests/datasets_test.py` enforces this), so publishing that format first keeps the primary the last store to advance.

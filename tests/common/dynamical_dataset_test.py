@@ -1,9 +1,11 @@
 import json
 import subprocess
+from collections import Counter
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from functools import partial
+from itertools import pairwise
 from pathlib import Path
 from typing import ClassVar
 from unittest.mock import Mock, patch
@@ -28,6 +30,9 @@ from reformatters.common import (
     template_utils,
     validation,
 )
+from reformatters.common import (
+    retry as retry_module,
+)
 from reformatters.common.config import Config, Env
 from reformatters.common.config_models import (
     BaseInternalAttrs,
@@ -50,11 +55,14 @@ from reformatters.common.storage import (
 )
 from reformatters.common.template_config import TemplateConfig
 from reformatters.common.types import AppendDim, Dim, Timedelta, Timestamp
-from reformatters.common.virtual_region_job import VirtualRegionJob
+from reformatters.common.virtual_region_job import VirtualRef, VirtualRegionJob
 from reformatters.deployments import targets
 from tests.common.virtual_region_job_test import (
+    N_LEADS,
     VirtualTestDataset,
     VirtualTestRegionJob,
+    VirtualTestSourceFileCoord,
+    _assert_store_values,
     _create_template_ds,
     _main_store_bytes,
     _make_dataset,
@@ -933,7 +941,7 @@ def test_run_virtual_operational_update_asserts_one_worker_per_job() -> None:
 
 
 @pytest.mark.slow
-def test_virtual_update_rejects_structural_drift_before_any_commit(
+def test_virtual_update_propagates_persistent_structural_drift_at_cutoff_without_writing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     dataset = _make_dataset(tmp_path)
@@ -958,10 +966,22 @@ def test_virtual_update_rejects_structural_drift_before_any_commit(
         "operational_update_jobs",
         classmethod(lambda cls, **kwargs: ([job], drifted)),
     )
+    now = pd.Timestamp("2024-01-02T00:04:29.750")
+    monkeypatch.setattr(
+        pd.Timestamp, "now", classmethod(lambda cls, tz=None: now.tz_localize(tz))
+    )
+
+    def advance_clock(seconds: float) -> None:
+        nonlocal now
+        now += pd.Timedelta(seconds=seconds)
+
+    sleep = Mock(side_effect=advance_clock)
+    monkeypatch.setattr(retry_module.time, "sleep", sleep)
 
     with pytest.raises(ValueError, match="does not match the existing store"):
         dataset.update("test")
 
+    sleep.assert_called_once()
     # Worker 0's guard raised before any commit landed on main.
     assert repo.lookup_branch("main") == main_before
 
@@ -1360,6 +1380,97 @@ def test_virtual_loop_dispatches_before_replica_then_primary_trim(
     )
     trigger.dispatch.assert_called_once_with(pd.Timestamp("2024-01-01T18:00"))
     assert trim.call_count == (2 if positions else 0)
+
+
+@pytest.mark.parametrize("failure_point", ["primary-commit", "dispatch"])
+def test_virtual_update_recovers_without_recommitting_files_or_dispatching_twice(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure_point: str
+) -> None:
+    monkeypatch.setattr(Config, "env", Env.prod)
+    monkeypatch.setenv("CRON_JOB_NAME", "test-virtual-dataset-update")
+    monkeypatch.setattr(
+        storage,
+        "_get_icechunk_storage",
+        lambda path, config: icechunk.local_filesystem_storage(path),
+    )
+    now = pd.Timestamp("2024-01-02T00:01")
+    monkeypatch.setattr(
+        pd.Timestamp, "now", classmethod(lambda cls, tz=None: now.tz_localize(tz))
+    )
+    sleep = Mock(side_effect=[None, AssertionError("update did not recover")])
+    monkeypatch.setattr(retry_module.time, "sleep", sleep)
+
+    dataset = _make_dataset(tmp_path)
+    dataset = dataset.model_copy(
+        update={
+            "replica_storage_configs": (
+                StorageConfig(
+                    base_path=str(tmp_path / "replica"), format=DatasetFormat.ICECHUNK
+                ),
+            )
+        }
+    )
+    n_inits = 4
+    monkeypatch.setattr(
+        VirtualTestDataset, "_get_template", lambda *args: _create_template_ds(n_inits)
+    )
+    template_utils.write_metadata(
+        _create_template_ds(0), dataset.store_factory, consolidated=False
+    )
+    primary, (replica,) = dataset.store_factory.icechunk_primary_and_replica_repos()
+    before = [repo.lookup_branch("main") for repo in (primary, replica)]
+
+    trigger = Mock()
+    monkeypatch.setattr(VirtualTestDataset, "materialized_update_triggers", (trigger,))
+    failure = OSError("transient update failure")
+    if failure_point == "dispatch":
+        trigger.dispatch.side_effect = [failure, None]
+    else:
+        original_commit = VirtualTestRegionJob._commit_virtual_batch
+        failed = False
+
+        def commit(
+            job: VirtualTestRegionJob,
+            repo: icechunk.Repository,
+            branch: str,
+            refs: Sequence[tuple[VirtualTestSourceFileCoord, Sequence[VirtualRef]]],
+            *,
+            overwrite_chunks: bool,
+            pipeline_batch_id: str | None = None,
+        ) -> None:
+            nonlocal failed
+            if pipeline_batch_id is not None and not failed:
+                assert primary.lookup_branch("main") == before[0]
+                assert replica.lookup_branch("main") != before[1]
+                failed = True
+                raise failure
+            original_commit(
+                job,
+                repo,
+                branch,
+                refs,
+                overwrite_chunks=overwrite_chunks,
+                pipeline_batch_id=pipeline_batch_id,
+            )
+
+        monkeypatch.setattr(VirtualTestRegionJob, "_commit_virtual_batch", commit)
+
+    dataset.update("retry-test")
+
+    sleep.assert_called_once()
+    trigger.dispatch.assert_called_once_with(pd.Timestamp("2024-01-01T18:00"))
+    expected_writes = Counter(
+        (init, lead, 0, 0) for init in range(n_inits) for lead in range(N_LEADS)
+    )
+    for repo, initial_snapshot in zip((primary, replica), before, strict=True):
+        _assert_store_values(repo.readonly_session("main").store, n_inits)
+        writes: Counter[tuple[int, ...]] = Counter()
+        for child, parent in pairwise(repo.ancestry(branch="main")):
+            if child.id == initial_snapshot:
+                break
+            diff = repo.diff(from_snapshot_id=parent.id, to_snapshot_id=child.id)
+            writes.update(map(tuple, diff.updated_chunks.get("/temperature_2m", ())))
+        assert writes == expected_writes
 
 
 @pytest.mark.slow
