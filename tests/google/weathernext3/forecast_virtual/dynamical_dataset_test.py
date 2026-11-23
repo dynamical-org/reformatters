@@ -95,7 +95,7 @@ def test_inline_validation_does_not_move_tip(
         worker_index: int,
         workers_total: int,
         *,
-        job_fire_time: pd.Timestamp | None = None,
+        poll_deadline: pd.Timestamp,
     ) -> None:
         (job,) = all_jobs
         session = repo.writable_session("main")

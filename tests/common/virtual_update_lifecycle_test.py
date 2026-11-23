@@ -464,7 +464,7 @@ def test_allow_validation_keeps_the_selected_window_after_the_successor_fire(
         worker_index: int,
         workers_total: int,
         *,
-        job_fire_time: pd.Timestamp | None = None,
+        poll_deadline: pd.Timestamp,
     ) -> None:
         _process_virtual(jobs[0], repo)
         now[0] = successor + timedelta(minutes=2)

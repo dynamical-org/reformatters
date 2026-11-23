@@ -1554,7 +1554,9 @@ def test_virtual_operational_rejects_backfill_mode_job(tmp_path: Path) -> None:
     job = _make_region_job(_create_template_ds(4), region=slice(0, 4))
 
     with pytest.raises(AssertionError, match="processing_mode='update'"):
-        dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+        dataset._run_virtual_operational_update(
+            [job], worker_index=0, workers_total=1, poll_deadline=pd.Timestamp.max
+        )
 
 
 def _construct_dataset(
@@ -2048,7 +2050,9 @@ def test_virtual_operational_single_writer_expands_main(tmp_path: Path) -> None:
     full_template = _create_template_ds(4)
     job = _make_region_job(full_template, region=slice(0, 4), processing_mode="update")
 
-    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+    dataset._run_virtual_operational_update(
+        [job], worker_index=0, workers_total=1, poll_deadline=pd.Timestamp.max
+    )
 
     # Single writer committed straight to main (no temp branch ever created).
     assert list(_primary_repo(dataset.store_factory).list_branches()) == ["main"]
@@ -2072,7 +2076,9 @@ def test_update_still_commits_per_tick(
 
     before = _snapshot_count(repo)
     with caplog.at_level("INFO"):
-        dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+        dataset._run_virtual_operational_update(
+            [job], worker_index=0, workers_total=1, poll_deadline=pd.Timestamp.max
+        )
     assert _snapshot_count(repo) - before == 4
     _assert_all_values(dataset, n_inits=4)
     commits = [
@@ -2117,7 +2123,9 @@ def test_virtual_operational_rejects_multiple_jobs(tmp_path: Path) -> None:
         _make_region_job(full_template, region=slice(2, 4)),
     ]
     with pytest.raises(AssertionError, match="single active-window job"):
-        dataset._run_virtual_operational_update(jobs, worker_index=0, workers_total=1)
+        dataset._run_virtual_operational_update(
+            jobs, worker_index=0, workers_total=1, poll_deadline=pd.Timestamp.max
+        )
 
 
 def test_validate_dataset_on_virtual_skips_shard_check(tmp_path: Path) -> None:
@@ -2649,7 +2657,9 @@ def test_virtual_operational_second_fire_sees_no_new_work(tmp_path: Path) -> Non
         job = _make_region_job(
             full_template, region=slice(0, 4), processing_mode="update"
         )
-        dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+        dataset._run_virtual_operational_update(
+            [job], worker_index=0, workers_total=1, poll_deadline=pd.Timestamp.max
+        )
 
     fire()
     repo = _primary_repo(dataset.store_factory)
@@ -2703,7 +2713,9 @@ def test_virtual_backfill_then_fire_leaves_metadata_stable(tmp_path: Path) -> No
     repo = _primary_repo(dataset.store_factory)
     snapshots_after_backfill = _snapshot_count(repo)
     job = _make_region_job(template_ds, region=slice(0, 4), processing_mode="update")
-    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+    dataset._run_virtual_operational_update(
+        [job], worker_index=0, workers_total=1, poll_deadline=pd.Timestamp.max
+    )
     assert _snapshot_count(repo) == snapshots_after_backfill
 
 
@@ -2966,9 +2978,6 @@ def test_operational_update_passes_poll_deadline_to_the_write_loop(
     assert job.poll_deadline == pd.Timestamp.max
 
     deadline = pd.Timestamp("2026-08-02T00:02")
-    monkeypatch.setattr(
-        VirtualTestDataset, "_virtual_poll_deadline", lambda self, now: deadline
-    )
     driven: list[VirtualTestRegionJob] = []
     monkeypatch.setattr(
         VirtualTestRegionJob,
@@ -2979,7 +2988,9 @@ def test_operational_update_passes_poll_deadline_to_the_write_loop(
             )
         ),
     )
-    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+    dataset._run_virtual_operational_update(
+        [job], worker_index=0, workers_total=1, poll_deadline=deadline
+    )
 
     assert [j.poll_deadline for j in driven] == [deadline]
 

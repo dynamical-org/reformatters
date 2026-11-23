@@ -290,5 +290,5 @@ def test_only_canonical_production_producer_dispatches(
     )
     submit = Mock()
     monkeypatch.setattr(kubernetes, "create_job_from_cronjob", submit)
-    dataset._run_virtual_operational_update([job], 0, 1)
+    dataset._run_virtual_operational_update([job], 0, 1, poll_deadline=pd.Timestamp.max)
     submit.assert_not_called()

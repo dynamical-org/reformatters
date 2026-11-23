@@ -987,7 +987,9 @@ def test_virtual_operational_expands_both_groups(tmp_path: Path) -> None:
     full_template = _create_template_ds(2)
     job = _make_region_job(full_template, region=slice(0, 2), processing_mode="update")
 
-    dataset._run_virtual_operational_update([job], worker_index=0, workers_total=1)
+    dataset._run_virtual_operational_update(
+        [job], worker_index=0, workers_total=1, poll_deadline=pd.Timestamp.max
+    )
 
     assert list(_primary_repo(dataset.store_factory).list_branches()) == ["main"]
     _assert_all_values(dataset, n_inits=2)

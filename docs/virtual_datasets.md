@@ -62,7 +62,7 @@ The write loop returns a completion flag for operational dispatch before validat
 
 **NOAA GRIB sources** (`noaa/noaa_virtual_region_job.py`): `NoaaVirtualRegionJob` provides discovery and ref construction for GRIB files with `.idx` sidecars.
 
-Ingest usable messages without requiring complete file coverage; retain checks that prevent invalid references. A source adapter may require the complete declared inventory when its representative probe relies on that contract. Raise file-scoped errors for malformed or incomplete source files so the default loop logs and skips them; programming assertions and source authentication failures remain fatal. Completeness belongs to operational validation. Once a file's representative chunk is committed, later-added messages require an `overwrite_chunks` backfill.
+Ingest usable messages without requiring complete file coverage; retain checks that prevent invalid references. A source adapter may require the complete declared inventory when its representative probe relies on that contract. Raise file-scoped errors for malformed or incomplete source files so the default loop logs and skips them. Programming assertions and source authentication failures propagate out of the write loop. Completeness belongs to operational validation. Once a file's representative chunk is committed, later-added messages require an `overwrite_chunks` backfill.
 
 ## Reader safety: whole files, atomic commits
 
@@ -88,9 +88,11 @@ The refresh reads each store's extent from the same session it commits, without 
 
 Virtual stores carry no consolidated metadata in the root zarr.json — nothing updates it as the append dim grows, so readers list the live metadata instead. Every virtual metadata writer renders unconsolidated (`VirtualRegionJob.consolidated_metadata = False` covers backfill setup/finalize; appends and the refresh pass `consolidated=False` directly), so their outputs are byte-identical and the refresh only commits on real template drift. Appends write only variables spanning the append dim: overwriting the rest would delete chunks that equal their fill_value (e.g. `spatial_ref`), since appends write with `write_empty_chunks=False`.
 
-Crash recovery is automatic: committed refs are durable and the filter skips them on the next cron fire; uncommitted refs and expansions vanish and are re-discovered.
+If an update attempt raises an exception, the worker logs it and retries the whole attempt with exponential backoff and jitter. It raises the error if the next retry would reach or pass the poll deadline.
 
-The write loop discovers at the region job's `tick_interval` and commits each tick's usable files. By default an unreadable file is skipped for the rest of that pod's life and retried by the next pod. Setting `retain_failed_files = True` keeps failed files pending for later sweeps until `poll_deadline`; the source adapter may suppress unchanged versions. Before opting in, discovery gates that depend on pending coordinates must allow retained files after their siblings commit. Files still uningested at the deadline remain eligible for a later update.
+Crash recovery is automatic: committed refs are durable and the filter skips them on the next attempt or cron fire; uncommitted refs and expansions vanish and are re-discovered.
+
+The write loop discovers at the region job's `tick_interval` and commits each tick's usable files. By default the loop skips an unreadable file for the rest of the attempt. Setting `retain_failed_files = True` keeps failed files pending for later sweeps until `poll_deadline`; the source adapter may suppress unchanged versions. Before opting in, discovery gates that depend on pending coordinates must allow retained files after their siblings commit. Files still uningested at the deadline remain eligible for a later update.
 
 See [virtual polling](operational_update_timing.md#virtual-polling) for fire selection, polling and validation, [non-`Allow` CronJobs](operational_update_timing.md#non-allow-cronjobs) for their retry rule, and [currency and integrity validation](operational_update_timing.md#currency-and-integrity-validation) for validator timing.
 
@@ -151,7 +153,7 @@ A source message may supply multiple arrays. Declare each output in the source c
 
 ## Replicas
 
-The loop opens sessions on all stores and commits replicas-then-primary. "Committed" is defined by the primary (the filter probes the primary's manifest), so a crash between replica and primary commits is replayed idempotently on the next fire; replicas may briefly be a commit ahead, never behind.
+The loop opens sessions on all stores and commits replicas-then-primary. "Committed" is defined by the primary (the filter probes the primary's manifest), so a crash between replica and primary commits is replayed idempotently on the next attempt or fire; replicas may briefly be a commit ahead, never behind.
 
 ## Operational validation
 
@@ -185,7 +187,7 @@ Map private container prefixes to Kubernetes Secrets with `IcechunkVirtualConfig
 output credentials remain separate in `StorageConfig`. See [storage.py](../src/reformatters/common/storage.py).
 
 For direct reads, use `s3_store_from_secret` and wrap signed operations, including lazy iteration,
-in `source_access()` so authentication failures stop workers. Custom-endpoint containers need
+in `source_access()` so authentication failures propagate out of the write loop. Custom-endpoint containers need
 `force_path_style=True` to match the client. Source credentials need list permission so missing
 objects return 404 rather than 403. See [download.py](../src/reformatters/common/download.py).
 

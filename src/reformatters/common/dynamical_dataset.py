@@ -43,7 +43,7 @@ from reformatters.common.region_job import (
     SourceFileCoord,
     SourceFileResult,
 )
-from reformatters.common.retry import retry
+from reformatters.common.retry import retry, retry_until
 from reformatters.common.staging import staging_cronjob_name
 from reformatters.common.storage import (
     DatasetFormat,
@@ -198,24 +198,35 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
             if should_run:
                 tmp_store = self._tmp_store()
 
-                all_jobs, template_ds = self._operational_update_jobs(
-                    reformat_job_name,
-                    tmp_store,
-                    job_fire_time=job_fire_time,
-                    job_reference_time=job_reference_time,
-                )
-
                 if is_virtual:
                     # Virtual operational updates stream one worker per Job (see docs/parallel_processing.md).
-                    if is_first:
-                        self._assert_no_structural_drift(template_ds)
-                    self._run_virtual_operational_update(
-                        all_jobs,
-                        worker_index,
-                        workers_total,
-                        job_fire_time=job_fire_time,
+                    deadline = self._virtual_poll_deadline(
+                        job_fire_time
+                        if job_fire_time is not None
+                        else pd.Timestamp.now()
                     )
+
+                    def attempt() -> None:
+                        jobs, template = self._operational_update_jobs(
+                            reformat_job_name, tmp_store, job_fire_time=job_fire_time
+                        )
+                        if is_first:
+                            self._assert_no_structural_drift(template)
+                        self._run_virtual_operational_update(
+                            jobs,
+                            worker_index,
+                            workers_total,
+                            poll_deadline=deadline,
+                        )
+
+                    retry_until(attempt, deadline, max_backoff_seconds=60)
                 else:
+                    all_jobs, template_ds = self._operational_update_jobs(
+                        reformat_job_name,
+                        tmp_store,
+                        job_fire_time=job_fire_time,
+                        job_reference_time=job_reference_time,
+                    )
                     self._process_region_jobs(
                         all_jobs=all_jobs,
                         worker_index=worker_index,
@@ -828,7 +839,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         worker_index: int,
         workers_total: int,
         *,
-        job_fire_time: Timestamp | None = None,
+        poll_deadline: Timestamp,
     ) -> None:
         """One-worker virtual dataset operational update: commit one or more
         whole source files straight to the "main" icechunk branch as they arrive
@@ -847,13 +858,7 @@ class DynamicalDataset(OperationalResources, Generic[DATA_VAR, SOURCE_FILE_COORD
         assert job.processing_mode == "update", (
             "operational_update_jobs must construct jobs with processing_mode='update'"
         )
-        job = job.model_copy(
-            update={
-                "poll_deadline": self._virtual_poll_deadline(
-                    job_fire_time if job_fire_time is not None else pd.Timestamp.now()
-                )
-            }
-        )
+        job = job.model_copy(update={"poll_deadline": poll_deadline})
         # Deploy checked-in template metadata fixes (attrs, coordinate values) before
         # ingesting. No-op commit-wise when the store already matches the template.
         job.refresh_metadata(self.store_factory, self._tmp_store())
