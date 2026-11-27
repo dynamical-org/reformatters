@@ -6,13 +6,8 @@ from typing import Literal, Protocol
 import boto3
 import icechunk
 from botocore.config import Config
-from botocore.exceptions import (
-    ClientError,
-    ConnectionClosedError,
-    ConnectTimeoutError,
-    EndpointConnectionError,
-    ReadTimeoutError,
-)
+from botocore.exceptions import ClientError, HTTPClientError
+from botocore.exceptions import ConnectionError as BotoConnectionError
 from botocore.paginate import Paginator
 
 from reformatters.common import download
@@ -30,12 +25,10 @@ SOURCE_SECRET = "dynamical-ecmwf-r2-storage-options-key"  # noqa: S105
 ENDPOINT = "https://a037e2d3d5f9c6ecfc95350360f2ab8d.r2.cloudflarestorage.com"
 log = get_logger(__name__)
 
-_LIST_TRANSPORT_ERRORS = (
-    ConnectionClosedError,
-    ConnectTimeoutError,
-    EndpointConnectionError,
-    ReadTimeoutError,
-)
+# botocore's two base classes for failures below the S3 API: connection setup
+# (connect timeout, endpoint, proxy, TLS) and the HTTP exchange (closed
+# connection, read timeout, broken response stream).
+_LIST_TRANSPORT_ERRORS = (BotoConnectionError, HTTPClientError)
 
 type Family = Literal["cf", "pf"]
 
