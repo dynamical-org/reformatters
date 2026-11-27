@@ -12,6 +12,7 @@ from botocore.exceptions import (
     ConnectTimeoutError,
     EndpointConnectionError,
     ReadTimeoutError,
+    SSLError,
 )
 from botocore.paginate import Paginator
 
@@ -35,6 +36,7 @@ _LIST_TRANSPORT_ERRORS = (
     ConnectTimeoutError,
     EndpointConnectionError,
     ReadTimeoutError,
+    SSLError,
 )
 
 type Family = Literal["cf", "pf"]

@@ -4,7 +4,12 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
-from botocore.exceptions import ClientError, EndpointConnectionError, PaginationError
+from botocore.exceptions import (
+    ClientError,
+    EndpointConnectionError,
+    PaginationError,
+    SSLError,
+)
 from botocore.paginate import Paginator
 from botocore.session import get_session
 
@@ -155,6 +160,7 @@ def test_authentication_failures_are_fatal(
     [
         ClientError({"Error": {"Code": "SlowDown"}}, "ListObjectsV2"),
         EndpointConnectionError(endpoint_url="https://synthetic.invalid"),
+        SSLError(endpoint_url="https://synthetic.invalid", error=OSError("synthetic")),
     ],
 )
 def test_pagination_failure_is_not_partial_success(
