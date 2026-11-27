@@ -6,8 +6,11 @@ import pandas as pd
 import pytest
 from botocore.exceptions import (
     ClientError,
+    ConnectionClosedError,
     EndpointConnectionError,
     PaginationError,
+    ProxyConnectionError,
+    ReadTimeoutError,
     SSLError,
 )
 from botocore.paginate import Paginator
@@ -161,6 +164,11 @@ def test_authentication_failures_are_fatal(
         ClientError({"Error": {"Code": "SlowDown"}}, "ListObjectsV2"),
         EndpointConnectionError(endpoint_url="https://synthetic.invalid"),
         SSLError(endpoint_url="https://synthetic.invalid", error=OSError("synthetic")),
+        ProxyConnectionError(
+            proxy_url="https://synthetic.invalid", error=OSError("synthetic")
+        ),
+        ConnectionClosedError(endpoint_url="https://synthetic.invalid"),
+        ReadTimeoutError(endpoint_url="https://synthetic.invalid"),
     ],
 )
 def test_pagination_failure_is_not_partial_success(
